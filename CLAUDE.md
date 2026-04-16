@@ -55,15 +55,71 @@ corepack pnpm ci:preflight        # lint + typecheck + test + build
 
 ## Core Scoring Logic
 
-The scoring pipeline (`worker/src/jobs/`) is the central domain logic:
+The scoring pipeline (`worker/src/jobs/score.ts`) is the central domain logic:
 
 1. **Collection** (`runCollection`): Fetches from EIA, Gas, and SEC sources; normalizes into `series_points` (time-series rows) in D1.
-2. **Scoring** (`runScore`): Reads the five signals, checks freshness (physical: 8d, recognition: 3d, transmission: 8d), then computes:
-   - `mismatch_score = physical - recognition + (transmission * 0.15)` (clamped 0–1)
-   - `none` (< 0.4) / `watch` (0.4–0.65) / `actionable` (≥ 0.65 AND ≥2 confirmation gates met)
+
+2. **Scoring** (`runScore`): Reads signals, checks freshness, then computes multi-layer state:
+   - **Subscores** (physical, recognition, transmission): Extracted as independent 0–1 metrics.
+   - **Mismatch score**: `mismatchScore = clamp(physical - recognition + transmission * 0.15)`.
+   - **Dislocation state** (computed in `worker/src/core/scoring/state-labels.ts`):
+     - `aligned`: Low mismatch + low physical.
+     - `mild_divergence`: Mismatch 0.3–0.5; market beginning to respond.
+     - `persistent_divergence`: Mismatch 0.5–0.75; state held 3+ days.
+     - `deep_divergence`: Mismatch ≥0.75; state held 5+ days; ≥2 confirmations.
+   - **Actionability state** (legacy): `none` / `watch` / `actionable` for backward compatibility.
+   - **Three clocks**:
+     - `shockAge`: Time since mismatch first detected (acute < 72h, else chronic).
+     - `dislocationAge`: Time in current dislocation state.
+     - `transmissionAge`: Time since transmission signal emerged.
+   - **Evidence classification** (per evidence item):
+     - `confirming`: Supports dislocation thesis.
+     - `counterevidence`: Weakens dislocation thesis.
+     - `falsifier`: Directly contradicts thesis.
+   - **Evidence coverage** (per evidence item):
+     - `well`: Fresh source data.
+     - `weakly`: Stale but not expired.
+     - `not_covered`: Missing data.
+   - **Ledger impact**: Applies 5–10% adjustment per active ledger entry (increase/decrease).
    - Writes results to `signal_snapshots` and `run_evidence`.
 
 The API routes are **read-only** against precomputed snapshots — no computation happens at request time.
+
+## Dislocation State Computation
+
+The dislocation state is determined by regime rules (not a simple function of score):
+
+```
+IF score < 0.3 AND physicalScore < 0.5
+  → aligned
+
+ELSE IF score >= 0.3 AND score < 0.5
+  → mild_divergence
+
+ELSE IF score >= 0.5 AND score < 0.75 AND durationInState >= 3 days
+  → persistent_divergence
+
+ELSE IF score >= 0.75 AND physicalScore >= 0.6 AND recognitionScore <= 0.45 AND transmissionScore >= 0.5 AND durationInState >= 5 days
+  → deep_divergence
+
+IF critical data (physical OR recognition) is stale
+  → downgrade to aligned (conservative)
+```
+
+The three clocks track temporal persistence:
+- **Shock age** < 72 hours = "acute" phase (early-stage mismatch).
+- **Dislocation age** measures how long the current state has held.
+- **Transmission age** measures how long price signals have been responding.
+
+Evidence classification follows the signal direction:
+- **physical-pressure high** → confirming.
+- **recognition gap large** → confirming (market lags).
+- **transmission high** → confirming (prices responding).
+- Opposite conditions = counterevidence or falsifier.
+
+Ledger adjustments apply when entries are active (not retired, not stale):
+- Each increase entry: +10% to final score (clamped 0–1).
+- Each decrease entry: −10% to final score.
 
 ## Key Conventions
 
@@ -85,12 +141,13 @@ The API routes are **read-only** against precomputed snapshots — no computatio
 
 ## Database
 
-D1 (SQLite). Schema is in `db/migrations/0001_init.sql`. Key tables:
+D1 (SQLite). Schema is in `db/migrations/`. Key tables:
 - `series_points` — raw time-series from collectors (indexed on `series_key, observed_at`)
-- `signal_snapshots` — latest computed state (indexed on `generated_at`)
-- `run_evidence` — evidence breakdown per scoring run
+- `signal_snapshots` — latest computed snapshot with mismatch score, dislocation state, subscores, clocks, ledger impact (indexed on `generated_at`)
+- `state_change_events` — historical state transitions for computing clock ages (indexed on `generated_at`)
+- `run_evidence` — evidence breakdown per scoring run with classification and coverage labels
 - `impairment_ledger` — manually-tracked impairment entries (support retire/reinstate)
-- `config_thresholds` — runtime-configurable scoring thresholds
+- `config_thresholds` — runtime-configurable scoring thresholds (state boundaries, temporal thresholds, ledger magnitude)
 
 ## Landmines
 
