@@ -1,0 +1,18 @@
+{
+  "name": "oil-shock",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "corepack pnpm -r --if-present build",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "lint": "corepack pnpm -r --if-present lint",
+    "test": "corepack pnpm -r --if-present test",
+    "dev:worker": "corepack pnpm --filter @oil-shock/worker dev",
+    "dev:web": "corepack pnpm --filter @oil-shock/app dev",
+    "db:migrate:local": "corepack pnpm --filter @oil-shock/worker db:migrate:local",
+    "poc:run": "corepack pnpm db:migrate:local && corepack pnpm build",
+    "replay:validate": "node scripts/replay-validate.mjs",
+    "docs:check": "node scripts/docs-check.mjs",
+    "ci:preflight": "corepack pnpm lint && corepack pnpm -r --if-present typecheck && corepack pnpm test && corepack pnpm build"
+  }
+}

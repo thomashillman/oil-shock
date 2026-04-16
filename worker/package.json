@@ -1,0 +1,18 @@
+{
+  "name": "@oil-shock/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "wrangler dev",
+    "db:migrate:local": "wrangler d1 execute energy_dislocation --local --file ../db/migrations/0001_init.sql --config ../wrangler.jsonc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260414.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.43.0"
+  }
+}
