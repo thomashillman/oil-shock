@@ -6,7 +6,7 @@
     {
       "binding": "DB",
       "database_name": "energy_dislocation",
-      "database_id": "REPLACE_WITH_REAL_DATABASE_ID"
+      "database_id": "9db64b68-6ffc-4be2-a2c6-667691a5801f"
     }
   ],
   "vars": {
@@ -15,15 +15,29 @@
   },
   "env": {
     "preview": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "energy_dislocation",
+          "database_id": "9db64b68-6ffc-4be2-a2c6-667691a5801f"
+        }
+      ],
       "vars": {
         "APP_ENV": "preview",
         "PRODUCTION_ORIGIN": ""
       }
     },
     "production": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "energy_dislocation",
+          "database_id": "9db64b68-6ffc-4be2-a2c6-667691a5801f"
+        }
+      ],
       "vars": {
         "APP_ENV": "production",
-        "PRODUCTION_ORIGIN": "https://example.com"
+        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app"
       }
     }
   }
