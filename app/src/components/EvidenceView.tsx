@@ -13,7 +13,11 @@ export interface EvidenceData {
 
 export function EvidenceView({ data, error }: { data: EvidenceData | null; error: string | null }) {
   if (error) {
-    return <p style={{ color: "#6b7280", fontSize: 14 }}>{error}</p>;
+    return (
+      <div style={{ margin: 20, padding: 16, background: "#fff", borderRadius: 12, color: "#6b7280", fontSize: 14 }}>
+        {error}
+      </div>
+    );
   }
   if (!data || data.evidence.length === 0) return null;
 
@@ -23,51 +27,104 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
   }, {});
 
   return (
-    <section>
+    <section style={{ padding: "20px 20px 0" }}>
       <h2
         style={{
-          fontSize: 11,
-          fontWeight: 600,
+          fontSize: 10,
+          fontWeight: 700,
           color: "#9ca3af",
           textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: 16,
+          letterSpacing: "0.14em",
+          marginBottom: 12,
         }}
       >
         Evidence
       </h2>
+
       {Object.entries(groups).map(([group, items]) => (
-        <div key={group} style={{ marginBottom: 28 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>{group}</h3>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-            <thead>
-              <tr style={{ borderBottom: "2px solid #e5e7eb" }}>
-                <th style={{ textAlign: "left", padding: "6px 0", color: "#9ca3af", fontWeight: 500 }}>
-                  Signal
-                </th>
-                <th style={{ textAlign: "left", padding: "6px 0", color: "#9ca3af", fontWeight: 500 }}>
-                  Observed
-                </th>
-                <th style={{ textAlign: "right", padding: "6px 0", color: "#9ca3af", fontWeight: 500 }}>
-                  Contribution
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.evidence_key} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "8px 0", color: "#111827" }}>{item.evidence_key}</td>
-                  <td style={{ padding: "8px 0", color: "#6b7280" }}>
-                    {new Date(item.observed_at).toLocaleDateString()}
-                  </td>
-                  <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 600, color: "#374151" }}>
-                    {item.contribution >= 0 ? "+" : ""}
-                    {(item.contribution * 100).toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div
+          key={group}
+          style={{ background: "#fff", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}
+        >
+          <div
+            style={{
+              padding: "10px 16px",
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#9ca3af",
+              textTransform: "uppercase",
+              letterSpacing: "0.14em",
+              borderBottom: "1px solid #f3f4f6",
+            }}
+          >
+            {group}
+          </div>
+
+          {items.map((item, i) => {
+            const pct = Math.abs(item.contribution * 100);
+            const positive = item.contribution >= 0;
+            const barColor = positive ? "#dc2626" : "#16a34a";
+            const valueColor = positive ? "#dc2626" : "#16a34a";
+
+            return (
+              <div
+                key={item.evidence_key}
+                style={{
+                  padding: "12px 16px",
+                  borderBottom: i < items.length - 1 ? "1px solid #f9fafb" : "none",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    marginBottom: 7,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 13,
+                      color: "#111827",
+                      fontFamily: "ui-monospace, 'Cascadia Code', monospace",
+                    }}
+                  >
+                    {item.evidence_key}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: valueColor,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {positive ? "+" : "−"}
+                    {pct.toFixed(1)}%
+                  </span>
+                </div>
+
+                <div style={{ height: 3, background: "#f3f4f6", borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${Math.min(pct, 100)}%`,
+                      background: barColor,
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+
+                <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                  {new Date(item.observed_at).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ))}
     </section>

@@ -37,10 +37,11 @@ function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
-      if (url.includes("/api/state")) {
+      if ((url as string).includes("/api/state")) {
         return Promise.resolve({
           ok: stateOk,
-          json: async () => (stateOk ? mockState : { error: "no_snapshot", message: "No snapshot available." }),
+          json: async () =>
+            stateOk ? mockState : { error: "no_snapshot", message: "No snapshot available." },
         });
       }
       return Promise.resolve({
@@ -60,12 +61,12 @@ describe("App", () => {
     expect(screen.getByText("Loading…")).toBeInTheDocument();
   });
 
-  it("renders state and evidence after fetch", async () => {
+  it("renders state and evidence after fetch resolves", async () => {
     stubFetch(true, true);
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     expect(screen.getAllByText("actionable").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("72.0%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("72% mismatch").length).toBeGreaterThan(0);
     expect(screen.getAllByText("eia_crude_stocks").length).toBeGreaterThan(0);
   });
 

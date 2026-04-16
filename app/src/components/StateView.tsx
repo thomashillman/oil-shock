@@ -14,94 +14,95 @@ export interface StateData {
   evidence_ids: string[];
 }
 
-const STATE_COLORS: Record<ActionabilityState, string> = {
+const STATE_BG: Record<ActionabilityState, string> = {
   none: "#6b7280",
   watch: "#d97706",
   actionable: "#dc2626",
 };
 
-const FRESHNESS_COLORS: Record<Freshness, string> = {
-  fresh: "#16a34a",
-  stale: "#d97706",
-  missing: "#dc2626",
+const FRESHNESS_DOT: Record<Freshness, string> = {
+  fresh: "#4ade80",
+  stale: "#fbbf24",
+  missing: "#f87171",
 };
-
-function FreshnessBadge({ value }: { value: Freshness }) {
-  return (
-    <span style={{ color: FRESHNESS_COLORS[value], fontWeight: 600, textTransform: "capitalize" }}>
-      {value}
-    </span>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ padding: 16, background: "#f9fafb", borderRadius: 8 }}>
-      <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: "#111827" }}>{value}</div>
-    </div>
-  );
-}
 
 export function StateView({ data, error }: { data: StateData | null; error: string | null }) {
   if (error) {
-    return <p style={{ color: "#6b7280", marginBottom: 32, fontSize: 14 }}>{error}</p>;
+    return (
+      <div style={{ margin: 20, padding: 16, background: "#fff", borderRadius: 12, color: "#6b7280", fontSize: 14 }}>
+        {error}
+      </div>
+    );
   }
   if (!data) return null;
 
-  const stateColor = STATE_COLORS[data.actionability_state];
+  const bg = STATE_BG[data.actionability_state];
+  const mismatchPct = Math.round(data.mismatch_score * 100);
+  const coveragePct = Math.round(data.coverage_confidence * 100);
 
   return (
-    <section style={{ marginBottom: 40 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <span
+    <section>
+      {/* Hero band */}
+      <div style={{ background: bg, padding: "32px 20px 28px", color: "#fff" }}>
+        <div
           style={{
-            background: stateColor,
-            color: "#fff",
-            padding: "4px 12px",
-            borderRadius: 4,
+            fontSize: 10,
             fontWeight: 700,
-            fontSize: 13,
+            letterSpacing: "0.14em",
             textTransform: "uppercase",
-            letterSpacing: "0.06em",
+            opacity: 0.75,
+            marginBottom: 10,
           }}
         >
+          State
+        </div>
+        <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, marginBottom: 8 }}>
           {data.actionability_state}
-        </span>
-        <span style={{ color: "#9ca3af", fontSize: 12 }}>
-          {new Date(data.generated_at).toLocaleString()}
-        </span>
-      </div>
+        </div>
+        <div style={{ fontSize: 16, opacity: 0.85 }}>{mismatchPct}% mismatch</div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
-        <Metric label="Mismatch Score" value={(data.mismatch_score * 100).toFixed(1) + "%"} />
-        <Metric label="Coverage" value={(data.coverage_confidence * 100).toFixed(1) + "%"} />
-      </div>
-
-      <h2
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "#9ca3af",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: 8,
-        }}
-      >
-        Source Freshness
-      </h2>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-        <tbody>
+        {/* Freshness dots */}
+        <div style={{ display: "flex", gap: 18, marginTop: 22 }}>
           {(["physical", "recognition", "transmission"] as const).map((key) => (
-            <tr key={key} style={{ borderBottom: "1px solid #f3f4f6" }}>
-              <td style={{ padding: "9px 0", color: "#374151", textTransform: "capitalize" }}>{key}</td>
-              <td style={{ padding: "9px 0", textAlign: "right" }}>
-                <FreshnessBadge value={data.source_freshness[key]} />
-              </td>
-            </tr>
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  display: "inline-block",
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: FRESHNESS_DOT[data.source_freshness[key]],
+                  flexShrink: 0,
+                }}
+              />
+              <span style={{ fontSize: 12, opacity: 0.85, textTransform: "capitalize" }}>{key}</span>
+            </div>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      {/* Coverage bar */}
+      <div style={{ background: "#fff", padding: "14px 20px", borderBottom: "1px solid #f3f4f6" }}>
+        <div
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}
+        >
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Coverage confidence</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#374151", fontVariantNumeric: "tabular-nums" }}>
+            {coveragePct}%
+          </span>
+        </div>
+        <div style={{ height: 4, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${coveragePct}%`,
+              background: bg,
+              borderRadius: 2,
+              transition: "width 0.4s ease",
+            }}
+          />
+        </div>
+      </div>
     </section>
   );
 }
