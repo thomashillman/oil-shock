@@ -117,6 +117,15 @@ export function StateView({ data, error }: { data: StateData | null; error: stri
   }
   if (!data) return null;
 
+  // Guard: new fields may be absent if the worker hasn't been redeployed yet
+  if (!data.dislocationState || !data.clocks || !data.subscores) {
+    return (
+      <div style={{ margin: 20, padding: 16, background: "#fff", borderRadius: 12, color: "#6b7280", fontSize: 14 }}>
+        State data is incomplete — the API worker may not be fully deployed yet.
+      </div>
+    );
+  }
+
   const bg = STATE_BG[data.dislocationState];
   const mismatchPct = Math.round(data.mismatchScore * 100);
   const coveragePct = Math.round(data.coverageConfidence * 100);
