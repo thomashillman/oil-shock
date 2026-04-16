@@ -12,23 +12,43 @@ afterEach(() => {
 import { App } from "./App";
 
 const mockState = {
-  generated_at: "2026-04-16T20:00:00.000Z",
-  mismatch_score: 0.72,
-  actionability_state: "actionable",
-  coverage_confidence: 0.9,
-  source_freshness: { physical: "fresh", recognition: "fresh", transmission: "stale" },
-  evidence_ids: ["ev1"],
+  generatedAt: "2026-04-16T20:00:00.000Z",
+  mismatchScore: 0.72,
+  dislocationState: "persistent_divergence",
+  stateRationale: "Physical pressure persists while market recognition lags.",
+  actionabilityState: "actionable",
+  confidence: {
+    coverage: 0.9,
+    sourceQuality: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  },
+  subscores: {
+    physical: 0.75,
+    recognition: 0.25,
+    transmission: 0.68,
+  },
+  clocks: {
+    shock: { ageSeconds: 259200, label: "3 days", classification: "acute" },
+    dislocation: { ageSeconds: 432000, label: "5 days", classification: "chronic" },
+    transmission: { ageSeconds: 86400, label: "24 hours", classification: "chronic" },
+  },
+  ledgerImpact: null,
+  coverageConfidence: 0.9,
+  sourceFreshness: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  evidenceIds: ["ev1"],
 };
 
 const mockEvidence = {
-  generated_at: "2026-04-16T20:00:00.000Z",
+  generatedAt: "2026-04-16T20:00:00.000Z",
   evidence: [
     {
-      evidence_key: "eia_crude_stocks",
-      evidence_group: "physical",
-      observed_at: "2026-04-10T00:00:00.000Z",
-      contribution: 0.4,
-      details_json: "{}",
+      evidenceKey: "physical-pressure",
+      evidenceGroup: "physical",
+      evidenceGroupLabel: "physical_reality",
+      observedAt: "2026-04-10T00:00:00.000Z",
+      contribution: 0.75,
+      classification: "confirming",
+      coverage: "well",
+      details: {},
     },
   ],
 };
@@ -65,9 +85,9 @@ describe("App", () => {
     stubFetch(true, true);
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
-    expect(screen.getAllByText("actionable").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/significantly ahead of market pricing/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Supply Pressure").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Persistent divergence").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Physical pressure persists while market recognition lags/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Physical Reality").length).toBeGreaterThan(0);
   });
 
   it("shows error message when no snapshot available", async () => {
