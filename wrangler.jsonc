@@ -1,0 +1,30 @@
+{
+  "name": "energy-dislocation-engine",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-04-16",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "energy_dislocation",
+      "database_id": "REPLACE_WITH_REAL_DATABASE_ID"
+    }
+  ],
+  "vars": {
+    "APP_ENV": "local",
+    "PRODUCTION_ORIGIN": ""
+  },
+  "env": {
+    "preview": {
+      "vars": {
+        "APP_ENV": "preview",
+        "PRODUCTION_ORIGIN": ""
+      }
+    },
+    "production": {
+      "vars": {
+        "APP_ENV": "production",
+        "PRODUCTION_ORIGIN": "https://example.com"
+      }
+    }
+  }
+}

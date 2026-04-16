@@ -1,0 +1,26 @@
+[
+  {
+    "window": "stress_case",
+    "physicalPressure": 0.88,
+    "recognition": 0.22,
+    "transmission": 0.73,
+    "freshness": {
+      "physical": "fresh",
+      "recognition": "fresh",
+      "transmission": "fresh"
+    },
+    "expectedState": "actionable"
+  },
+  {
+    "window": "soft_case",
+    "physicalPressure": 0.42,
+    "recognition": 0.38,
+    "transmission": 0.31,
+    "freshness": {
+      "physical": "fresh",
+      "recognition": "fresh",
+      "transmission": "fresh"
+    },
+    "expectedState": "watch"
+  }
+]
