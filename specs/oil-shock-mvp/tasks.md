@@ -185,19 +185,19 @@ This spec is complete only when all are true:
 
 ## Phase 5: PR Lifecycle
 
-- [ ] 5.1 Open PR with implementation summary
+- [x] 5.1 Open PR with implementation summary
   - **Do**: Push branch and create PR with architecture, scope, and verification notes.
   - **Done when**: PR URL exists and description is complete.
   - **Verify**: `gh pr create --fill`
   - **Commit**: `chore(pr): prepare pr metadata`
 
-- [ ] 5.2 [VERIFY] Monitor CI and resolve deterministic failures
+- [x] 5.2 [VERIFY] Monitor CI and resolve deterministic failures
   - **Do**: Triage failing checks, apply minimal fixes, and re-run until CI is green.
   - **Done when**: Required checks pass.
   - **Verify**: `gh pr checks --watch`
   - **Commit**: `fix(ci): resolve deterministic check failures`
 
-- [ ] 5.3 Address review feedback and re-validate
+- [x] 5.3 Address review feedback and re-validate
   - **Do**: Resolve review comments with focused commits and rerun relevant validation.
   - **Done when**: No unresolved critical review comments remain.
   - **Verify**: `pnpm test && gh pr view --comments`
