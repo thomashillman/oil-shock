@@ -92,6 +92,10 @@ D1 (SQLite). Schema is in `db/migrations/0001_init.sql`. Key tables:
 - `impairment_ledger` — manually-tracked impairment entries (support retire/reinstate)
 - `config_thresholds` — runtime-configurable scoring thresholds
 
+## Landmines
+
+- **Vercel output directory**: Vercel defaults to looking for a `public` directory. This repo builds to `app/dist`. The `vercel.json` at the root sets `outputDirectory` and `buildCommand` correctly — don't remove it or change the output path without updating `vercel.json` to match.
+
 ## Testing Patterns
 
 - Worker tests use an in-memory D1 mock (`worker/test/helpers/fake-d1.ts`).
