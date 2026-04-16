@@ -82,7 +82,12 @@ export class FakeD1Database {
         actionability_state: params[2],
         coverage_confidence: params[3],
         source_freshness_json: params[4],
-        evidence_ids_json: params[5]
+        evidence_ids_json: params[5],
+        dislocation_state_json: params[6],
+        state_rationale: params[7],
+        subscores_json: params[8],
+        clocks_json: params[9],
+        ledger_impact_json: params[10]
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -93,7 +98,10 @@ export class FakeD1Database {
         evidence_group: params[2],
         observed_at: params[3],
         contribution: params[4],
-        details_json: params[5]
+        evidence_classification: params[5],
+        coverage_quality: params[6],
+        evidence_group_label: params[7],
+        details_json: params[8]
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
