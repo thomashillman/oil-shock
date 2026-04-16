@@ -1,25 +1,61 @@
-import { FRESHNESS_LABEL, STATE_SUBTITLE, STATE_TAGLINE } from "../labels";
+import { FRESHNESS_LABEL, DISLOCATION_STATE_LABEL, DISLOCATION_STATE_DESCRIPTION } from "../labels";
 
 type Freshness = "fresh" | "stale" | "missing";
-type ActionabilityState = "none" | "watch" | "actionable";
+type DislocationState = "aligned" | "mild_divergence" | "persistent_divergence" | "deep_divergence";
+
+export interface Clock {
+  ageSeconds: number;
+  label: string;
+  classification: "acute" | "chronic" | "emerging";
+}
+
+export interface Subscores {
+  physical: number;
+  recognition: number;
+  transmission: number;
+}
+
+export interface LedgerImpact {
+  direction: "increase" | "decrease";
+  magnitude: number;
+  rationale: string;
+}
 
 export interface StateData {
-  generated_at: string;
-  mismatch_score: number;
-  actionability_state: ActionabilityState;
-  coverage_confidence: number;
-  source_freshness: {
+  generatedAt: string;
+  mismatchScore: number;
+  dislocationState: DislocationState;
+  stateRationale: string;
+  actionabilityState: "none" | "watch" | "actionable";
+  confidence: {
+    coverage: number;
+    sourceQuality: {
+      physical: Freshness;
+      recognition: Freshness;
+      transmission: Freshness;
+    };
+  };
+  subscores: Subscores;
+  clocks: {
+    shock: Clock;
+    dislocation: Clock;
+    transmission: Clock;
+  };
+  ledgerImpact: LedgerImpact | null;
+  coverageConfidence: number;
+  sourceFreshness: {
     physical: Freshness;
     recognition: Freshness;
     transmission: Freshness;
   };
-  evidence_ids: string[];
+  evidenceIds: string[];
 }
 
-const STATE_BG: Record<ActionabilityState, string> = {
-  none: "#6b7280",
-  watch: "#d97706",
-  actionable: "#dc2626",
+const STATE_BG: Record<DislocationState, string> = {
+  aligned: "#6b7280",
+  mild_divergence: "#d97706",
+  persistent_divergence: "#dc2626",
+  deep_divergence: "#7c2d12",
 };
 
 const FRESHNESS_DOT: Record<Freshness, string> = {
@@ -34,88 +70,38 @@ const FRESHNESS_TEXT: Record<Freshness, string> = {
   missing: "missing",
 };
 
-const WATCH_THRESHOLD = 40;
-const ACTIONABLE_THRESHOLD = 65;
-
-function ThresholdScale({ score }: { score: number }) {
+function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
   return (
-    <div style={{ marginTop: 20 }}>
-      {/* Position pointer above bar */}
-      <div style={{ position: "relative", height: 14, marginBottom: 2 }}>
-        <span
-          style={{
-            position: "absolute",
-            left: `${score}%`,
-            transform: "translateX(-50%)",
-            fontSize: 10,
-            fontWeight: 700,
-            color: "rgba(255,255,255,0.95)",
-            lineHeight: 1,
-          }}
-        >
-          ▼
-        </span>
+    <div style={{ padding: "12px 16px", borderRight: "1px solid #f3f4f6" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 6 }}>
+        {label}
       </div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: "#111827", marginBottom: 2 }}>{clock.label}</div>
+      <div style={{ fontSize: 11, color: "#6b7280" }}>
+        {clock.classification === "acute" ? "Early phase" : clock.classification === "emerging" ? "Emerging" : "Sustained"}
+      </div>
+    </div>
+  );
+}
 
-      {/* Bar with zone fills */}
-      <div style={{ position: "relative", height: 8, borderRadius: 4, overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, display: "flex" }}>
-          <div style={{ flex: WATCH_THRESHOLD, background: "rgba(255,255,255,0.08)" }} />
-          <div style={{ flex: ACTIONABLE_THRESHOLD - WATCH_THRESHOLD, background: "rgba(255,255,255,0.13)" }} />
-          <div style={{ flex: 100 - ACTIONABLE_THRESHOLD, background: "rgba(255,255,255,0.18)" }} />
-        </div>
+function SubscoreBar({ score, label }: { score: number; label: string }) {
+  const percentage = Math.round(score * 100);
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 11 }}>
+        <span style={{ color: "#6b7280", fontWeight: 500 }}>{label}</span>
+        <span style={{ color: "#111827", fontWeight: 600 }}>{percentage}%</span>
+      </div>
+      <div style={{ height: 4, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
         <div
           style={{
-            position: "absolute",
-            left: 0,
-            width: `${score}%`,
             height: "100%",
-            background: "rgba(255,255,255,0.75)",
-            transition: "width 0.4s ease",
+            width: `${percentage}%`,
+            background: "#2563eb",
+            borderRadius: 2,
+            transition: "width 0.3s ease",
           }}
         />
-        {[WATCH_THRESHOLD, ACTIONABLE_THRESHOLD].map((tick) => (
-          <div
-            key={tick}
-            style={{
-              position: "absolute",
-              left: `${tick}%`,
-              top: 0,
-              bottom: 0,
-              width: 1,
-              background: "rgba(255,255,255,0.4)",
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Zone labels */}
-      <div style={{ position: "relative", height: 18, marginTop: 5 }}>
-        <span style={{ position: "absolute", left: 0, fontSize: 10, color: "rgba(255,255,255,0.6)" }}>
-          none
-        </span>
-        <span
-          style={{
-            position: "absolute",
-            left: `${WATCH_THRESHOLD}%`,
-            transform: "translateX(-50%)",
-            fontSize: 10,
-            color: "rgba(255,255,255,0.6)",
-          }}
-        >
-          watch
-        </span>
-        <span
-          style={{
-            position: "absolute",
-            left: `${ACTIONABLE_THRESHOLD}%`,
-            transform: "translateX(-30%)",
-            fontSize: 10,
-            color: "rgba(255,255,255,0.6)",
-          }}
-        >
-          actionable
-        </span>
       </div>
     </div>
   );
@@ -131,15 +117,16 @@ export function StateView({ data, error }: { data: StateData | null; error: stri
   }
   if (!data) return null;
 
-  const bg = STATE_BG[data.actionability_state];
-  const mismatchPct = Math.round(data.mismatch_score * 100);
-  const coveragePct = Math.round(data.coverage_confidence * 100);
+  const bg = STATE_BG[data.dislocationState];
+  const mismatchPct = Math.round(data.mismatchScore * 100);
+  const coveragePct = Math.round(data.coverageConfidence * 100);
+  const stateLabel = DISLOCATION_STATE_LABEL[data.dislocationState];
 
   return (
     <section>
       {/* Hero band */}
-      <div style={{ background: bg, padding: "24px 20px 20px", color: "#fff" }}>
-        {/* State badge */}
+      <div style={{ background: bg, padding: "24px 20px", color: "#fff" }}>
+        {/* State label badge */}
         <div style={{ marginBottom: 16 }}>
           <span
             style={{
@@ -152,15 +139,15 @@ export function StateView({ data, error }: { data: StateData | null; error: stri
               borderRadius: 100,
             }}
           >
-            {data.actionability_state}
+            {stateLabel}
           </span>
         </div>
 
-        {/* Score hero */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
+        {/* Score display */}
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
           <span
             style={{
-              fontSize: 56,
+              fontSize: 48,
               fontWeight: 800,
               letterSpacing: "-0.03em",
               lineHeight: 1,
@@ -169,23 +156,18 @@ export function StateView({ data, error }: { data: StateData | null; error: stri
           >
             {mismatchPct}%
           </span>
-          <span style={{ fontSize: 13, opacity: 0.6 }}>mismatch</span>
+          <span style={{ fontSize: 13, opacity: 0.7 }}>mismatch</span>
         </div>
 
-        {/* Tagline */}
-        <p style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.9, maxWidth: 340, marginBottom: 3 }}>
-          {STATE_TAGLINE[data.actionability_state]}
-        </p>
-        <p style={{ fontSize: 11, opacity: 0.6 }}>
-          {STATE_SUBTITLE[data.actionability_state]}
+        {/* State rationale */}
+        <p style={{ fontSize: 14, lineHeight: 1.5, opacity: 0.95, maxWidth: 380, marginBottom: 2 }}>
+          {data.stateRationale}
         </p>
 
-        <ThresholdScale score={mismatchPct} />
-
-        {/* Freshness pill badges */}
+        {/* Freshness pills */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 16 }}>
           {(["physical", "recognition", "transmission"] as const).map((key) => {
-            const freshness = data.source_freshness[key];
+            const freshness = data.sourceFreshness[key];
             return (
               <div
                 key={key}
@@ -216,8 +198,37 @@ export function StateView({ data, error }: { data: StateData | null; error: stri
         </div>
       </div>
 
+      {/* Three clocks display */}
+      <div style={{ background: "#fff", borderBottom: "1px solid #f3f4f6", display: "flex" }}>
+        <ClockDisplay clock={data.clocks.shock} label="Shock age" />
+        <ClockDisplay clock={data.clocks.dislocation} label="Dislocation age" />
+        <ClockDisplay clock={data.clocks.transmission} label="Transmission age" />
+      </div>
+
+      {/* Subscores */}
+      <div style={{ background: "#fff", padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 12 }}>
+          Score breakdown
+        </div>
+        <SubscoreBar score={data.subscores.physical} label="Physical pressure" />
+        <SubscoreBar score={data.subscores.recognition} label="Market recognition" />
+        <SubscoreBar score={data.subscores.transmission} label="Transmission pressure" />
+      </div>
+
+      {/* Ledger impact */}
+      {data.ledgerImpact && (
+        <div style={{ background: "#fff", padding: "12px 20px", borderBottom: "1px solid #f3f4f6", fontSize: 12 }}>
+          <span style={{ color: "#6b7280", fontWeight: 600 }}>Ledger adjustment: </span>
+          <span style={{ color: "#111827" }}>
+            {data.ledgerImpact.direction === "increase" ? "+" : "−"}
+            {Math.round(data.ledgerImpact.magnitude * 100)}%
+          </span>
+          <span style={{ color: "#9ca3af", marginLeft: 8 }}>({data.ledgerImpact.rationale})</span>
+        </div>
+      )}
+
       {/* Coverage bar */}
-      <div style={{ background: "#fff", padding: "12px 20px 14px", borderBottom: "1px solid #f3f4f6" }}>
+      <div style={{ background: "#fff", padding: "12px 20px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", letterSpacing: "0.03em" }}>
