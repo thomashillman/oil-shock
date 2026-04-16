@@ -82,18 +82,19 @@ export function App() {
             onClick={() => void fetchAll(true)}
             disabled={refreshing || loading}
             aria-label="Refresh"
+            className="refresh-btn"
             style={{
               background: "none",
               border: "1px solid #e5e7eb",
               borderRadius: 6,
               padding: "4px 10px",
               fontSize: 14,
-              color: refreshing ? "#9ca3af" : "#374151",
-              cursor: refreshing || loading ? "default" : "pointer",
+              color: "#374151",
+              cursor: "pointer",
               lineHeight: 1,
             }}
           >
-            ↺
+            <span className={refreshing ? "spin-icon" : undefined}>↺</span>
           </button>
         </div>
       </header>
