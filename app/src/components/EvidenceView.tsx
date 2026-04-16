@@ -13,16 +13,23 @@ export interface EvidenceData {
   evidence: EvidenceItem[];
 }
 
+const GROUP_ACCENT: Record<string, string> = {
+  physical: "#dc2626",
+  recognition: "#d97706",
+  transmission: "#2563eb",
+};
+
 function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) {
   const color = positive ? "#dc2626" : "#16a34a";
   return (
-    <div style={{ height: 3, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
+    <div style={{ height: 5, background: "#f3f4f6", borderRadius: 3, overflow: "hidden" }}>
       <div
         style={{
           height: "100%",
           width: `${Math.min(pct, 100)}%`,
           background: color,
-          borderRadius: 2,
+          borderRadius: 3,
+          transition: "width 0.3s ease",
         }}
       />
     </div>
@@ -61,18 +68,25 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
 
       {Object.entries(groups).map(([group, items]) => {
         const meta = groupMeta(group);
+        const accent = GROUP_ACCENT[group] ?? "#6b7280";
         return (
           <div
             key={group}
-            style={{ background: "#fff", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              marginBottom: 12,
+              overflow: "hidden",
+              borderLeft: `3px solid ${accent}`,
+            }}
           >
             {/* Group header */}
-            <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
+            <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
               <div
                 style={{
                   fontSize: 10,
                   fontWeight: 700,
-                  color: "#9ca3af",
+                  color: accent,
                   textTransform: "uppercase",
                   letterSpacing: "0.12em",
                   marginBottom: 3,
@@ -132,13 +146,12 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      marginTop: 6,
+                      marginTop: 7,
                       fontSize: 11,
-                      color: "#9ca3af",
                     }}
                   >
-                    <span style={{ color: positive ? "#fca5a5" : "#86efac" }}>{directionLabel}</span>
-                    <span>
+                    <span style={{ color: valueColor, fontWeight: 500 }}>{directionLabel}</span>
+                    <span style={{ color: "#9ca3af" }}>
                       {new Date(item.observed_at).toLocaleDateString(undefined, {
                         month: "short",
                         day: "numeric",
