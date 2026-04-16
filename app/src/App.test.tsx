@@ -53,6 +53,32 @@ const mockEvidence = {
   ],
 };
 
+const mockSnakeCaseState = {
+  generated_at: "2026-04-16T20:00:00.000Z",
+  mismatch_score: 0.72,
+  dislocation_state: "persistent_divergence",
+  state_rationale: "Physical pressure persists while market recognition lags.",
+  actionability_state: "actionable",
+  confidence: {
+    coverage: 0.9,
+    sourceQuality: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  },
+  subscores: {
+    physical: 0.75,
+    recognition: 0.25,
+    transmission: 0.68,
+  },
+  clocks: {
+    shock: { ageSeconds: 259200, label: "3 days", classification: "acute" },
+    dislocation: { ageSeconds: 432000, label: "5 days", classification: "chronic" },
+    transmission: { ageSeconds: 86400, label: "24 hours", classification: "chronic" },
+  },
+  ledger_impact: null,
+  coverage_confidence: 0.9,
+  source_freshness: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  evidence_ids: ["ev1"],
+};
+
 function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -68,6 +94,24 @@ function stubFetch(stateOk: boolean, evidenceOk: boolean) {
         ok: evidenceOk,
         json: async () =>
           evidenceOk ? mockEvidence : { error: "no_snapshot", message: "No snapshot available." },
+      });
+    }),
+  );
+}
+
+function stubFetchWithStatePayload(payload: unknown) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if ((url as string).includes("/api/state")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => payload,
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => mockEvidence,
       });
     }),
   );
@@ -95,5 +139,12 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     expect(screen.getAllByText("No snapshot available.").length).toBeGreaterThan(0);
+  });
+
+  it("renders state data from snake_case payloads", async () => {
+    stubFetchWithStatePayload(mockSnakeCaseState);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    expect(screen.getAllByText("Persistent divergence").length).toBeGreaterThan(0);
   });
 });

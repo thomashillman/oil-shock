@@ -7,6 +7,47 @@ import type { EvidenceData } from "./components/EvidenceView";
 
 const REFRESH_MS = 60_000;
 
+function normalizeStatePayload(payload: unknown): StateData | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const data = payload as Record<string, unknown>;
+  const fromSnake = {
+    generatedAt: data.generated_at,
+    mismatchScore: data.mismatch_score,
+    dislocationState: data.dislocation_state,
+    stateRationale: data.state_rationale,
+    actionabilityState: data.actionability_state,
+    confidence: data.confidence,
+    subscores: data.subscores,
+    clocks: data.clocks,
+    ledgerImpact: data.ledger_impact,
+    coverageConfidence: data.coverage_confidence,
+    sourceFreshness: data.source_freshness,
+    evidenceIds: data.evidence_ids,
+  };
+
+  const normalized = {
+    generatedAt: data.generatedAt ?? fromSnake.generatedAt,
+    mismatchScore: data.mismatchScore ?? fromSnake.mismatchScore,
+    dislocationState: data.dislocationState ?? fromSnake.dislocationState,
+    stateRationale: data.stateRationale ?? fromSnake.stateRationale,
+    actionabilityState: data.actionabilityState ?? fromSnake.actionabilityState,
+    confidence: data.confidence ?? fromSnake.confidence,
+    subscores: data.subscores ?? fromSnake.subscores,
+    clocks: data.clocks ?? fromSnake.clocks,
+    ledgerImpact: data.ledgerImpact ?? fromSnake.ledgerImpact,
+    coverageConfidence: data.coverageConfidence ?? fromSnake.coverageConfidence,
+    sourceFreshness: data.sourceFreshness ?? fromSnake.sourceFreshness,
+    evidenceIds: data.evidenceIds ?? fromSnake.evidenceIds,
+  } as StateData;
+
+  if (!normalized.dislocationState || !normalized.clocks || !normalized.subscores) {
+    return null;
+  }
+
+  return normalized;
+}
+
 export function App() {
   const [stateData, setStateData] = useState<StateData | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceData | null>(null);
@@ -27,8 +68,14 @@ export function App() {
     if (stateRes.status === "fulfilled") {
       const data = await stateRes.value.json();
       if (stateRes.value.ok) {
-        setStateData(data as StateData);
-        setStateError(null);
+        const normalized = normalizeStatePayload(data);
+        if (normalized) {
+          setStateData(normalized);
+          setStateError(null);
+        } else {
+          setStateData(null);
+          setStateError(`State payload is missing required fields from ${apiBaseUrl}/api/state`);
+        }
       } else {
         setStateError((data as { message?: string }).message ?? "Failed to load state");
       }
