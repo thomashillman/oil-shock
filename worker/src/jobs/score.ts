@@ -4,12 +4,21 @@ import {
   getLatestSeriesValue,
   startRun,
   writeRunEvidence,
-  writeSnapshot
+  writeSnapshot,
+  getLatestStateChangeEvent,
+  writeSateChangeEvent,
+  getLedgerEntries
 } from "../db/client";
 import { evaluateFreshness } from "../core/freshness/evaluate";
+import { evaluateEvidenceCoverage } from "../core/freshness/evidence-coverage";
 import { computeSnapshot } from "../core/scoring/compute";
+import { computeDislocationState } from "../core/scoring/state-labels";
+import { computeClocks } from "../core/scoring/clocks";
+import { classifyEvidence } from "../core/scoring/evidence-classifier";
+import { applyLedgerAdjustments } from "../core/ledger/impact";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
+import type { DislocationState } from "../types";
 
 function safeValue(value: number | null): number {
   if (value === null || Number.isNaN(value)) {
@@ -20,6 +29,7 @@ function safeValue(value: number | null): number {
 
 export async function runScore(env: Env, now = new Date()): Promise<void> {
   const runKey = `score-${now.getTime()}`;
+  const nowIso = now.toISOString();
   await startRun(env, runKey, "score");
   log("info", "Starting scoring run", { runKey });
 
@@ -44,8 +54,9 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       transmissionObservedAt: transmission?.observedAt ?? null
     });
 
-    const { snapshot, evidence } = computeSnapshot({
-      nowIso: now.toISOString(),
+    // Compute initial snapshot with subscores
+    let { snapshot, evidence } = computeSnapshot({
+      nowIso,
       physicalPressure,
       recognition: recognitionValue,
       transmission: transmissionValue,
@@ -55,15 +66,88 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       freshness
     });
 
+    // Apply ledger adjustments to mismatch score
+    const ledgerEntries = await getLedgerEntries(env);
+    const { adjustedMismatchScore, ledgerImpact } = applyLedgerAdjustments({
+      mismatchScore: snapshot.mismatchScore,
+      physicalScore: snapshot.subscores.physical,
+      ledgerEntries,
+      nowIso
+    });
+    snapshot.mismatchScore = adjustedMismatchScore;
+    snapshot.ledgerImpact = ledgerImpact;
+
+    // Get previous state change event to compute duration
+    const previousStateEvent = await getLatestStateChangeEvent(env);
+    let durationInCurrentStateSeconds: number | null = null;
+    if (previousStateEvent) {
+      durationInCurrentStateSeconds = Math.floor((now.getTime() - new Date(previousStateEvent.generated_at).getTime()) / 1000);
+    }
+
+    // Compute dislocation state
+    const { state: dislocationState, rationale: stateRationale } = computeDislocationState(
+      snapshot.mismatchScore,
+      snapshot.subscores,
+      freshness,
+      durationInCurrentStateSeconds
+    );
+    snapshot.dislocationState = dislocationState;
+    snapshot.stateRationale = stateRationale;
+
+    // Write state change event if state changed
+    if (!previousStateEvent || previousStateEvent.new_state !== dislocationState) {
+      await writeSateChangeEvent(env, {
+        generatedAt: nowIso,
+        previousState: previousStateEvent?.new_state ?? null,
+        newState: dislocationState,
+        stateDurationSeconds: previousStateEvent ? durationInCurrentStateSeconds : null,
+        transmissionChanged: !previousStateEvent || previousStateEvent.transmission_pressure_changed
+      });
+    }
+
+    // Compute clocks
+    const clocks = computeClocks({
+      nowIso,
+      durationInCurrentStateSeconds,
+      firstTransmissionSignalObservedAt: transmission?.observedAt ?? null,
+      firstMismatchObservedAt: physical?.observedAt ?? null
+    });
+    snapshot.clocks = clocks;
+
+    // Classify evidence and evaluate coverage
+    evidence = evidence.map((evt) => {
+      const { classification, reason } = classifyEvidence({
+        evidenceKey: evt.evidenceKey,
+        contribution: evt.contribution,
+        physicalScore: snapshot.subscores.physical,
+        recognitionScore: snapshot.subscores.recognition,
+        transmissionScore: snapshot.subscores.transmission
+      });
+
+      const { coverage } = evaluateEvidenceCoverage({
+        evidenceKey: evt.evidenceKey,
+        freshness: freshness[evt.evidenceGroup as keyof typeof freshness]
+      });
+
+      return {
+        ...evt,
+        classification,
+        coverage,
+        reason
+      };
+    });
+
     await writeSnapshot(env, snapshot);
     await writeRunEvidence(env, runKey, evidence);
     await finishRun(env, runKey, "success", {
       mismatchScore: snapshot.mismatchScore,
+      dislocationState: snapshot.dislocationState,
       actionabilityState: snapshot.actionabilityState
     });
     log("info", "Scoring run completed", {
       runKey,
       mismatchScore: snapshot.mismatchScore,
+      dislocationState: snapshot.dislocationState,
       actionabilityState: snapshot.actionabilityState
     });
   } catch (error) {

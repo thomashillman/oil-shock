@@ -1,22 +1,34 @@
-import { evidenceLabel, groupMeta } from "../labels";
+import { evidenceLabel, groupMeta, classificationLabel, coverageLabel } from "../labels";
 
 export interface EvidenceItem {
-  evidence_key: string;
-  evidence_group: string;
-  observed_at: string;
+  evidenceKey: string;
+  evidenceGroup: string;
+  evidenceGroupLabel: string;
+  observedAt: string;
   contribution: number;
-  details_json: string;
+  classification: string;
+  coverage: string;
+  details: Record<string, unknown>;
 }
 
 export interface EvidenceData {
-  generated_at: string;
+  generatedAt: string;
   evidence: EvidenceItem[];
 }
 
 const GROUP_ACCENT: Record<string, string> = {
+  physical_reality: "#dc2626",
+  market_recognition: "#d97706",
+  transmission_pressure: "#2563eb",
   physical: "#dc2626",
   recognition: "#d97706",
   transmission: "#2563eb",
+};
+
+const CLASSIFICATION_COLOR: Record<string, string> = {
+  confirming: "#16a34a",
+  counterevidence: "#f97316",
+  falsifier: "#dc2626",
 };
 
 function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) {
@@ -36,6 +48,84 @@ function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) 
   );
 }
 
+function EvidenceItem({ item, accent }: { item: EvidenceItem; accent: string }) {
+  const pct = Math.abs(item.contribution * 100);
+  const positive = item.contribution >= 0;
+  const classColor = CLASSIFICATION_COLOR[item.classification] ?? "#6b7280";
+
+  return (
+    <div style={{ padding: "12px 16px", borderBottom: "1px solid #f9fafb" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+        <span style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>
+          {evidenceLabel(item.evidenceKey)}
+        </span>
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: classColor,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {classificationLabel(item.classification)}
+        </span>
+      </div>
+
+      <ContributionBar pct={pct} positive={positive} />
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, gap: 8 }}>
+        <span style={{ color: "#6b7280" }}>{coverageLabel(item.coverage)}</span>
+        <span style={{ color: "#9ca3af", textAlign: "right" }}>
+          {new Date(item.observedAt).toLocaleDateString(undefined, {
+            month: "short",
+            day: "numeric",
+          })}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function EvidenceColumn({ groupLabel, items, accent }: { groupLabel: string; items: EvidenceItem[]; accent: string }) {
+  const meta = groupMeta(groupLabel);
+  return (
+    <div
+      style={{
+        flex: 1,
+        background: "#fff",
+        borderRadius: 8,
+        overflow: "hidden",
+        borderLeft: `3px solid ${accent}`,
+        marginBottom: 12,
+      }}
+    >
+      <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: accent,
+            textTransform: "uppercase",
+            letterSpacing: "0.12em",
+            marginBottom: 3,
+          }}
+        >
+          {meta.label}
+        </div>
+        {meta.description && (
+          <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.3, margin: 0 }}>
+            {meta.description}
+          </p>
+        )}
+      </div>
+
+      {items.map((item) => (
+        <EvidenceItem key={item.evidenceKey} item={item} accent={accent} />
+      ))}
+    </div>
+  );
+}
+
 export function EvidenceView({ data, error }: { data: EvidenceData | null; error: string | null }) {
   if (error) {
     return (
@@ -47,9 +137,14 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
   if (!data || data.evidence.length === 0) return null;
 
   const groups = data.evidence.reduce<Record<string, EvidenceItem[]>>((acc, item) => {
-    (acc[item.evidence_group] ??= []).push(item);
+    const groupKey = item.evidenceGroupLabel || item.evidenceGroup;
+    (acc[groupKey] ??= []).push(item);
     return acc;
   }, {});
+
+  const orderedGroups = ["physical_reality", "market_recognition", "transmission_pressure"].filter(
+    (group) => groups[group]
+  );
 
   return (
     <section style={{ padding: "20px 20px 0" }}>
@@ -63,108 +158,17 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
           marginBottom: 12,
         }}
       >
-        Evidence
+        Evidence Frame
       </h2>
 
-      {Object.entries(groups).map(([group, items]) => {
-        const meta = groupMeta(group);
-        const accent = GROUP_ACCENT[group] ?? "#6b7280";
-        return (
-          <div
-            key={group}
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              marginBottom: 12,
-              overflow: "hidden",
-              borderLeft: `3px solid ${accent}`,
-            }}
-          >
-            {/* Group header */}
-            <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: accent,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.12em",
-                  marginBottom: 3,
-                }}
-              >
-                {meta.label}
-              </div>
-              {meta.description && (
-                <p style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>{meta.description}</p>
-              )}
-            </div>
-
-            {/* Evidence items */}
-            {items.map((item, i) => {
-              const pct = Math.abs(item.contribution * 100);
-              const positive = item.contribution >= 0;
-              const valueColor = positive ? "#dc2626" : "#16a34a";
-              const directionLabel = positive ? "driving signal" : "moderating signal";
-
-              return (
-                <div
-                  key={item.evidence_key}
-                  style={{
-                    padding: "12px 16px",
-                    borderBottom: i < items.length - 1 ? "1px solid #f9fafb" : "none",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>
-                      {evidenceLabel(item.evidence_key)}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        color: valueColor,
-                        fontVariantNumeric: "tabular-nums",
-                        marginLeft: 12,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {positive ? "+" : "−"}
-                      {pct.toFixed(1)}%
-                    </span>
-                  </div>
-
-                  <ContributionBar pct={pct} positive={positive} />
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      marginTop: 7,
-                      fontSize: 11,
-                    }}
-                  >
-                    <span style={{ color: valueColor, fontWeight: 500 }}>{directionLabel}</span>
-                    <span style={{ color: "#9ca3af" }}>
-                      {new Date(item.observed_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
+      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+        {orderedGroups.map((group) => {
+          const accent = GROUP_ACCENT[group] ?? "#6b7280";
+          return (
+            <EvidenceColumn key={group} groupLabel={group} items={groups[group]!} accent={accent} />
+          );
+        })}
+      </div>
     </section>
   );
 }

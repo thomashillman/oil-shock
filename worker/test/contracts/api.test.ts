@@ -17,11 +17,16 @@ describe("api contracts", () => {
     const stateResponse = await handleGetState(env);
     const state = (await stateResponse.json()) as Record<string, unknown>;
     expect(stateResponse.status).toBe(200);
-    expect(state).toHaveProperty("generated_at");
-    expect(state).toHaveProperty("mismatch_score");
-    expect(state).toHaveProperty("actionability_state");
-    expect(state).toHaveProperty("source_freshness");
-    expect(state).toHaveProperty("coverage_confidence");
+    expect(state).toHaveProperty("generatedAt");
+    expect(state).toHaveProperty("mismatchScore");
+    expect(state).toHaveProperty("dislocationState");
+    expect(state).toHaveProperty("stateRationale");
+    expect(state).toHaveProperty("actionabilityState");
+    expect(state).toHaveProperty("confidence");
+    expect(state).toHaveProperty("subscores");
+    expect(state).toHaveProperty("clocks");
+    expect(state).toHaveProperty("sourceFreshness");
+    expect(state).toHaveProperty("coverageConfidence");
 
     const evidenceResponse = await handleGetEvidence(env);
     const evidence = (await evidenceResponse.json()) as Record<string, unknown>;
