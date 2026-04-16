@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import type { NormalizedPoint, ScoreEvidence, StateSnapshot } from "../types";
+import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState } from "../types";
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
@@ -83,9 +83,14 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot): Promise<
       actionability_state,
       coverage_confidence,
       source_freshness_json,
-      evidence_ids_json
+      evidence_ids_json,
+      dislocation_state_json,
+      state_rationale,
+      subscores_json,
+      clocks_json,
+      ledger_impact_json
     )
-    VALUES (?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -94,7 +99,12 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot): Promise<
       snapshot.actionabilityState,
       snapshot.coverageConfidence,
       JSON.stringify(snapshot.sourceFreshness),
-      JSON.stringify(snapshot.evidenceIds)
+      JSON.stringify(snapshot.evidenceIds),
+      JSON.stringify(snapshot.dislocationState),
+      snapshot.stateRationale,
+      JSON.stringify(snapshot.subscores),
+      JSON.stringify(snapshot.clocks),
+      JSON.stringify(snapshot.ledgerImpact)
     )
     .run();
 
@@ -111,9 +121,12 @@ export async function writeRunEvidence(env: Env, runKey: string, evidenceItems: 
         evidence_group,
         observed_at,
         contribution,
+        evidence_classification,
+        coverage_quality,
+        evidence_group_label,
         details_json
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
       .bind(
@@ -122,6 +135,9 @@ export async function writeRunEvidence(env: Env, runKey: string, evidenceItems: 
         evidence.evidenceGroup,
         evidence.observedAt,
         evidence.contribution,
+        evidence.classification,
+        evidence.coverage,
+        evidence.evidenceGroupLabel,
         JSON.stringify(evidence.details)
       )
       .run();
@@ -144,6 +160,11 @@ export async function getLatestSnapshot(env: Env) {
     coverage_confidence: number;
     source_freshness_json: string;
     evidence_ids_json: string;
+    dislocation_state_json: string;
+    state_rationale: string;
+    subscores_json: string;
+    clocks_json: string;
+    ledger_impact_json: string | null;
   }>();
   return row ?? null;
 }
@@ -165,7 +186,7 @@ export async function getLatestRunEvidence(env: Env) {
 
   const result = await env.DB.prepare(
     `
-    SELECT evidence_key, evidence_group, observed_at, contribution, details_json
+    SELECT evidence_key, evidence_group, observed_at, contribution, evidence_classification, coverage_quality, evidence_group_label, details_json
     FROM run_evidence
     WHERE run_key = ?
     ORDER BY observed_at DESC
@@ -177,8 +198,110 @@ export async function getLatestRunEvidence(env: Env) {
       evidence_group: string;
       observed_at: string;
       contribution: number;
+      evidence_classification: string;
+      coverage_quality: string;
+      evidence_group_label: string;
       details_json: string;
     }>();
 
   return result.results;
+}
+
+export async function getLatestStateChangeEvent(env: Env): Promise<{
+  generated_at: string;
+  previous_state: DislocationState | null;
+  new_state: DislocationState;
+  state_transition_duration_seconds: number | null;
+  transmission_pressure_changed: boolean;
+} | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at, previous_state, new_state, state_transition_duration_seconds, transmission_pressure_changed
+    FROM state_change_events
+    ORDER BY generated_at DESC
+    LIMIT 1
+    `
+  ).first<{
+    generated_at: string;
+    previous_state: string | null;
+    new_state: string;
+    state_transition_duration_seconds: number | null;
+    transmission_pressure_changed: boolean;
+  }>();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    generated_at: row.generated_at,
+    previous_state: row.previous_state as DislocationState | null,
+    new_state: row.new_state as DislocationState,
+    state_transition_duration_seconds: row.state_transition_duration_seconds,
+    transmission_pressure_changed: row.transmission_pressure_changed
+  };
+}
+
+export async function writeSateChangeEvent(
+  env: Env,
+  event: {
+    generatedAt: string;
+    previousState: DislocationState | null;
+    newState: DislocationState;
+    stateDurationSeconds: number | null;
+    transmissionChanged: boolean;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO state_change_events (
+      generated_at,
+      previous_state,
+      new_state,
+      state_transition_duration_seconds,
+      transmission_pressure_changed
+    )
+    VALUES (?, ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      event.generatedAt,
+      event.previousState,
+      event.newState,
+      event.stateDurationSeconds,
+      event.transmissionChanged ? 1 : 0
+    )
+    .run();
+}
+
+export async function getLedgerEntries(env: Env): Promise<
+  {
+    entryKey: string;
+    impactDirection: "increase" | "decrease";
+    createdAt: string;
+    retiredAt: string | null;
+    reviewDueAt: string;
+  }[]
+> {
+  const result = await env.DB.prepare(
+    `
+    SELECT entry_key, impact_direction, created_at, retired_at, review_due_at
+    FROM impairment_ledger
+    ORDER BY created_at DESC
+    `
+  ).all<{
+    entry_key: string;
+    impact_direction: string;
+    created_at: string;
+    retired_at: string | null;
+    review_due_at: string;
+  }>();
+
+  return result.results.map((row) => ({
+    entryKey: row.entry_key,
+    impactDirection: row.impact_direction as "increase" | "decrease",
+    createdAt: row.created_at,
+    retiredAt: row.retired_at,
+    reviewDueAt: row.review_due_at
+  }));
 }

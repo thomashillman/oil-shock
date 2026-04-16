@@ -15,11 +15,20 @@ export async function handleGetState(env: Env): Promise<Response> {
   }
 
   return json({
-    generated_at: snapshot.generated_at,
-    mismatch_score: snapshot.mismatch_score,
-    actionability_state: snapshot.actionability_state,
-    coverage_confidence: snapshot.coverage_confidence,
-    source_freshness: JSON.parse(snapshot.source_freshness_json),
-    evidence_ids: JSON.parse(snapshot.evidence_ids_json)
+    generatedAt: snapshot.generated_at,
+    mismatchScore: snapshot.mismatch_score,
+    dislocationState: JSON.parse(snapshot.dislocation_state_json),
+    stateRationale: snapshot.state_rationale,
+    actionabilityState: snapshot.actionability_state,
+    confidence: {
+      coverage: snapshot.coverage_confidence,
+      sourceQuality: JSON.parse(snapshot.source_freshness_json)
+    },
+    subscores: JSON.parse(snapshot.subscores_json),
+    clocks: JSON.parse(snapshot.clocks_json),
+    ledgerImpact: snapshot.ledger_impact_json ? JSON.parse(snapshot.ledger_impact_json) : null,
+    coverageConfidence: snapshot.coverage_confidence,
+    sourceFreshness: JSON.parse(snapshot.source_freshness_json),
+    evidenceIds: JSON.parse(snapshot.evidence_ids_json)
   });
 }
