@@ -66,8 +66,8 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     expect(screen.getAllByText("actionable").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("72% mismatch").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("eia_crude_stocks").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/significantly ahead of market pricing/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Supply Pressure").length).toBeGreaterThan(0);
   });
 
   it("shows error message when no snapshot available", async () => {

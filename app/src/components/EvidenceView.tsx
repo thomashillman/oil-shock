@@ -1,3 +1,5 @@
+import { evidenceLabel, groupMeta } from "../labels";
+
 export interface EvidenceItem {
   evidence_key: string;
   evidence_group: string;
@@ -9,6 +11,22 @@ export interface EvidenceItem {
 export interface EvidenceData {
   generated_at: string;
   evidence: EvidenceItem[];
+}
+
+function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) {
+  const color = positive ? "#dc2626" : "#16a34a";
+  return (
+    <div style={{ height: 3, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
+      <div
+        style={{
+          height: "100%",
+          width: `${Math.min(pct, 100)}%`,
+          background: color,
+          borderRadius: 2,
+        }}
+      />
+    </div>
+  );
 }
 
 export function EvidenceView({ data, error }: { data: EvidenceData | null; error: string | null }) {
@@ -41,92 +59,99 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
         Evidence
       </h2>
 
-      {Object.entries(groups).map(([group, items]) => (
-        <div
-          key={group}
-          style={{ background: "#fff", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}
-        >
+      {Object.entries(groups).map(([group, items]) => {
+        const meta = groupMeta(group);
+        return (
           <div
-            style={{
-              padding: "10px 16px",
-              fontSize: 10,
-              fontWeight: 700,
-              color: "#9ca3af",
-              textTransform: "uppercase",
-              letterSpacing: "0.14em",
-              borderBottom: "1px solid #f3f4f6",
-            }}
+            key={group}
+            style={{ background: "#fff", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}
           >
-            {group}
-          </div>
-
-          {items.map((item, i) => {
-            const pct = Math.abs(item.contribution * 100);
-            const positive = item.contribution >= 0;
-            const barColor = positive ? "#dc2626" : "#16a34a";
-            const valueColor = positive ? "#dc2626" : "#16a34a";
-
-            return (
+            {/* Group header */}
+            <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
               <div
-                key={item.evidence_key}
                 style={{
-                  padding: "12px 16px",
-                  borderBottom: i < items.length - 1 ? "1px solid #f9fafb" : "none",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#9ca3af",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  marginBottom: 3,
                 }}
               >
+                {meta.label}
+              </div>
+              {meta.description && (
+                <p style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>{meta.description}</p>
+              )}
+            </div>
+
+            {/* Evidence items */}
+            {items.map((item, i) => {
+              const pct = Math.abs(item.contribution * 100);
+              const positive = item.contribution >= 0;
+              const valueColor = positive ? "#dc2626" : "#16a34a";
+              const directionLabel = positive ? "driving signal" : "moderating signal";
+
+              return (
                 <div
+                  key={item.evidence_key}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "baseline",
-                    marginBottom: 7,
+                    padding: "12px 16px",
+                    borderBottom: i < items.length - 1 ? "1px solid #f9fafb" : "none",
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: 13,
-                      color: "#111827",
-                      fontFamily: "ui-monospace, 'Cascadia Code', monospace",
-                    }}
-                  >
-                    {item.evidence_key}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: valueColor,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {positive ? "+" : "−"}
-                    {pct.toFixed(1)}%
-                  </span>
-                </div>
-
-                <div style={{ height: 3, background: "#f3f4f6", borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
                   <div
                     style={{
-                      height: "100%",
-                      width: `${Math.min(pct, 100)}%`,
-                      background: barColor,
-                      borderRadius: 2,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      marginBottom: 8,
                     }}
-                  />
-                </div>
+                  >
+                    <span style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>
+                      {evidenceLabel(item.evidence_key)}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: valueColor,
+                        fontVariantNumeric: "tabular-nums",
+                        marginLeft: 12,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {positive ? "+" : "−"}
+                      {pct.toFixed(1)}%
+                    </span>
+                  </div>
 
-                <div style={{ fontSize: 11, color: "#9ca3af" }}>
-                  {new Date(item.observed_at).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  <ContributionBar pct={pct} positive={positive} />
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginTop: 6,
+                      fontSize: 11,
+                      color: "#9ca3af",
+                    }}
+                  >
+                    <span style={{ color: positive ? "#fca5a5" : "#86efac" }}>{directionLabel}</span>
+                    <span>
+                      {new Date(item.observed_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
+              );
+            })}
+          </div>
+        );
+      })}
     </section>
   );
 }
