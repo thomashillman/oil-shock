@@ -1,5 +1,6 @@
 import type { Env } from "../env";
-import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState } from "../types";
+import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState, ScoringThresholds } from "../types";
+import { AppError } from "../lib/errors";
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
@@ -272,6 +273,63 @@ export async function writeSateChangeEvent(
       event.transmissionChanged ? 1 : 0
     )
     .run();
+}
+
+export async function getFirstNonAlignedStateEvent(env: Env): Promise<{ generated_at: string } | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at
+    FROM state_change_events
+    WHERE new_state != 'aligned'
+    ORDER BY generated_at ASC
+    LIMIT 1
+    `
+  ).first<{ generated_at: string }>();
+  return row ?? null;
+}
+
+export async function getFirstTransmissionEvent(env: Env): Promise<{ generated_at: string } | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at
+    FROM state_change_events
+    WHERE transmission_pressure_changed = 1
+    ORDER BY generated_at ASC
+    LIMIT 1
+    `
+  ).first<{ generated_at: string }>();
+  return row ?? null;
+}
+
+export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
+  const result = await env.DB.prepare(
+    `SELECT key, value FROM config_thresholds`
+  ).all<{ key: string; value: number }>();
+
+  const map = new Map<string, number>(result.results.map((r) => [r.key, r.value]));
+
+  const required: Array<[keyof ScoringThresholds, string]> = [
+    ["stateAlignedMax", "state_aligned_threshold_max"],
+    ["stateMildMin", "state_mild_threshold_min"],
+    ["stateMildMax", "state_mild_threshold_max"],
+    ["statePersistentMin", "state_persistent_threshold_min"],
+    ["statePersistentMax", "state_persistent_threshold_max"],
+    ["stateDeepMin", "state_deep_threshold_min"],
+    ["shockAgeThresholdHours", "shock_age_threshold_hours"],
+    ["dislocationPersistenceHours", "dislocation_persistence_threshold_hours"],
+    ["ledgerAdjustmentMagnitude", "ledger_adjustment_magnitude"]
+  ];
+
+  const thresholds = {} as ScoringThresholds;
+  for (const [field, key] of required) {
+    const value = map.get(key);
+    if (value === undefined) {
+      throw new AppError(`Missing config_thresholds key: ${key}`, 500, "MISSING_THRESHOLD");
+    }
+    thresholds[field] = value;
+  }
+
+  return thresholds;
 }
 
 export async function getLedgerEntries(env: Env): Promise<

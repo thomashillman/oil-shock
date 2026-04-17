@@ -1,4 +1,4 @@
-import type { LedgerImpact } from "../../types";
+import type { LedgerImpact, ScoringThresholds } from "../../types";
 
 interface LedgerEntry {
   entryKey: string;
@@ -13,9 +13,9 @@ interface LedgerImpactInput {
   physicalScore: number;
   ledgerEntries: LedgerEntry[];
   nowIso: string;
+  thresholds: ScoringThresholds;
 }
 
-const LEDGER_ADJUSTMENT_MAGNITUDE = 0.1; // 10% per entry
 const LEDGER_STALE_THRESHOLD_DAYS = 30;
 
 function isLedgerEntryActive(entry: LedgerEntry, nowIso: string): boolean {
@@ -47,10 +47,10 @@ export function applyLedgerAdjustments(input: LedgerImpactInput): {
 
   for (const entry of activeEntries) {
     if (entry.impactDirection === "increase") {
-      totalAdjustment += LEDGER_ADJUSTMENT_MAGNITUDE;
+      totalAdjustment += input.thresholds.ledgerAdjustmentMagnitude;
       increaseCount++;
     } else {
-      totalAdjustment -= LEDGER_ADJUSTMENT_MAGNITUDE;
+      totalAdjustment -= input.thresholds.ledgerAdjustmentMagnitude;
       decreaseCount++;
     }
   }

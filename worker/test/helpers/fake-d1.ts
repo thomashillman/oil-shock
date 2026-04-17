@@ -26,7 +26,20 @@ class FakePreparedStatement {
   }
 }
 
-type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger";
+type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger" | "state_change_events" | "config_thresholds";
+
+const SEED_CONFIG_THRESHOLDS: Row[] = [
+  { key: "state_aligned_threshold_max", value: 0.3 },
+  { key: "state_mild_threshold_min", value: 0.3 },
+  { key: "state_mild_threshold_max", value: 0.5 },
+  { key: "state_persistent_threshold_min", value: 0.5 },
+  { key: "state_persistent_threshold_max", value: 0.75 },
+  { key: "state_deep_threshold_min", value: 0.75 },
+  { key: "shock_age_threshold_hours", value: 72 },
+  { key: "dislocation_persistence_threshold_hours", value: 72 },
+  { key: "transmission_freshness_threshold_days", value: 8 },
+  { key: "ledger_adjustment_magnitude", value: 0.1 }
+];
 
 export class FakeD1Database {
   private readonly tables: Record<TableName, Row[]> = {
@@ -34,7 +47,9 @@ export class FakeD1Database {
     runs: [],
     run_evidence: [],
     signal_snapshots: [],
-    impairment_ledger: []
+    impairment_ledger: [],
+    state_change_events: [],
+    config_thresholds: [...SEED_CONFIG_THRESHOLDS]
   };
 
   private nextId = 1;
@@ -128,6 +143,16 @@ export class FakeD1Database {
       }
       return { success: true, meta: { last_row_id: 0 } };
     }
+    if (normalized.includes("insert into state_change_events")) {
+      this.insert("state_change_events", {
+        generated_at: params[0],
+        previous_state: params[1],
+        new_state: params[2],
+        state_transition_duration_seconds: params[3],
+        transmission_pressure_changed: params[4]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
     return { success: true, meta: { last_row_id: 0 } };
   }
 
@@ -152,6 +177,24 @@ export class FakeD1Database {
         .sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
       return (row as T) ?? null;
     }
+    if (normalized.includes("from state_change_events")) {
+      if (normalized.includes("where new_state != 'aligned'") && normalized.includes("order by generated_at asc")) {
+        const row = [...this.tables.state_change_events]
+          .filter((item) => item.new_state !== "aligned")
+          .sort((a, b) => String(a.generated_at).localeCompare(String(b.generated_at)))[0];
+        return (row as T) ?? null;
+      }
+      if (normalized.includes("where transmission_pressure_changed = 1") && normalized.includes("order by generated_at asc")) {
+        const row = [...this.tables.state_change_events]
+          .filter((item) => item.transmission_pressure_changed === 1)
+          .sort((a, b) => String(a.generated_at).localeCompare(String(b.generated_at)))[0];
+        return (row as T) ?? null;
+      }
+      // getLatestStateChangeEvent
+      const row = [...this.tables.state_change_events]
+        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0];
+      return (row as T) ?? null;
+    }
     return null;
   }
 
@@ -165,11 +208,12 @@ export class FakeD1Database {
       return { results: rows as T[] };
     }
     if (normalized.includes("from impairment_ledger")) {
-      const limit = String(params[0]);
-      const rows = this.tables.impairment_ledger
-        .filter((item) => item.retired_at === null && String(item.review_due_at) <= limit)
-        .sort((a, b) => String(a.review_due_at).localeCompare(String(b.review_due_at)));
+      const rows = [...this.tables.impairment_ledger]
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return { results: rows as T[] };
+    }
+    if (normalized.includes("from config_thresholds")) {
+      return { results: this.tables.config_thresholds as T[] };
     }
     return { results: [] };
   }

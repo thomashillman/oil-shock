@@ -87,3 +87,15 @@ export interface LedgerEntryInput {
   impactDirection: "increase" | "decrease";
   reviewDueAt: string;
 }
+
+export interface ScoringThresholds {
+  stateAlignedMax: number;
+  stateMildMin: number;
+  stateMildMax: number;
+  statePersistentMin: number;
+  statePersistentMax: number;
+  stateDeepMin: number;
+  shockAgeThresholdHours: number;
+  dislocationPersistenceHours: number;
+  ledgerAdjustmentMagnitude: number;
+}
