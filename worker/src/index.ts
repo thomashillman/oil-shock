@@ -9,6 +9,7 @@ import { handleGetCoverage } from "./routes/coverage";
 import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
+import { handleGetStateHistory } from "./routes/history";
 
 interface HealthPayload {
   ok: boolean;
@@ -17,7 +18,7 @@ interface HealthPayload {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
       return withCors(new Response(null, { status: 204 }), request, env);
     }
@@ -38,6 +39,10 @@ export default {
 
       if (request.method === "GET" && pathname === "/api/state") {
         response = await handleGetState(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/state/history") {
+        response = await handleGetStateHistory(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/evidence") {
@@ -62,9 +67,8 @@ export default {
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
-        await runCollection(env);
-        await runScore(env);
-        response = json({ ok: true });
+        ctx.waitUntil(runCollection(env).then(() => runScore(env)));
+        response = json({ ok: true, triggered: true });
         return withCors(response, request, env);
       }
 
