@@ -83,6 +83,9 @@ function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
+      if ((url as string).includes("/api/state/history")) {
+        return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+      }
       if ((url as string).includes("/api/state")) {
         return Promise.resolve({
           ok: stateOk,
@@ -103,6 +106,9 @@ function stubFetchWithStatePayload(payload: unknown) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string) => {
+      if ((url as string).includes("/api/state/history")) {
+        return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+      }
       if ((url as string).includes("/api/state")) {
         return Promise.resolve({
           ok: true,

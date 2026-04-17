@@ -1,11 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "./config";
 import { StateView } from "./components/StateView";
 import { EvidenceView } from "./components/EvidenceView";
-import type { StateData } from "./components/StateView";
+import type { StateData, HistoryPoint } from "./components/StateView";
 import type { EvidenceData } from "./components/EvidenceView";
 
 const REFRESH_MS = 60_000;
+const RECALC_POLL_MS = 3_000;
+const RECALC_TIMEOUT_MS = 90_000;
+
+function relativeAge(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
@@ -51,15 +63,14 @@ function normalizeStatePayload(payload: unknown): StateData | null {
 export function App() {
   const [stateData, setStateData] = useState<StateData | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceData | null>(null);
+  const [historyData, setHistoryData] = useState<HistoryPoint[]>([]);
   const [stateError, setStateError] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastFetched, setLastFetched] = useState<Date | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchAll = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
-
+  const fetchAll = useCallback(async () => {
     const [stateRes, evidenceRes] = await Promise.allSettled([
       fetch(`${apiBaseUrl}/api/state`),
       fetch(`${apiBaseUrl}/api/evidence`),
@@ -95,19 +106,79 @@ export function App() {
       setEvidenceError("Network error loading evidence");
     }
 
-    setLastFetched(new Date());
     setLoading(false);
-    if (manual) setRefreshing(false);
   }, []);
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`);
+      if (res.ok) {
+        const data = (await res.json()) as { history?: unknown };
+        if (Array.isArray(data.history)) {
+          setHistoryData(data.history as HistoryPoint[]);
+        }
+      }
+    } catch {
+      // history is non-critical
+    }
+  }, []);
+
+  const recalculate = useCallback(async () => {
+    if (recalculating) return;
+    setRecalculating(true);
+
+    const prevGeneratedAt = stateData?.generatedAt ?? null;
+
+    try {
+      await fetch(`${apiBaseUrl}/api/admin/run-poc`, { method: "POST" });
+    } catch {
+      // fire-and-forget
+    }
+
+    const deadline = Date.now() + RECALC_TIMEOUT_MS;
+
+    const poll = async () => {
+      if (Date.now() >= deadline) {
+        setRecalculating(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/state`);
+        if (res.ok) {
+          const raw = (await res.json()) as Record<string, unknown>;
+          const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;
+          if (newGeneratedAt && newGeneratedAt !== prevGeneratedAt) {
+            await fetchAll();
+            await fetchHistory();
+            setRecalculating(false);
+            return;
+          }
+        }
+      } catch {
+        // continue polling
+      }
+      pollTimerRef.current = setTimeout(() => {
+        void poll();
+      }, RECALC_POLL_MS);
+    };
+
+    pollTimerRef.current = setTimeout(() => {
+      void poll();
+    }, RECALC_POLL_MS);
+  }, [recalculating, stateData, fetchAll, fetchHistory]);
 
   useEffect(() => {
     void fetchAll();
+    void fetchHistory();
     const id = setInterval(() => void fetchAll(), REFRESH_MS);
-    return () => clearInterval(id);
-  }, [fetchAll]);
+    return () => {
+      clearInterval(id);
+      if (pollTimerRef.current !== null) clearTimeout(pollTimerRef.current);
+    };
+  }, [fetchAll, fetchHistory]);
 
-  const timeLabel = lastFetched
-    ? lastFetched.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  const calcLabel = stateData?.generatedAt
+    ? `Calculated ${relativeAge(stateData.generatedAt)}`
     : null;
 
   return (
@@ -124,24 +195,30 @@ export function App() {
       >
         <h1 style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>Oil Shock</h1>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {timeLabel && <span style={{ fontSize: 12, color: "#9ca3af" }}>{timeLabel}</span>}
+          {calcLabel && (
+            <span style={{ fontSize: 12, color: "#9ca3af" }}>{calcLabel}</span>
+          )}
           <button
-            onClick={() => void fetchAll(true)}
-            disabled={refreshing || loading}
-            aria-label="Refresh"
+            onClick={() => void recalculate()}
+            disabled={recalculating || loading}
+            aria-label="Recalculate"
             className="refresh-btn"
             style={{
               background: "none",
               border: "1px solid #e5e7eb",
               borderRadius: 6,
               padding: "4px 10px",
-              fontSize: 14,
+              fontSize: 13,
               color: "#374151",
               cursor: "pointer",
               lineHeight: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
             }}
           >
-            <span className={refreshing ? "spin-icon" : undefined}>↺</span>
+            <span className={recalculating ? "spin-icon" : undefined}>↺</span>
+            <span>{recalculating ? "Recalculating…" : "Recalculate"}</span>
           </button>
         </div>
       </header>
@@ -151,7 +228,7 @@ export function App() {
           <p style={{ padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>Loading…</p>
         ) : (
           <>
-            <StateView data={stateData} error={stateError} />
+            <StateView data={stateData} error={stateError} history={historyData} />
             <EvidenceView data={evidenceData} error={evidenceError} />
           </>
         )}

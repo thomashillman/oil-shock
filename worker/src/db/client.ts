@@ -208,6 +208,23 @@ export async function getLatestRunEvidence(env: Env) {
   return result.results;
 }
 
+export async function getSnapshotHistory(
+  env: Env,
+  limit: number
+): Promise<{ generated_at: string; mismatch_score: number; dislocation_state_json: string }[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT generated_at, mismatch_score, dislocation_state_json
+    FROM signal_snapshots
+    ORDER BY generated_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(limit)
+    .all<{ generated_at: string; mismatch_score: number; dislocation_state_json: string }>();
+  return result.results;
+}
+
 export async function getLatestStateChangeEvent(env: Env): Promise<{
   generated_at: string;
   previous_state: DislocationState | null;
