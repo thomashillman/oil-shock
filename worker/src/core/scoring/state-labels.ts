@@ -1,4 +1,4 @@
-import type { DislocationState, Subscores, FreshnessSummary } from "../../types";
+import type { DislocationState, Subscores, FreshnessSummary, ScoringThresholds } from "../../types";
 
 interface StateContext {
   physicalScore: number;
@@ -8,18 +8,6 @@ interface StateContext {
   durationInCurrentStateSeconds: number | null;
 }
 
-// Hardcoded thresholds (from config_thresholds)
-const STATE_THRESHOLDS = {
-  aligned_max: 0.3,
-  mild_min: 0.3,
-  mild_max: 0.5,
-  persistent_min: 0.5,
-  persistent_max: 0.75,
-  deep_min: 0.75,
-  shock_age_hours: 72,
-  dislocation_persistence_hours: 72
-};
-
 function secondsToHours(seconds: number | null): number | null {
   return seconds === null ? null : seconds / 3600;
 }
@@ -28,7 +16,8 @@ export function computeDislocationState(
   mismatchScore: number,
   subscores: Subscores,
   freshness: FreshnessSummary,
-  durationInCurrentStateSeconds: number | null
+  durationInCurrentStateSeconds: number | null,
+  thresholds: ScoringThresholds
 ): { state: DislocationState; rationale: string } {
   const context: StateContext = {
     physicalScore: subscores.physical,
@@ -47,14 +36,14 @@ export function computeDislocationState(
   // Check for stale data; if critical data is stale, downgrade confidence
   const hasStaleCritical = freshness.physical === "stale" || freshness.recognition === "stale";
 
-  // aligned: score < 0.3 AND physical pressure is low
-  if (mismatchScore < STATE_THRESHOLDS.aligned_max && context.physicalScore < 0.5) {
+  // aligned: score < aligned_max AND physical pressure is low
+  if (mismatchScore < thresholds.stateAlignedMax && context.physicalScore < 0.5) {
     state = "aligned";
     rationale = "Physical pressure is modest; market recognition aligned.";
   }
-  // deep_divergence: score >= 0.75 AND >= 2 confirmations AND persisted 5+ days
+  // deep_divergence: score >= deep_min AND >= 2 confirmations AND persisted 5+ days
   else if (
-    mismatchScore >= STATE_THRESHOLDS.deep_min &&
+    mismatchScore >= thresholds.stateDeepMin &&
     context.physicalScore >= 0.6 &&
     context.recognitionScore <= 0.45 &&
     context.transmissionScore >= 0.5 &&
@@ -67,19 +56,19 @@ export function computeDislocationState(
       rationale = "Physical deterioration sustained; market recognition lags; transmission pressure building. Persistent state now deep.";
     }
   }
-  // persistent_divergence: score 0.5-0.75 AND persisted 3+ days
+  // persistent_divergence: score persistent_min–persistent_max AND persisted dislocationPersistenceHours+
   else if (
-    mismatchScore >= STATE_THRESHOLDS.persistent_min &&
-    mismatchScore < STATE_THRESHOLDS.persistent_max &&
+    mismatchScore >= thresholds.statePersistentMin &&
+    mismatchScore < thresholds.statePersistentMax &&
     context.physicalScore >= 0.6 &&
     context.recognitionScore <= 0.45 &&
-    (!durationHours || durationHours >= 72) // 3 days = 72 hours
+    (!durationHours || durationHours >= thresholds.dislocationPersistenceHours)
   ) {
     state = "persistent_divergence";
     rationale = "Physical pressure persists while market recognition lags; transmission signals emerging. Divergence now sustained.";
   }
-  // mild_divergence: score 0.3-0.5 OR early stage
-  else if (mismatchScore >= STATE_THRESHOLDS.mild_min && mismatchScore < STATE_THRESHOLDS.persistent_min) {
+  // mild_divergence: score mild_min–persistent_min
+  else if (mismatchScore >= thresholds.stateMildMin && mismatchScore < thresholds.statePersistentMin) {
     state = "mild_divergence";
     if (context.transmissionScore >= 0.6) {
       rationale = "Physical pressure emerging; market recognition beginning to respond; transmission signals rising.";
@@ -88,7 +77,7 @@ export function computeDislocationState(
     }
   }
   // catch-all for score-driven transitions
-  else if (mismatchScore >= STATE_THRESHOLDS.persistent_min) {
+  else if (mismatchScore >= thresholds.statePersistentMin) {
     state = "persistent_divergence";
     rationale = "Score-driven persistent state: physical elevated, recognition lagging, transmission mixed.";
   }

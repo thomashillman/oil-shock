@@ -7,7 +7,10 @@ import {
   writeSnapshot,
   getLatestStateChangeEvent,
   writeSateChangeEvent,
-  getLedgerEntries
+  getLedgerEntries,
+  loadThresholds,
+  getFirstNonAlignedStateEvent,
+  getFirstTransmissionEvent
 } from "../db/client";
 import { evaluateFreshness } from "../core/freshness/evaluate";
 import { evaluateEvidenceCoverage } from "../core/freshness/evidence-coverage";
@@ -32,6 +35,7 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
   const nowIso = now.toISOString();
   await startRun(env, runKey, "score");
   log("info", "Starting scoring run", { runKey });
+  const thresholds = await loadThresholds(env);
 
   try {
     const physical = await getLatestSeriesValue(env, "physical.inventory_draw");
@@ -72,7 +76,8 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       mismatchScore: snapshot.mismatchScore,
       physicalScore: snapshot.subscores.physical,
       ledgerEntries,
-      nowIso
+      nowIso,
+      thresholds
     });
     snapshot.mismatchScore = adjustedMismatchScore;
     snapshot.ledgerImpact = ledgerImpact;
@@ -89,7 +94,8 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       snapshot.mismatchScore,
       snapshot.subscores,
       freshness,
-      durationInCurrentStateSeconds
+      durationInCurrentStateSeconds,
+      thresholds
     );
     snapshot.dislocationState = dislocationState;
     snapshot.stateRationale = stateRationale;
@@ -101,16 +107,19 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
         previousState: previousStateEvent?.new_state ?? null,
         newState: dislocationState,
         stateDurationSeconds: previousStateEvent ? durationInCurrentStateSeconds : null,
-        transmissionChanged: !previousStateEvent || previousStateEvent.transmission_pressure_changed
+        transmissionChanged: transmissionValue >= 0.5
       });
     }
 
     // Compute clocks
+    const firstMismatchEvent = await getFirstNonAlignedStateEvent(env);
+    const firstTransmissionEvent = await getFirstTransmissionEvent(env);
     const clocks = computeClocks({
       nowIso,
       durationInCurrentStateSeconds,
-      firstTransmissionSignalObservedAt: transmission?.observedAt ?? null,
-      firstMismatchObservedAt: physical?.observedAt ?? null
+      firstMismatchObservedAt: firstMismatchEvent?.generated_at ?? null,
+      firstTransmissionSignalObservedAt: firstTransmissionEvent?.generated_at ?? null,
+      thresholds
     });
     snapshot.clocks = clocks;
 

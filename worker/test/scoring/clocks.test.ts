@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { computeClocks } from "../../src/core/scoring/clocks";
+import type { ScoringThresholds } from "../../src/types";
+
+const thresholds: ScoringThresholds = {
+  stateAlignedMax: 0.3,
+  stateMildMin: 0.3,
+  stateMildMax: 0.5,
+  statePersistentMin: 0.5,
+  statePersistentMax: 0.75,
+  stateDeepMin: 0.75,
+  shockAgeThresholdHours: 72,
+  dislocationPersistenceHours: 72,
+  ledgerAdjustmentMagnitude: 0.1
+};
 
 describe("computeClocks", () => {
   const now = new Date("2026-04-16T12:00:00Z");
@@ -12,6 +25,7 @@ describe("computeClocks", () => {
       durationInCurrentStateSeconds: 3600, // 1 hour
       firstTransmissionSignalObservedAt: null,
       firstMismatchObservedAt: twoHoursAgo,
+      thresholds,
     });
 
     expect(clocks.shock.ageSeconds).toBeCloseTo(7200, 100); // approximately 2 hours
@@ -25,6 +39,7 @@ describe("computeClocks", () => {
       durationInCurrentStateSeconds: 1800,
       firstTransmissionSignalObservedAt: null,
       firstMismatchObservedAt: oneHourAgo,
+      thresholds,
     });
 
     expect(clocks.shock.classification).toBe("acute");
@@ -37,6 +52,7 @@ describe("computeClocks", () => {
       durationInCurrentStateSeconds: 3 * 24 * 3600,
       firstTransmissionSignalObservedAt: null,
       firstMismatchObservedAt: fourDaysAgo,
+      thresholds,
     });
 
     expect(clocks.shock.classification).toBe("chronic");
@@ -49,6 +65,7 @@ describe("computeClocks", () => {
       durationInCurrentStateSeconds: durationSeconds,
       firstTransmissionSignalObservedAt: null,
       firstMismatchObservedAt: null,
+      thresholds,
     });
 
     expect(clocks.dislocation.ageSeconds).toBe(durationSeconds);
@@ -61,6 +78,7 @@ describe("computeClocks", () => {
       durationInCurrentStateSeconds: 3600,
       firstTransmissionSignalObservedAt: null,
       firstMismatchObservedAt: null,
+      thresholds,
     });
 
     expect(clocks.transmission.classification).toBe("emerging");

@@ -1,7 +1,8 @@
 import { normalizePoints } from "../../core/normalize";
+import type { Env } from "../../env";
 import type { NormalizedPoint } from "../../types";
 
-export function collectSec(nowIso: string): NormalizedPoint[] {
+export async function collectSec(_env: Env, nowIso: string): Promise<NormalizedPoint[]> {
   return normalizePoints("sec", [
     {
       seriesKey: "transmission.impairment_mentions",

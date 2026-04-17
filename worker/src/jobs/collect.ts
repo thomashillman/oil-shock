@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import type { NormalizedPoint } from "../types";
 import { writeSeriesPoints, startRun, finishRun } from "../db/client";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
@@ -12,7 +13,19 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
   await startRun(env, runKey, "collect");
   log("info", "Starting collection run", { runKey, nowIso });
   try {
-    const points = [...collectEia(nowIso), ...collectGas(nowIso), ...collectSec(nowIso)];
+    const results = await Promise.allSettled([
+      collectEia(env, nowIso),
+      collectGas(env, nowIso),
+      collectSec(env, nowIso)
+    ]);
+    const points: NormalizedPoint[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        points.push(...result.value);
+      } else {
+        log("error", "Collector failed", { error: String(result.reason) });
+      }
+    }
     await writeSeriesPoints(env, points);
     await finishRun(env, runKey, "success", {
       pointCount: points.length,

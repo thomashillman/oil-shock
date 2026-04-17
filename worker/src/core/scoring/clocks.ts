@@ -1,17 +1,12 @@
-import type { Clock } from "../../types";
+import type { Clock, ScoringThresholds } from "../../types";
 
 interface ClockInputs {
   nowIso: string;
   durationInCurrentStateSeconds: number | null;
   firstTransmissionSignalObservedAt: string | null;
   firstMismatchObservedAt: string | null;
+  thresholds: ScoringThresholds;
 }
-
-// Hardcoded thresholds (from config_thresholds)
-const CLOCK_THRESHOLDS = {
-  shock_age_threshold_hours: 72, // 3 days
-  dislocation_persistence_threshold_hours: 72 // 3 days
-};
 
 function dateToSeconds(iso: string, nowIso: string): number {
   const observedTime = new Date(iso).getTime();
@@ -45,13 +40,13 @@ export function computeClocks(inputs: ClockInputs): {
     shockAgeSeconds = dateToSeconds(inputs.firstMismatchObservedAt, nowIso);
   }
   const shockAgeHours = shockAgeSeconds / 3600;
-  const shockClockClassification = shockAgeHours < CLOCK_THRESHOLDS.shock_age_threshold_hours ? "acute" : "chronic";
+  const shockClockClassification = shockAgeHours < inputs.thresholds.shockAgeThresholdHours ? "acute" : "chronic";
 
   // Dislocation age: duration in current state
   let dislocationAgeSeconds = inputs.durationInCurrentStateSeconds ?? 0;
   const dislocationAgeHours = dislocationAgeSeconds / 3600;
   const dislocationClockClassification =
-    dislocationAgeHours < CLOCK_THRESHOLDS.dislocation_persistence_threshold_hours ? "acute" : "chronic";
+    dislocationAgeHours < inputs.thresholds.dislocationPersistenceHours ? "acute" : "chronic";
 
   // Transmission age: duration since first significant transmission signal
   let transmissionAgeSeconds = 0;
