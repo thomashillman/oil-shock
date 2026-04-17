@@ -63,13 +63,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker (preview)
-        run: corepack pnpm --filter @oil-shock/worker deploy -- --env preview
+        run: corepack pnpm --filter @oil-shock/worker run deploy -- --env preview
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy worker (production)
-        run: corepack pnpm --filter @oil-shock/worker deploy -- --env production
+        run: corepack pnpm --filter @oil-shock/worker run deploy -- --env production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
