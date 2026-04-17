@@ -153,6 +153,27 @@ D1 (SQLite). Schema is in `db/migrations/`. Key tables:
 
 - **Vercel output directory**: Vercel defaults to looking for a `public` directory. This repo builds to `app/dist`. The `vercel.json` at the root sets `outputDirectory` and `buildCommand` correctly — don't remove it or change the output path without updating `vercel.json` to match.
 
+- **D1 migrations must be applied via Wrangler, never ad-hoc**: The production D1 database (`energy_dislocation`, id `9db64b68-6ffc-4be2-a2c6-667691a5801f`) previously had migrations applied out of order (0004/0005 applied, 0002/0003 skipped), which surfaced as `D1_ERROR: no such column: evidence_classification` at runtime. Ad-hoc SQL execution bypasses Wrangler's `d1_migrations` tracking table, leaving the database in an inconsistent state with no audit trail.
+
+  **Required workflow for any schema change:**
+
+  1. **Author** the migration as a new, sequentially numbered file in `db/migrations/` (e.g., `0006_*.sql`). Never edit an existing migration that has been applied anywhere.
+  2. **Apply locally first**: `corepack pnpm db:migrate:local` — confirm the change works against the local D1.
+  3. **Run the full test suite** (`corepack pnpm test`) and `corepack pnpm replay:validate` before touching remote.
+  4. **Apply to remote via Wrangler**, never via the Cloudflare dashboard, MCP SQL tool, or raw API:
+     ```bash
+     corepack pnpm wrangler d1 migrations apply energy_dislocation --remote
+     ```
+     This is the only path that updates the `d1_migrations` tracking table.
+  5. **Verify** applied migrations on the remote:
+     ```bash
+     corepack pnpm wrangler d1 migrations list energy_dislocation --remote
+     ```
+     The output must list every file in `db/migrations/`. If any are missing, stop and investigate before deploying worker code that depends on them.
+  6. **Deploy the worker only after** the migration is confirmed applied on remote. Schema changes lead code: migration first, then worker deploy.
+
+  **If you find the remote DB in an inconsistent state** (missing `d1_migrations` table, or schema drift from the migration files): do not patch columns manually. Reconcile by backfilling the `d1_migrations` table to reflect what's actually applied, then run `wrangler d1 migrations apply --remote` to apply the true-missing ones. Document the reconciliation in the commit message.
+
 ## Testing Patterns
 
 - Worker tests use an in-memory D1 mock (`worker/test/helpers/fake-d1.ts`).
