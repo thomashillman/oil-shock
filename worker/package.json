@@ -7,6 +7,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "deploy:preview": "wrangler deploy --env preview",
+    "deploy:production": "wrangler deploy --env production",
     "db:migrate:local": "wrangler d1 execute energy_dislocation --local --file ../db/migrations/0001_init.sql --config ../wrangler.jsonc",
     "test": "vitest run"
   },
