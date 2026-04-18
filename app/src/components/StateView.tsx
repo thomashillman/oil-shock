@@ -198,24 +198,52 @@ function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
 
 function SubscoreBar({ score, label, color }: { score: number; label: string; color: string }) {
   const percentage = Math.round(score * 100);
+  const isMuted = percentage === 0;
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
+      {/* Accent bar */}
       <div
-        style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 11 }}
-      >
-        <span style={{ color: "#6b7280", fontWeight: 500 }}>{label}</span>
-        <span style={{ color: "#111827", fontWeight: 600 }}>{percentage}%</span>
-      </div>
-      <div style={{ height: 4, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
+        style={{
+          width: 3,
+          height: 28,
+          background: color,
+          borderRadius: 2,
+          flexShrink: 0,
+          marginTop: 0,
+        }}
+      />
+
+      {/* Label and value */}
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div
-          style={{
-            height: "100%",
-            width: `${percentage}%`,
-            background: color,
-            borderRadius: 2,
-            transition: "width 0.3s ease",
-          }}
-        />
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 6 }}
+        >
+          <span style={{ color: "#6b7280", fontWeight: 500, fontSize: 12 }}>{label}</span>
+          <span
+            style={{
+              fontFamily: '"JetBrains Mono", "Courier New", monospace',
+              fontSize: 12,
+              fontWeight: 600,
+              color: isMuted ? "#d1d5db" : "#111827",
+              flexShrink: 0,
+            }}
+          >
+            {percentage}%
+          </span>
+        </div>
+
+        {/* Bar */}
+        <div style={{ height: 4, background: "#f3f4f6", borderRadius: 2, overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${percentage}%`,
+              background: color,
+              borderRadius: 2,
+              transition: "width 0.3s ease",
+            }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -456,20 +484,8 @@ export function StateView({
         </div>
       </div>
 
-      {/* Three clocks — collapsed to single line when aligned */}
-      {isAligned ? (
-        <div
-          style={{
-            background: "#fff",
-            borderBottom: "1px solid #f3f4f6",
-            padding: "11px 20px",
-          }}
-        >
-          <span style={{ fontSize: 12, color: "#9ca3af" }}>
-            No active dislocation — clocks inactive
-          </span>
-        </div>
-      ) : (
+      {/* Three clocks — completely hidden when aligned */}
+      {!isAligned && (
         <div style={{ background: "#fff", borderBottom: "1px solid #f3f4f6", display: "flex" }}>
           <ClockDisplay clock={data.clocks.shock} label="Shock age" />
           <ClockDisplay clock={data.clocks.dislocation} label="Dislocation age" />

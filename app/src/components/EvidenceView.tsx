@@ -86,42 +86,60 @@ function EvidenceItem({ item, accent }: { item: EvidenceItem; accent: string }) 
   );
 }
 
-function EvidenceColumn({ groupLabel, items, accent }: { groupLabel: string; items: EvidenceItem[]; accent: string }) {
+function EvidenceGroup({ groupLabel, items, accent }: { groupLabel: string; items: EvidenceItem[]; accent: string }) {
   const meta = groupMeta(groupLabel);
   return (
-    <div
-      style={{
-        flex: 1,
-        background: "#fff",
-        borderRadius: 8,
-        overflow: "hidden",
-        borderLeft: `3px solid ${accent}`,
-        marginBottom: 12,
-      }}
-    >
-      <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
+    <div style={{ marginBottom: 16 }}>
+      {/* Group header with accent bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          paddingLeft: 20,
+          paddingRight: 20,
+          paddingTop: 16,
+          paddingBottom: 12,
+          background: "#fff",
+          borderBottom: "1px solid #f3f4f6",
+        }}
+      >
         <div
           style={{
-            fontSize: 10,
-            fontWeight: 700,
-            color: accent,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            marginBottom: 3,
+            width: 3,
+            height: 24,
+            background: accent,
+            borderRadius: 2,
+            flexShrink: 0,
           }}
-        >
-          {meta.label}
+        />
+        <div style={{ flex: 1 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: accent,
+              textTransform: "uppercase",
+              letterSpacing: "0.12em",
+              marginBottom: 2,
+            }}
+          >
+            {meta.label}
+          </div>
+          {meta.description && (
+            <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.3, margin: 0 }}>
+              {meta.description}
+            </p>
+          )}
         </div>
-        {meta.description && (
-          <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.3, margin: 0 }}>
-            {meta.description}
-          </p>
-        )}
       </div>
 
-      {items.map((item) => (
-        <EvidenceItem key={item.evidenceKey} item={item} accent={accent} />
-      ))}
+      {/* Evidence items in full-width stacked layout */}
+      <div style={{ background: "#fff" }}>
+        {items.map((item) => (
+          <EvidenceItem key={item.evidenceKey} item={item} accent={accent} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -161,14 +179,14 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
         Evidence Frame
       </h2>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-        {orderedGroups.map((group) => {
-          const accent = GROUP_ACCENT[group] ?? "#6b7280";
-          return (
-            <EvidenceColumn key={group} groupLabel={group} items={groups[group]!} accent={accent} />
-          );
-        })}
-      </div>
+      {orderedGroups.map((group) => {
+        const accent = GROUP_ACCENT[group] ?? "#6b7280";
+        return (
+          <EvidenceGroup key={group} groupLabel={group} items={groups[group]!} accent={accent} />
+        );
+      })}
+
+      <div style={{ height: 20 }} />
     </section>
   );
 }
