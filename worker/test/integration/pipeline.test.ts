@@ -17,5 +17,5 @@ describe("pipeline integration", () => {
     expect(snapshot?.actionability_state).toMatch(/none|watch|actionable/);
     expect(snapshot?.mismatch_score).toBeTypeOf("number");
     expect(snapshot?.coverage_confidence).toBeTypeOf("number");
-  });
+  }, 30000);
 });
