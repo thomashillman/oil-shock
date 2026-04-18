@@ -135,9 +135,159 @@ Ledger adjustments apply when entries are active (not retired, not stale):
 **Worker** (set in `wrangler.jsonc` or via Cloudflare dashboard):
 - `APP_ENV`: `local` | `preview` | `production`
 - `PRODUCTION_ORIGIN`: frontend origin for CORS
+- `EIA_API_KEY`: U.S. Energy Information Administration API key (required for live EIA data)
+- `GIE_API_KEY`: Gas Infrastructure Europe AGSI/ALSI API key (required for live GIE data)
 
 **Frontend** (`.env` file in `app/`):
 - `VITE_API_BASE_URL`: defaults to `http://127.0.0.1:8787` for local dev
+
+## Data Collectors (Live APIs)
+
+### EIA Collector (`worker/src/jobs/collectors/eia.ts`)
+
+Fetches from **U.S. Energy Information Administration v2 API** (https://api.eia.gov/v2).
+
+**Route-based discovery pattern:**
+- Discovers available facets and data columns via metadata endpoint
+- Generic `fetchRouteData()` supports any route with configurable data columns and facets
+- Pagination: offset/length with 5000-row max per request
+
+**Currently tracked routes:**
+1. `petroleum/pri/spt` (Petroleum Spot Prices)
+   - Brent crude (series: RBRTE) → `physical.inventory_draw`
+   - WTI crude (series: RWTC) → `physical.utilization`
+
+2. `natural-gas/stor/cap` (Natural Gas Storage Capacity)
+   - Weekly storage data → `recognition.curve_signal`
+
+3. `natural-gas/pri` (Natural Gas Prices)
+   - Daily/monthly prices → `transmission.crack_signal`
+
+**Rate limiting:** 150ms minimum between requests (per EIA guidance)  
+**Timeout:** 45 seconds per request  
+**Fallback:** Returns empty array if API unavailable; scoring continues with other sources
+
+**To verify facet IDs match live metadata:**
+```bash
+curl "https://api.eia.gov/v2/petroleum/pri/spt?api_key=YOUR_KEY" | jq .response.facets
+```
+
+### Gas Collector (`worker/src/jobs/collectors/gas.ts`)
+
+Integrates **ENTSOG Transparency API** and **GIE AGSI/ALSI APIs** for European gas infrastructure stress.
+
+#### ENTSOG (Transparency Platform)
+- **Base:** https://transparency.entsog.eu/api/v1
+- **Endpoint:** `operationaldatas` with tight filters
+- **Tracked indicators:** Nomination, Physical Flow, Firm Available, Firm Technical, Firm Booked
+- **Date windows:** Minimal (30 days) to avoid 60-second timeout
+- **Aggregation:** Computes stress ratios:
+  - `flow_vs_nomination_ratio`: Physical Flow / Nomination (< 0.9 = stress)
+  - `booked_vs_technical_ratio`: Firm Booked / Firm Technical (> 0.8 = stress)
+- **Maps to:** `recognition.curve_signal` (1 - flow_ratio)
+
+#### GIE AGSI (Storage Inventory System)
+- **Base:** https://agsi.gie.eu/api
+- **Headers:** Required `x-key: GIE_API_KEY` on every request
+- **Pagination:** `page` and `size` (max 300/page)
+- **Tracked data:** EU-level (type: eu)
+  - `full`: Storage fullness percentage (< 35% = stress)
+  - `gasInStorage`: Current inventory
+  - `workingGasVolume`: Total usable capacity
+  - `injection`/`withdrawal`: Daily flows
+- **Maps to:** 
+  - `physical.inventory_draw` (1 - storage_ratio)
+  - `physical.utilization` (net_withdrawal normalized)
+
+**Rate limiting:** 150ms between requests  
+**Timeout:** 60s (ENTSOG), 30s (GIE)  
+**Fallback:** Partial data; continues with available sources
+
+### SEC Collector (`worker/src/jobs/collectors/sec.ts`)
+
+Fetches from **SEC EDGAR via data.sec.gov** (no authentication required).
+
+**Two-phase approach:**
+
+1. **Ticker Map Discovery** (once per collection)
+   - Fetches: https://www.sec.gov/files/company_tickers.json
+   - Maps ticker symbols (e.g., "XOM") to CIK numbers
+
+2. **Company Analysis** (per ticker)
+   - **XBRL Facts:** Fetches `companyfacts/CIK{cik}.json` for latest 6 quarters
+   - **Recent Filings:** Pulls 10-K, 10-Q, 8-K text from last 4 filings
+   - **Keyword extraction:** Scores on energy linkage (fuel, feedstock, commodity, etc.)
+   - **Guidance scoring:** Detects negative patterns (margin pressure, lower guidance, etc.)
+
+**Tracked sectors (7 groups):**
+- Airlines/Trucking/Shipping/Logistics: DAL, UAL, AAL, FDX, UPS, JBHT
+- Chemicals/Plastics/Industrials: DOW, LYB, EMN, WLK, DD
+- Retail/Consumer/Food: WMT, COST, TGT, KR
+- Utilities/Power/LNG/Energy: DUK, SO, NEE, SRE, LNG
+- Oil Producers/Refiners: XOM, CVX, COP, MPC, VLO
+- (Plus smaller representative tickers in each)
+
+**Scoring logic:**
+- Averages impairment scores across all tracked tickers
+- Energy linkage presence: +0.5 points
+- Negative guidance: +guidance_risk points (1–3)
+- Pricing power/hedging: −0.75 points (offsets risk)
+
+**Maps to:** `transmission.impairment_mentions` (0–1 normalized average)
+
+**Timeouts:**
+- Ticker map: 15s
+- Submissions: 10s
+- Company facts: 10s
+- Filing text: 15s
+
+**Fallback:** Returns average of successfully-fetched tickers; empty array if all fail
+
+### HTTP Client (`worker/src/lib/http-client.ts`)
+
+Shared layer for all API calls with built-in resilience:
+
+**Features:**
+- **Exponential backoff:** 2s, 4s, 8s, 16s retry delays
+- **Rate limiting:** Global 150ms minimum between all requests (configurable per call)
+- **Timeout handling:** Configurable per API (default 30s)
+- **Structured logging:** All API calls and errors logged with context
+
+**Usage pattern:**
+```typescript
+const data = await fetchJson<T>(url, {
+  timeout: 45000,
+  retries: 4,
+  backoffMs: 2000,
+  rateLimitDelayMs: 150,
+  headers: { "x-key": apiKey }
+});
+```
+
+### Data Normalization
+
+All collectors return `NormalizedPoint[]`:
+```typescript
+interface NormalizedPoint {
+  seriesKey: string;      // physical.* | recognition.* | transmission.*
+  observedAt: string;     // ISO timestamp
+  value: number;          // 0–1 clamped
+  unit: string;           // "index"
+  sourceKey: string;      // "eia" | "gas" | "sec"
+}
+```
+
+**Series key mapping:**
+- **Physical** (energy supply/inventory stress):
+  - `physical.inventory_draw`: EIA crude/product inventory levels (higher = less stress)
+  - `physical.utilization`: EIA/GIE capacity utilization (higher = more stress)
+- **Recognition** (market awareness):
+  - `recognition.curve_signal`: ENTSOG/GIE operational flow-nomination ratio (lower = stress gap)
+- **Transmission** (price response):
+  - `transmission.crack_signal`: EIA natural gas price relative movement
+  - `transmission.impairment_mentions`: SEC filing guidance + energy linkage scoring
+
+
 
 ## Database
 
@@ -191,8 +341,41 @@ D1 (SQLite). Schema is in `db/migrations/`. Key tables:
 
 - **`POST /api/admin/run-poc` must use `ctx.waitUntil`, never `await`**: The collection + scoring pipeline takes longer than Cloudflare's CPU budget for a single request. If the handler uses `await runCollection(env); await runScore(env)`, Cloudflare will kill the request mid-execution, no snapshot is written, and the frontend Recalculate button spins indefinitely. The handler must return immediately via `ctx.waitUntil(runCollection(env).then(() => runScore(env)))`. The `fetch` handler signature must include `ctx: ExecutionContext` as the third parameter.
 
+- **API collector failures are graceful but visible in logs**: When EIA, ENTSOG/GIE, or SEC APIs are unavailable (timeouts, rate limits, auth errors), the collectors return partial data or empty arrays. The scoring pipeline continues with whatever was collected. Check logs (JSON structured with level, message, context) to diagnose which APIs failed:
+  ```json
+  {"level":"warn","message":"ENTSOG fetch failed","indicator":"Physical Flow","error":"HTTP 503: Service Unavailable"}
+  ```
+  The scoring pipeline will still produce a snapshot, but with fewer confirmed signals. This is intentional resilience.
+
+- **Missing API keys cause real API calls to fail silently**: If `EIA_API_KEY` or `GIE_API_KEY` are not set in the Cloudflare Workers environment, the HTTP client will receive 403 Forbidden or 401 Unauthorized. Collectors log these as failures and return empty arrays. Verify keys are present in Cloudflare dashboard (Settings > Environment Variables). For local testing, `createTestEnv()` provides placeholder keys (`test-eia-key`, `test-gie-key`) — do not use these for real API calls.
+
+- **SEC EDGAR rate limiting** (429 Too Many Requests): If many tickers are fetched in succession, the SEC API may rate-limit. The exponential backoff (2s, 4s, 8s, 16s) handles transient limits. If persistent, add delays between tickers or reduce the ticker list in `TICKERS_BY_SECTOR` (currently ~40 tickers tracked across 7 sectors).
+
 ## Testing Patterns
 
 - Worker tests use an in-memory D1 mock (`worker/test/helpers/fake-d1.ts`).
 - App tests use `@testing-library/react` with jest-dom matchers (setup in `app/src/test/setup.ts`).
 - `scripts/replay-validate.mjs` runs the scoring pipeline against fixture inputs and asserts deterministic output — update fixtures when intentionally changing scoring behavior.
+
+### API Collector Testing
+
+**Test environment isolation:**
+- Real API calls are executed during tests (with real timeouts and rate limiting).
+- Test fixtures provide mock credentials (`test-eia-key`, `test-gie-key`) to the collector functions.
+- If real APIs are unavailable (503 errors, rate limits), collectors gracefully fall back to partial or empty data.
+- The scoring pipeline continues normally with whatever normalized points were collected.
+
+**Test timeouts:**
+- Tests that call `runCollection()` (e.g., `pipeline.test.ts`, `api.test.ts`) have **30000ms timeout** to accommodate SEC API latency.
+- Default test timeout is 5000ms; real API calls can exceed this in CI environments.
+- Mock API responses are not used in tests — all integration tests exercise real API paths.
+
+**Expected test behavior:**
+- ENTSOG/GIE APIs often return 503 during tests (service boundaries); graceful fallback keeps tests passing.
+- SEC ticker fetch may timeout; test still completes via fallback to mock score.
+- Overall determinism check (`replay:validate`) verifies scoring logic is unaffected by partial data variations.
+
+**To test local mock vs. live:**
+- Live APIs are called by default during tests.
+- To mock API responses, modify `fetchJson()` and `fetchText()` in collector files to use test doubles.
+- Tests pass as long as scoring pipeline completes and writes `signal_snapshots` to D1.
