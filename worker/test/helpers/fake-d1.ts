@@ -227,6 +227,8 @@ export function createTestEnv() {
   return {
     APP_ENV: "local" as const,
     PRODUCTION_ORIGIN: "",
-    DB: new FakeD1Database() as unknown as D1Database
+    DB: new FakeD1Database() as unknown as D1Database,
+    EIA_API_KEY: "test-eia-key",
+    GIE_API_KEY: "test-gie-key"
   };
 }
