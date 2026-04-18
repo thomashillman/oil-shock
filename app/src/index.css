@@ -5,63 +5,54 @@
   padding: 0;
 }
 
-/* Color scheme preference */
+/* Seismic Dashboard - Dark mode is default */
 html {
-  color-scheme: light dark;
-}
-
-/* CSS Variables - Light Mode (default) */
-:root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-tertiary: #f3f4f6;
-  --border-primary: #e5e7eb;
-  --border-secondary: #d1d5db;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --page-bg: #eaecf0;
-  --focus-ring: rgba(59, 130, 246, 0.5);
-  --state-aligned: #1a3a4a;
-  --state-mild: #d97706;
-  --state-persistent: #dc2626;
-  --state-deep: #7c2d12;
-  --color-fresh: #4ade80;
-  --color-stale: #fbbf24;
-  --color-missing: #f87171;
-}
-
-/* CSS Variables - Dark Mode */
-@media (prefers-color-scheme: dark) {
-  html:not(.light-mode) {
-    --bg-primary: #161b22;
-    --bg-secondary: #0f1117;
-    --bg-tertiary: #21262d;
-    --border-primary: #30363d;
-    --border-secondary: #444c56;
-    --text-primary: #e6edf3;
-    --text-secondary: #8b949e;
-    --text-tertiary: #6e7681;
-    --page-bg: #0d1117;
-    --focus-ring: rgba(96, 165, 250, 0.3);
-  }
-}
-
-/* Manual dark mode toggle (class-based override) */
-html.dark-mode {
-  --bg-primary: #161b22;
-  --bg-secondary: #0f1117;
-  --bg-tertiary: #21262d;
-  --border-primary: #30363d;
-  --border-secondary: #444c56;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-tertiary: #6e7681;
-  --page-bg: #0d1117;
-  --focus-ring: rgba(96, 165, 250, 0.3);
   color-scheme: dark;
 }
 
+/* CSS Variables - Seismic Control Room (Dark Mode Default) */
+:root {
+  /* Background colors (deep, technical look) */
+  --bg-primary: #0a0f15;
+  --bg-secondary: #0f1420;
+  --bg-tertiary: #141a22;
+  --border-primary: #1a2838;
+  --border-secondary: #233350;
+
+  /* Text colors (high contrast, electric feel) */
+  --text-primary: #e8f0ff;
+  --text-secondary: #a8b8d8;
+  --text-tertiary: #707a8a;
+
+  /* Page background (scientific instrument) */
+  --page-bg: #050810;
+
+  /* Focus and interaction (cyan/electric) */
+  --focus-ring: rgba(0, 200, 255, 0.6);
+
+  /* State colors (seismic escalation) */
+  --state-aligned: #0a1a2a;
+  --state-mild: #ff8800;
+  --state-persistent: #ff3333;
+  --state-deep: #8b0000;
+
+  /* State glows (pressure visualization) */
+  --glow-aligned: rgba(0, 200, 255, 0.4);
+  --glow-mild: rgba(255, 136, 0, 0.4);
+  --glow-persistent: rgba(255, 51, 51, 0.5);
+  --glow-deep: rgba(255, 51, 51, 0.6);
+
+  /* Signal colors (measured data) */
+  --color-fresh: #00ff00;
+  --color-stale: #ffaa00;
+  --color-missing: #ff4444;
+
+  /* Typography (monospace technical) */
+  --font-mono: "IBM Plex Mono", "Roboto Mono", "Courier New", monospace;
+  --font-display: "Courier New", monospace;
+}
+
+/* Light mode toggle (if user switches) */
 html.light-mode {
   --bg-primary: #ffffff;
   --bg-secondary: #f9fafb;
@@ -73,15 +64,35 @@ html.light-mode {
   --text-tertiary: #9ca3af;
   --page-bg: #eaecf0;
   --focus-ring: rgba(59, 130, 246, 0.5);
+  --state-aligned: #0a1a2a;
+  --state-mild: #ff8800;
+  --state-persistent: #ff3333;
+  --state-deep: #8b0000;
   color-scheme: light;
 }
 
-/* Body and base styles */
+/* Body and base styles - Scientific instrument aesthetic */
 body {
   background-color: var(--page-bg);
+  background-image:
+    linear-gradient(
+      90deg,
+      rgba(26, 40, 56, 0.15) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      0deg,
+      rgba(26, 40, 56, 0.15) 1px,
+      transparent 1px
+    );
+  background-size: 20px 20px;
+  background-attachment: fixed;
   color: var(--text-primary);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
   transition: background-color 0.2s ease, color 0.2s ease;
+  letter-spacing: 0.02em;
 }
 
 /* Scrollbar styling */
@@ -111,17 +122,20 @@ body {
   }
 }
 
-/* Focus visible styles - visible focus for keyboard users */
+/* Focus visible styles - cyan glow for keyboard users */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid rgba(0, 200, 255, 0.8);
   outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.4);
 }
 
-/* Animation: spin (for loading indicators) */
+/* Animations - Seismic system (respects prefers-reduced-motion) */
+
+/* Spin animation for loading spinner */
 @media (prefers-reduced-motion: no-preference) {
   @keyframes spin-ccw {
     from {
@@ -136,18 +150,68 @@ select:focus-visible {
     display: inline-block;
     animation: spin-ccw 0.9s linear infinite;
   }
+
+  /* Glow pulse for critical states */
+  @keyframes glow-pulse {
+    0%, 100% {
+      opacity: 0.6;
+      filter: drop-shadow(0 0 8px rgba(255, 51, 51, 0.6));
+    }
+    50% {
+      opacity: 0.9;
+      filter: drop-shadow(0 0 16px rgba(255, 51, 51, 0.8));
+    }
+  }
+
+  /* Subtle flicker for deep divergence */
+  @keyframes flicker {
+    0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
+      opacity: 1;
+      filter: drop-shadow(0 0 8px rgba(255, 51, 51, 0.4));
+    }
+    20%, 24%, 55% {
+      opacity: 0.95;
+      filter: drop-shadow(0 0 12px rgba(255, 51, 51, 0.6));
+    }
+  }
+
+  /* Draw-in animation for waveforms */
+  @keyframes draw-waveform {
+    from {
+      stroke-dashoffset: 1000;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Gauge needle sweep */
+  @keyframes needle-sweep {
+    from {
+      transform: rotate(-90deg);
+    }
+    to {
+      transform: rotate(var(--rotation, 0deg));
+    }
+  }
+
+  .state-deep-divergence {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .spin-icon {
-    display: inline-block;
+    animation: none;
+  }
+  .state-deep-divergence {
     animation: none;
   }
 }
 
-/* Button styles */
+/* Button styles - Technical, glowing */
 button.refresh-btn {
-  border: 1px solid var(--border-primary);
+  border: 1px solid rgba(0, 200, 255, 0.3);
   background-color: var(--bg-secondary);
   color: var(--text-primary);
   transition: none;
@@ -155,18 +219,20 @@ button.refresh-btn {
 
 @media (prefers-reduced-motion: no-preference) {
   button.refresh-btn {
-    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+    transition: all 0.15s ease;
   }
 }
 
 button.refresh-btn:hover:not(:disabled) {
   background-color: var(--bg-tertiary);
-  border-color: var(--border-secondary);
+  border-color: rgba(0, 200, 255, 0.6);
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.2);
 }
 
 button.refresh-btn:focus-visible {
-  outline: 2px solid var(--focus-ring);
+  outline: 2px solid rgba(0, 200, 255, 0.8);
   outline-offset: 2px;
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.4);
 }
 
 button.refresh-btn:disabled {

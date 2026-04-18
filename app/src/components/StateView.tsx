@@ -3,6 +3,8 @@ import { theme } from "../theme";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { useDarkMode } from "../hooks/useDarkMode";
 import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
+import { SeismicWaveform } from "./ui/SeismicWaveform";
+import { GaugeIndicator } from "./ui/GaugeIndicator";
 
 type Freshness = "fresh" | "stale" | "missing";
 type DislocationState = "aligned" | "mild_divergence" | "persistent_divergence" | "deep_divergence";
@@ -291,71 +293,122 @@ export function StateView({
       ? latestPt.mismatchScore - prevPt.mismatchScore
       : null;
 
+  const getGlowColor = (state: string) => {
+    switch (state) {
+      case "aligned":
+        return "rgba(0, 200, 255, 0.15)";
+      case "mild_divergence":
+        return "rgba(255, 136, 0, 0.15)";
+      case "persistent_divergence":
+        return "rgba(255, 51, 51, 0.2)";
+      case "deep_divergence":
+        return "rgba(255, 51, 51, 0.3)";
+      default:
+        return "rgba(0, 200, 255, 0.1)";
+    }
+  };
+
   return (
     <section>
-      {/* Hero band */}
+      {/* Hero band - Seismic state visualization */}
       <div
         style={{
           background: bg,
+          backgroundImage: `
+            repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 4px),
+            linear-gradient(0deg, ${getGlowColor(data.dislocationState)}, transparent 40%)
+          `,
           padding: isMobile ? `${theme.spacing.xxl} ${theme.spacing.xl}` : `${theme.spacing.xxxl} ${theme.spacing.xxl}`,
           color: "#fff",
+          position: "relative",
+          borderBottom: `2px solid ${
+            data.dislocationState === "deep_divergence"
+              ? "rgba(255, 51, 51, 0.6)"
+              : data.dislocationState === "persistent_divergence"
+                ? "rgba(255, 51, 51, 0.4)"
+                : "rgba(255, 255, 255, 0.1)"
+          }`,
+          boxShadow:
+            data.dislocationState === "deep_divergence"
+              ? `inset 0 0 20px ${getGlowColor(data.dislocationState)}`
+              : "none",
         }}
       >
-        {/* State label badge */}
-        <div style={{ marginBottom: 14 }}>
+        {/* State label badge - Technical identifier */}
+        <div style={{ marginBottom: theme.spacing.xxl }}>
           <span
             style={{
-              fontSize: 10,
+              fontSize: theme.typography.sizes.sm,
               fontWeight: 700,
-              letterSpacing: "0.16em",
+              letterSpacing: theme.letterSpacing.widest,
               textTransform: "uppercase",
-              background: "rgba(0,0,0,0.2)",
-              padding: "3px 10px",
-              borderRadius: 100,
+              background: "rgba(0, 0, 0, 0.4)",
+              border: `1px solid ${
+                data.dislocationState === "deep_divergence"
+                  ? "rgba(255, 51, 51, 0.6)"
+                  : "rgba(255, 255, 255, 0.2)"
+              }`,
+              padding: `${theme.spacing.sm} ${theme.spacing.xl}`,
+              borderRadius: "2px",
+              fontFamily: theme.typography.monoStack,
+              display: "inline-block",
             }}
           >
             {stateLabel}
           </span>
         </div>
 
-        {/* Score row: number + delta chip + sparkline */}
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 4 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 7 }}>
+        {/* Score row: seismic display with waveform */}
+        <div style={{ marginBottom: theme.spacing.xxl }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: theme.spacing.xl, marginBottom: theme.spacing.lg }}>
             <span
               style={{
-                fontSize: 48,
+                fontSize: theme.typography.sizes["7xl"],
                 fontWeight: 800,
-                letterSpacing: "-0.03em",
+                letterSpacing: theme.letterSpacing.tight,
                 lineHeight: 1,
+                fontFamily: theme.typography.monoStack,
                 fontVariantNumeric: "tabular-nums",
+                color: mismatchPct > 75 ? "var(--color-missing)" : "#fff",
+                textShadow: mismatchPct > 75 ? "0 0 16px rgba(255, 51, 51, 0.6)" : "none",
               }}
             >
               {mismatchPct}%
             </span>
-            <span style={{ fontSize: 13, opacity: 0.7 }}>mismatch</span>
+            <span style={{ fontSize: theme.typography.sizes.lg, opacity: 0.8, marginBottom: theme.spacing.md }}>
+              mismatch
+            </span>
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: 3,
-            }}
-          >
-            {delta !== null && Math.abs(delta) >= 0.005 && (
+
+          {/* Delta indicator (pressure direction) */}
+          {delta !== null && Math.abs(delta) >= 0.005 && (
+            <div style={{ marginBottom: theme.spacing.lg }}>
               <span
                 style={{
-                  fontSize: 12,
+                  fontSize: theme.typography.sizes.lg,
                   fontWeight: 700,
-                  color: delta > 0 ? "#fca5a5" : "#86efac",
-                  letterSpacing: "-0.01em",
+                  color: delta > 0 ? "var(--color-missing)" : "var(--color-fresh)",
+                  fontFamily: theme.typography.monoStack,
+                  letterSpacing: theme.letterSpacing.wide,
                 }}
               >
-                {delta > 0 ? "↑" : "↓"}&nbsp;{Math.abs(Math.round(delta * 100))}pp
+                {delta > 0 ? "▲" : "▼"} {Math.abs(Math.round(delta * 100))}pp
               </span>
-            )}
-            <Sparkline history={history} />
-          </div>
+            </div>
+          )}
+
+          {/* Seismic waveform (history visualization) */}
+          <SeismicWaveform
+            history={history}
+            height={50}
+            color={
+              mismatchPct > 75
+                ? "rgba(255, 51, 51, 0.8)"
+                : mismatchPct > 50
+                  ? "rgba(255, 136, 0, 0.8)"
+                  : "rgba(0, 200, 255, 0.6)"
+            }
+          />
         </div>
 
         {/* Threshold scale — resolves "ALIGNED + 44%" confusion */}
@@ -492,37 +545,50 @@ export function StateView({
         </div>
       )}
 
-      {/* Subscores — color-coded by role */}
+      {/* Subscores — gauge indicators showing danger zones */}
       <div
-        style={{ background: "#fff", padding: "16px 20px", borderBottom: "1px solid #f3f4f6" }}
+        style={{
+          background: "var(--bg-primary)",
+          padding: theme.spacing.xxl,
+          borderBottom: `1px solid var(--border-primary)`,
+          borderLeft: `3px solid rgba(255, 136, 0, 0.6)`,
+        }}
       >
         <div
           style={{
-            fontSize: 11,
+            fontSize: theme.typography.sizes.sm,
             fontWeight: 600,
-            color: "#6b7280",
+            color: "var(--text-tertiary)",
             textTransform: "uppercase",
-            letterSpacing: "0.03em",
-            marginBottom: 12,
+            letterSpacing: theme.letterSpacing.wider,
+            marginBottom: theme.spacing.xxl,
           }}
         >
-          Score breakdown
+          Pressure Analysis
         </div>
-        <SubscoreBar
-          score={data.subscores.physical}
-          label="Physical pressure"
-          color={SUBSCORE_COLOR.physical}
-        />
-        <SubscoreBar
-          score={data.subscores.recognition}
-          label="Market recognition"
-          color={SUBSCORE_COLOR.recognition}
-        />
-        <SubscoreBar
-          score={data.subscores.transmission}
-          label="Transmission pressure"
-          color={SUBSCORE_COLOR.transmission}
-        />
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: theme.spacing.xxl }}>
+          <GaugeIndicator
+            value={data.subscores.physical}
+            label="Physical Pressure"
+            color="var(--state-persistent)"
+            dangerZone={0.6}
+            showLabel
+          />
+          <GaugeIndicator
+            value={data.subscores.recognition}
+            label="Market Recognition"
+            color="var(--state-mild)"
+            dangerZone={0.45}
+            showLabel
+          />
+          <GaugeIndicator
+            value={data.subscores.transmission}
+            label="Transmission Pressure"
+            color="var(--state-persistent)"
+            dangerZone={0.5}
+            showLabel
+          />
+        </div>
       </div>
 
       {/* Ledger impact */}

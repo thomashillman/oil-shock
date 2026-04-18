@@ -1,74 +1,84 @@
-// Design tokens for Oil Shock dashboard
-// Stripe/Datadog style: professional, data-focused, information-dense
+// Design tokens for Oil Shock — Seismic Crisis Monitoring Dashboard
+// Aesthetic: Emergency control room / geological pressure visualization
+// Visual language: technical, measured, electric, glowing accents
 
 export const theme = {
-  // Color palette - Dislocation States
+  // Color palette - Seismic State Escalation
   colors: {
     states: {
-      aligned: "#1a3a4a",
-      mild_divergence: "#d97706",
-      persistent_divergence: "#dc2626",
-      deep_divergence: "#7c2d12",
+      // Vigilant stable state (deep cool blue with subtle glow potential)
+      aligned: "#0a1a2a",
+      // Early warning (electric orange, building tension)
+      mild_divergence: "#ff8800",
+      // Active crisis (bright red, urgent glow)
+      persistent_divergence: "#ff3333",
+      // Systemic failure (deep red, darkest intensity)
+      deep_divergence: "#8b0000",
     },
 
-    // Freshness indicators
+    // State accent glows (for visual pressure indication)
+    glows: {
+      aligned: "rgba(0, 200, 255, 0.4)",
+      mild_divergence: "rgba(255, 136, 0, 0.4)",
+      persistent_divergence: "rgba(255, 51, 51, 0.5)",
+      deep_divergence: "rgba(255, 51, 51, 0.6)",
+    },
+
+    // Freshness indicators (measured signal quality)
     freshness: {
-      fresh: "#4ade80",
-      stale: "#fbbf24",
-      missing: "#f87171",
+      fresh: "#00ff00",
+      stale: "#ffaa00",
+      missing: "#ff4444",
     },
 
-    // Evidence categories (subscores)
+    // Evidence categories (seismic pressure components)
     evidence: {
-      physical: "#dc2626",
-      recognition: "#2563eb",
-      transmission: "#d97706",
+      physical: "#ff3333",
+      recognition: "#00ccff",
+      transmission: "#ffaa00",
     },
 
-    // Evidence classification
+    // Evidence classification (signal quality)
     classification: {
-      confirming: "#16a34a",
-      counterevidence: "#f97316",
-      falsifier: "#dc2626",
+      confirming: "#00ff00",
+      counterevidence: "#ffaa00",
+      falsifier: "#ff3333",
     },
 
-    // Grayscale - Light mode
+    // Grayscale - Dark mode (scientific instrument)
     light: {
-      bg: "#ffffff",
-      bg_secondary: "#f9fafb",
-      bg_tertiary: "#f3f4f6",
-      border_primary: "#e5e7eb",
-      border_secondary: "#d1d5db",
-      text_primary: "#111827",
-      text_secondary: "#6b7280",
-      text_tertiary: "#9ca3af",
+      bg: "#0a0f15",
+      bg_secondary: "#0f1420",
+      bg_tertiary: "#141a22",
+      border_primary: "#1a2838",
+      border_secondary: "#233350",
+      text_primary: "#e8f0ff",
+      text_secondary: "#a8b8d8",
+      text_tertiary: "#707a8a",
     },
 
-    // Grayscale - Dark mode
     dark: {
-      bg: "#0f1117",
-      bg_secondary: "#161b22",
-      bg_tertiary: "#21262d",
-      border_primary: "#30363d",
-      border_secondary: "#444c56",
-      text_primary: "#e6edf3",
-      text_secondary: "#8b949e",
-      text_tertiary: "#6e7681",
+      bg: "#050810",
+      bg_secondary: "#0a0f15",
+      bg_tertiary: "#0f1420",
+      border_primary: "#1a2838",
+      border_secondary: "#233350",
+      text_primary: "#e8f0ff",
+      text_secondary: "#a8b8d8",
+      text_tertiary: "#707a8a",
     },
 
-    // Status page background
-    page_bg_light: "#eaecf0",
-    page_bg_dark: "#0d1117",
+    // Page and container backgrounds
+    page_bg_light: "#050810",
+    page_bg_dark: "#050810",
 
-    // Interactive states
-    focus_ring: "rgba(59, 130, 246, 0.5)",
-    focus_ring_dark: "rgba(96, 165, 250, 0.3)",
-    hover_lift: "rgba(0, 0, 0, 0.04)",
-    hover_lift_dark: "rgba(255, 255, 255, 0.08)",
+    // Focus and interaction (cyan/electric)
+    focus_ring: "rgba(0, 200, 255, 0.6)",
+    focus_ring_dark: "rgba(0, 200, 255, 0.6)",
 
-    // Delta indicators
-    delta_up: "#fca5a5",
-    delta_down: "#86efac",
+    // Delta indicators (pressure direction)
+    delta_up: "#ff5555",
+    delta_down: "#00ff88",
   },
 
   // Spacing scale (4px grid)
@@ -84,7 +94,7 @@ export const theme = {
     giant: "40px",
   },
 
-  // Typography
+  // Typography - Monospace Technical Feel
   typography: {
     sizes: {
       xs: "9px",
@@ -114,25 +124,29 @@ export const theme = {
       relaxed: 1.5,
       loose: 1.6,
     },
-    fontStack: 'system-ui, -apple-system, sans-serif',
+    // Monospace font stack: IBM Plex Mono > Roboto Mono > Courier New
+    fontStack: '"IBM Plex Mono", "Roboto Mono", "Courier New", monospace',
+    // Monospace for numbers/data (technical, measured feel)
+    monoStack: '"Courier New", monospace',
   },
 
-  // Border radius
+  // Border radius (sharp, angular edges)
   radius: {
     none: "0px",
-    sm: "2px",
-    md: "6px",
-    lg: "8px",
-    xl: "12px",
+    sm: "1px",
+    md: "2px",
+    lg: "4px",
+    xl: "6px",
     full: "9999px",
   },
 
-  // Shadows
+  // Shadows (sharp, technical, no soft blur)
   shadows: {
     none: "none",
-    sm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-    md: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-    lg: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+    sm: "0 0 8px rgba(0, 200, 255, 0.1)",
+    md: "0 0 16px rgba(0, 200, 255, 0.15)",
+    lg: "0 0 24px rgba(0, 200, 255, 0.2)",
+    glow: "0 0 20px rgba(255, 51, 51, 0.3)",
   },
 
   // Z-index ladder
@@ -145,9 +159,9 @@ export const theme = {
 
   // Transitions - respects prefers-reduced-motion
   transitions: {
-    fast: "150ms ease",
-    normal: "250ms ease",
-    slow: "400ms ease",
+    fast: "150ms ease-in-out",
+    normal: "250ms ease-in-out",
+    slow: "400ms ease-in-out",
   },
 
   // Breakpoints
@@ -157,13 +171,13 @@ export const theme = {
     desktop: "1200px",
   },
 
-  // Letter spacing
+  // Letter spacing (tight for monospace, wider for display)
   letterSpacing: {
     tight: "-0.01em",
     normal: "0em",
-    wide: "0.03em",
-    wider: "0.12em",
-    widest: "0.16em",
+    wide: "0.05em",
+    wider: "0.1em",
+    widest: "0.2em",
   },
 };
 
