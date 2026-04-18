@@ -1,20 +1,303 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Global Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-body { background: #eaecf0; }
+/* Color scheme preference */
+html {
+  color-scheme: light dark;
+}
 
+/* CSS Variables - Light Mode (default) */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --border-primary: #e5e7eb;
+  --border-secondary: #d1d5db;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --page-bg: #eaecf0;
+  --focus-ring: rgba(59, 130, 246, 0.5);
+  --state-aligned: #1a3a4a;
+  --state-mild: #d97706;
+  --state-persistent: #dc2626;
+  --state-deep: #7c2d12;
+  --color-fresh: #4ade80;
+  --color-stale: #fbbf24;
+  --color-missing: #f87171;
+}
+
+/* CSS Variables - Dark Mode */
+@media (prefers-color-scheme: dark) {
+  html:not(.light-mode) {
+    --bg-primary: #161b22;
+    --bg-secondary: #0f1117;
+    --bg-tertiary: #21262d;
+    --border-primary: #30363d;
+    --border-secondary: #444c56;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-tertiary: #6e7681;
+    --page-bg: #0d1117;
+    --focus-ring: rgba(96, 165, 250, 0.3);
+  }
+}
+
+/* Manual dark mode toggle (class-based override) */
+html.dark-mode {
+  --bg-primary: #161b22;
+  --bg-secondary: #0f1117;
+  --bg-tertiary: #21262d;
+  --border-primary: #30363d;
+  --border-secondary: #444c56;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --page-bg: #0d1117;
+  --focus-ring: rgba(96, 165, 250, 0.3);
+  color-scheme: dark;
+}
+
+html.light-mode {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --bg-tertiary: #f3f4f6;
+  --border-primary: #e5e7eb;
+  --border-secondary: #d1d5db;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --page-bg: #eaecf0;
+  --focus-ring: rgba(59, 130, 246, 0.5);
+  color-scheme: light;
+}
+
+/* Body and base styles */
+body {
+  background-color: var(--page-bg);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-secondary);
+}
+
+/* Safe area support for notched devices */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+}
+
+/* Focus visible styles - visible focus for keyboard users */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Animation: spin (for loading indicators) */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes spin-ccw {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .spin-icon {
+    display: inline-block;
+    animation: spin-ccw 0.9s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-icon {
+    display: inline-block;
+    animation: none;
+  }
+}
+
+/* Button styles */
 button.refresh-btn {
-  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  border: 1px solid var(--border-primary);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: none;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  button.refresh-btn {
+    transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+  }
+}
+
 button.refresh-btn:hover:not(:disabled) {
-  background: #f9fafb !important;
-  border-color: #d1d5db !important;
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-secondary);
 }
+
+button.refresh-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 button.refresh-btn:disabled {
   opacity: 0.4;
+  cursor: not-allowed;
 }
 
-@keyframes spin-ccw {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(-360deg); }
+/* Transitions - respect prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    --transition-fast: 150ms ease;
+    --transition-normal: 250ms ease;
+    --transition-slow: 400ms ease;
+  }
 }
-.spin-icon { display: inline-block; animation: spin-ccw 0.9s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    --transition-fast: 0s;
+    --transition-normal: 0s;
+    --transition-slow: 0s;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Typography improvements */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+/* Text wrapping for headings (for better spacing) */
+@supports (text-wrap: balance) {
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+}
+
+@supports (text-wrap: pretty) {
+  p {
+    text-wrap: pretty;
+  }
+}
+
+/* Prevent overflow on text containers */
+p {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Links */
+a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--text-primary);
+}
+
+/* Lists */
+ul, ol {
+  list-style: none;
+}
+
+/* Form elements */
+input, textarea, select {
+  font-family: inherit;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-color: transparent;
+}
+
+/* Remove spinner from number inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Placeholder text */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+/* Code blocks */
+code {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 13px;
+}
+
+/* Selection highlight */
+::selection {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: var(--text-primary);
+}
+
+/* Utility: reduce motion check - disable transitions globally */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0 !important;
+  }
+}

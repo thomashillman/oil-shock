@@ -1,4 +1,8 @@
 import { FRESHNESS_LABEL, DISLOCATION_STATE_LABEL } from "../labels";
+import { theme } from "../theme";
+import { useIsMobile } from "../hooks/useMediaQuery";
+import { useDarkMode } from "../hooks/useDarkMode";
+import { usePrefersReducedMotion } from "../hooks/useMediaQuery";
 
 type Freshness = "fresh" | "stale" | "missing";
 type DislocationState = "aligned" | "mild_divergence" | "persistent_divergence" | "deep_divergence";
@@ -58,16 +62,16 @@ export interface StateData {
 }
 
 const STATE_BG: Record<DislocationState, string> = {
-  aligned: "#1a3a4a",
-  mild_divergence: "#d97706",
-  persistent_divergence: "#dc2626",
-  deep_divergence: "#7c2d12",
+  aligned: theme.colors.states.aligned,
+  mild_divergence: theme.colors.states.mild_divergence,
+  persistent_divergence: theme.colors.states.persistent_divergence,
+  deep_divergence: theme.colors.states.deep_divergence,
 };
 
 const FRESHNESS_DOT: Record<Freshness, string> = {
-  fresh: "#4ade80",
-  stale: "#fbbf24",
-  missing: "#f87171",
+  fresh: theme.colors.freshness.fresh,
+  stale: theme.colors.freshness.stale,
+  missing: theme.colors.freshness.missing,
 };
 
 const FRESHNESS_TEXT: Record<Freshness, string> = {
@@ -77,9 +81,9 @@ const FRESHNESS_TEXT: Record<Freshness, string> = {
 };
 
 const SUBSCORE_COLOR: Record<keyof Subscores, string> = {
-  physical: "#dc2626",
-  recognition: "#2563eb",
-  transmission: "#d97706",
+  physical: theme.colors.evidence.physical,
+  recognition: theme.colors.evidence.recognition,
+  transmission: theme.colors.evidence.transmission,
 };
 
 function ThresholdScale({ score }: { score: number }) {
@@ -230,16 +234,20 @@ export function StateView({
   error: string | null;
   history: HistoryPoint[];
 }) {
+  const isMobile = useIsMobile();
+  const { isDarkMode } = useDarkMode();
+  const prefersReducedMotion = usePrefersReducedMotion();
   if (error) {
     return (
       <div
         style={{
-          margin: 20,
-          padding: 16,
-          background: "#fff",
-          borderRadius: 12,
-          color: "#6b7280",
-          fontSize: 14,
+          margin: theme.spacing.xl,
+          padding: theme.spacing.xl,
+          background: "var(--bg-primary)",
+          borderRadius: theme.radius.lg,
+          color: "var(--text-secondary)",
+          fontSize: theme.typography.sizes.base,
+          border: `1px solid var(--border-primary)`,
         }}
       >
         {error}
@@ -252,12 +260,13 @@ export function StateView({
     return (
       <div
         style={{
-          margin: 20,
-          padding: 16,
-          background: "#fff",
-          borderRadius: 12,
-          color: "#6b7280",
-          fontSize: 14,
+          margin: theme.spacing.xl,
+          padding: theme.spacing.xl,
+          background: "var(--bg-primary)",
+          borderRadius: theme.radius.lg,
+          color: "var(--text-secondary)",
+          fontSize: theme.typography.sizes.base,
+          border: `1px solid var(--border-primary)`,
         }}
       >
         State data is incomplete — the API worker may not be fully deployed yet.
@@ -285,7 +294,13 @@ export function StateView({
   return (
     <section>
       {/* Hero band */}
-      <div style={{ background: bg, padding: "24px 20px", color: "#fff" }}>
+      <div
+        style={{
+          background: bg,
+          padding: isMobile ? `${theme.spacing.xxl} ${theme.spacing.xl}` : `${theme.spacing.xxxl} ${theme.spacing.xxl}`,
+          color: "#fff",
+        }}
+      >
         {/* State label badge */}
         <div style={{ marginBottom: 14 }}>
           <span

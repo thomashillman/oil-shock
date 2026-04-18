@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "./config";
 import { StateView } from "./components/StateView";
 import { EvidenceView } from "./components/EvidenceView";
+import { Button } from "./components/ui/Button";
+import { LiveRegion } from "./components/ui/LiveRegion";
+import { useDarkMode } from "./hooks/useDarkMode";
+import { useIsMobile } from "./hooks/useMediaQuery";
+import { theme } from "./theme";
 import type { StateData, HistoryPoint } from "./components/StateView";
 import type { EvidenceData } from "./components/EvidenceView";
 
@@ -68,7 +73,10 @@ export function App() {
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
+  const isMobile = useIsMobile();
 
   const fetchAll = useCallback(async () => {
     const [stateRes, evidenceRes] = await Promise.allSettled([
@@ -126,6 +134,7 @@ export function App() {
   const recalculate = useCallback(async () => {
     if (recalculating) return;
     setRecalculating(true);
+    setLoadingMessage("Recalculating…");
 
     const prevGeneratedAt = stateData?.generatedAt ?? null;
 
@@ -140,6 +149,7 @@ export function App() {
     const poll = async () => {
       if (Date.now() >= deadline) {
         setRecalculating(false);
+        setLoadingMessage("Recalculation complete.");
         return;
       }
       try {
@@ -151,6 +161,7 @@ export function App() {
             await fetchAll();
             await fetchHistory();
             setRecalculating(false);
+            setLoadingMessage("Recalculation complete. Data updated.");
             return;
           }
         }
@@ -181,51 +192,132 @@ export function App() {
     ? `Calculated ${relativeAge(stateData.generatedAt)}`
     : null;
 
+  const handleRecalculateKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      void recalculate();
+    }
+  };
+
   return (
-    <div style={{ minHeight: "100dvh", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+    <div
+      style={{
+        minHeight: "100dvh",
+        fontFamily: theme.typography.fontStack,
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "var(--page-bg)",
+        color: "var(--text-primary)",
+        transition: "background-color 0.2s ease, color 0.2s ease",
+      }}
+    >
+      <LiveRegion>{loadingMessage}</LiveRegion>
+
       <header
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "14px 20px",
-          background: "#fff",
-          borderBottom: "1px solid #e5e7eb",
+          padding: isMobile
+            ? `${theme.spacing.lg} ${theme.spacing.xxl}`
+            : `${theme.spacing.lg} ${theme.spacing.xxl}`,
+          backgroundColor: "var(--bg-primary)",
+          borderBottom: `1px solid var(--border-primary)`,
+          flexWrap: isMobile ? "wrap" : "nowrap",
+          gap: theme.spacing.xl,
         }}
       >
-        <h1 style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em" }}>Oil Shock</h1>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <h1
+          style={{
+            fontSize: theme.typography.sizes["2xl"],
+            fontWeight: theme.typography.weights.bold,
+            letterSpacing: theme.letterSpacing.tight,
+            margin: 0,
+            color: "var(--text-primary)",
+          }}
+        >
+          Oil Shock
+        </h1>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: theme.spacing.xl,
+            minWidth: isMobile ? "100%" : "auto",
+            justifyContent: isMobile ? "space-between" : "flex-end",
+          }}
+        >
           {calcLabel && (
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>{calcLabel}</span>
+            <span
+              style={{
+                fontSize: theme.typography.sizes.sm,
+                color: "var(--text-tertiary)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {calcLabel}
+            </span>
           )}
-          <button
-            onClick={() => void recalculate()}
-            disabled={recalculating || loading}
-            aria-label="Recalculate"
-            className="refresh-btn"
-            style={{
-              background: "none",
-              border: "1px solid #e5e7eb",
-              borderRadius: 6,
-              padding: "4px 10px",
-              fontSize: 13,
-              color: "#374151",
-              cursor: "pointer",
-              lineHeight: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <span className={recalculating ? "spin-icon" : undefined}>↺</span>
-            <span>{recalculating ? "Recalculating…" : "Recalculate"}</span>
-          </button>
+          <div style={{ display: "flex", gap: theme.spacing.lg, alignItems: "center" }}>
+            <Button
+              onClick={toggleDarkMode}
+              aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+              style={{
+                padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
+                fontSize: theme.typography.sizes.base,
+                background: "var(--bg-secondary)",
+                border: `1px solid var(--border-primary)`,
+                color: "var(--text-primary)",
+                borderRadius: theme.radius.md,
+                cursor: "pointer",
+              }}
+            >
+              {isDarkMode ? "☀" : "🌙"}
+            </Button>
+            <Button
+              onClick={() => void recalculate()}
+              onKeyDown={handleRecalculateKeyDown}
+              disabled={recalculating || loading}
+              aria-label="Recalculate state"
+              className="refresh-btn"
+              style={{
+                padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
+                fontSize: theme.typography.sizes.base,
+                background: "var(--bg-secondary)",
+                border: `1px solid var(--border-primary)`,
+                color: "var(--text-primary)",
+                borderRadius: theme.radius.md,
+                cursor: recalculating || loading ? "not-allowed" : "pointer",
+                opacity: recalculating || loading ? 0.4 : 1,
+              }}
+            >
+              <span className={recalculating ? "spin-icon" : undefined}>↺</span>
+              <span>{recalculating ? "Recalculating…" : "Recalculate"}</span>
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 40 }}>
+      <main
+        style={{
+          maxWidth: "1200px",
+          width: "100%",
+          margin: "0 auto",
+          padding: isMobile ? `${theme.spacing.xl}` : `${theme.spacing.xxxl}`,
+          paddingBottom: "40px",
+          flex: 1,
+        }}
+      >
         {loading ? (
-          <p style={{ padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>Loading…</p>
+          <p
+            style={{
+              padding: `${theme.spacing.xxxl} ${theme.spacing.xxl}`,
+              color: "var(--text-secondary)",
+              fontSize: theme.typography.sizes.base,
+            }}
+          >
+            Loading…
+          </p>
         ) : (
           <>
             <StateView data={stateData} error={stateError} history={historyData} />

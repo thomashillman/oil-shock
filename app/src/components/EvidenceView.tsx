@@ -1,4 +1,7 @@
 import { evidenceLabel, groupMeta, classificationLabel, coverageLabel } from "../labels";
+import { theme } from "../theme";
+import { useIsMobile } from "../hooks/useMediaQuery";
+import { useDarkMode } from "../hooks/useDarkMode";
 
 export interface EvidenceItem {
   evidenceKey: string;
@@ -32,16 +35,23 @@ const CLASSIFICATION_COLOR: Record<string, string> = {
 };
 
 function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) {
-  const color = positive ? "#dc2626" : "#16a34a";
+  const color = positive ? theme.colors.classification.falsifier : theme.colors.classification.confirming;
   return (
-    <div style={{ height: 5, background: "#f3f4f6", borderRadius: 3, overflow: "hidden" }}>
+    <div
+      style={{
+        height: "5px",
+        background: "var(--bg-tertiary)",
+        borderRadius: theme.radius.sm,
+        overflow: "hidden",
+      }}
+    >
       <div
         style={{
           height: "100%",
           width: `${Math.min(pct, 100)}%`,
           background: color,
-          borderRadius: 3,
-          transition: "width 0.3s ease",
+          borderRadius: theme.radius.sm,
+          transition: `width ${theme.transitions.normal}`,
         }}
       />
     </div>
@@ -51,18 +61,36 @@ function ContributionBar({ pct, positive }: { pct: number; positive: boolean }) 
 function EvidenceItem({ item, accent }: { item: EvidenceItem; accent: string }) {
   const pct = Math.abs(item.contribution * 100);
   const positive = item.contribution >= 0;
-  const classColor = CLASSIFICATION_COLOR[item.classification] ?? "#6b7280";
+  const classColor = CLASSIFICATION_COLOR[item.classification] ?? "var(--text-secondary)";
 
   return (
-    <div style={{ padding: "12px 16px", borderBottom: "1px solid #f9fafb" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-        <span style={{ fontSize: 13, color: "#111827", fontWeight: 500 }}>
+    <div
+      style={{
+        padding: `${theme.spacing.lg} ${theme.spacing.xl}`,
+        borderBottom: `1px solid var(--border-primary)`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: theme.spacing.md,
+        }}
+      >
+        <span
+          style={{
+            fontSize: theme.typography.sizes.lg,
+            color: "var(--text-primary)",
+            fontWeight: theme.typography.weights.medium,
+          }}
+        >
           {evidenceLabel(item.evidenceKey)}
         </span>
         <span
           style={{
-            fontSize: 12,
-            fontWeight: 600,
+            fontSize: theme.typography.sizes.base,
+            fontWeight: theme.typography.weights.semibold,
             color: classColor,
             fontVariantNumeric: "tabular-nums",
           }}
@@ -73,9 +101,17 @@ function EvidenceItem({ item, accent }: { item: EvidenceItem; accent: string }) 
 
       <ContributionBar pct={pct} positive={positive} />
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 11, gap: 8 }}>
-        <span style={{ color: "#6b7280" }}>{coverageLabel(item.coverage)}</span>
-        <span style={{ color: "#9ca3af", textAlign: "right" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginTop: theme.spacing.md,
+          fontSize: theme.typography.sizes.sm,
+          gap: theme.spacing.lg,
+        }}
+      >
+        <span style={{ color: "var(--text-secondary)" }}>{coverageLabel(item.coverage)}</span>
+        <span style={{ color: "var(--text-tertiary)", textAlign: "right" }}>
           {new Date(item.observedAt).toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",
@@ -91,29 +127,40 @@ function EvidenceColumn({ groupLabel, items, accent }: { groupLabel: string; ite
   return (
     <div
       style={{
-        flex: 1,
-        background: "#fff",
-        borderRadius: 8,
+        background: "var(--bg-primary)",
+        borderRadius: theme.radius.lg,
         overflow: "hidden",
         borderLeft: `3px solid ${accent}`,
-        marginBottom: 12,
+        border: `1px solid var(--border-primary)`,
       }}
     >
-      <div style={{ padding: "12px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
+      <div
+        style={{
+          padding: `${theme.spacing.lg} ${theme.spacing.xl}`,
+          borderBottom: `1px solid var(--border-primary)`,
+        }}
+      >
         <div
           style={{
-            fontSize: 10,
-            fontWeight: 700,
+            fontSize: theme.typography.sizes.sm,
+            fontWeight: theme.typography.weights.bold,
             color: accent,
             textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            marginBottom: 3,
+            letterSpacing: theme.letterSpacing.wider,
+            marginBottom: theme.spacing.sm,
           }}
         >
           {meta.label}
         </div>
         {meta.description && (
-          <p style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.3, margin: 0 }}>
+          <p
+            style={{
+              fontSize: theme.typography.sizes.sm,
+              color: "var(--text-secondary)",
+              lineHeight: theme.typography.lineHeights.snug,
+              margin: 0,
+            }}
+          >
             {meta.description}
           </p>
         )}
@@ -127,9 +174,22 @@ function EvidenceColumn({ groupLabel, items, accent }: { groupLabel: string; ite
 }
 
 export function EvidenceView({ data, error }: { data: EvidenceData | null; error: string | null }) {
+  const isMobile = useIsMobile();
+  const { isDarkMode } = useDarkMode();
+
   if (error) {
     return (
-      <div style={{ margin: 20, padding: 16, background: "#fff", borderRadius: 12, color: "#6b7280", fontSize: 14 }}>
+      <div
+        style={{
+          margin: theme.spacing.xl,
+          padding: theme.spacing.xl,
+          background: "var(--bg-primary)",
+          borderRadius: theme.radius.lg,
+          color: "var(--text-secondary)",
+          fontSize: theme.typography.sizes.base,
+          border: `1px solid var(--border-primary)`,
+        }}
+      >
         {error}
       </div>
     );
@@ -146,24 +206,34 @@ export function EvidenceView({ data, error }: { data: EvidenceData | null; error
     (group) => groups[group]
   );
 
+  const gridColumns = isMobile ? 1 : 2;
+  const gridGap = isMobile ? theme.spacing.xl : theme.spacing.lg;
+
   return (
-    <section style={{ padding: "20px 20px 0" }}>
+    <section style={{ padding: `${theme.spacing.xxl} ${theme.spacing.xl} 0` }}>
       <h2
         style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#9ca3af",
+          fontSize: theme.typography.sizes.sm,
+          fontWeight: theme.typography.weights.bold,
+          color: "var(--text-tertiary)",
           textTransform: "uppercase",
-          letterSpacing: "0.14em",
-          marginBottom: 12,
+          letterSpacing: theme.letterSpacing.widest,
+          marginBottom: theme.spacing.lg,
         }}
       >
         Evidence Frame
       </h2>
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
+          gap: gridGap,
+          marginBottom: theme.spacing.xxxl,
+        }}
+      >
         {orderedGroups.map((group) => {
-          const accent = GROUP_ACCENT[group] ?? "#6b7280";
+          const accent = GROUP_ACCENT[group] ?? "var(--text-secondary)";
           return (
             <EvidenceColumn key={group} groupLabel={group} items={groups[group]!} accent={accent} />
           );
