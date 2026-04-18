@@ -37,7 +37,7 @@
       ],
       "vars": {
         "APP_ENV": "production",
-        "PRODUCTION_ORIGIN": "https://example.com"
+        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app"
       }
     }
   }
