@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { getLatestRunEvidence, getLatestSnapshot } from "../db/client";
+import { getLatestSnapshot, getRunEvidenceBySnapshotRunKey } from "../db/client";
 import { json } from "../lib/http";
 
 export async function handleGetEvidence(env: Env): Promise<Response> {
@@ -14,7 +14,7 @@ export async function handleGetEvidence(env: Env): Promise<Response> {
     );
   }
 
-  const evidenceRows = await getLatestRunEvidence(env);
+  const evidenceRows = await getRunEvidenceBySnapshotRunKey(env, snapshot.run_key);
   const evidence = evidenceRows.map((row) => ({
     evidenceKey: row.evidence_key,
     evidenceGroup: row.evidence_group,

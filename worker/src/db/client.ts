@@ -75,7 +75,7 @@ export async function getLatestSeriesValue(env: Env, seriesKey: string): Promise
   };
 }
 
-export async function writeSnapshot(env: Env, snapshot: StateSnapshot): Promise<number> {
+export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: string | null = null): Promise<number> {
   const result = await env.DB.prepare(
     `
     INSERT INTO signal_snapshots (
@@ -89,9 +89,10 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot): Promise<
       state_rationale,
       subscores_json,
       clocks_json,
-      ledger_impact_json
+      ledger_impact_json,
+      run_key
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -105,7 +106,8 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot): Promise<
       snapshot.stateRationale,
       JSON.stringify(snapshot.subscores),
       JSON.stringify(snapshot.clocks),
-      JSON.stringify(snapshot.ledgerImpact)
+      JSON.stringify(snapshot.ledgerImpact),
+      runKey
     )
     .run();
 
@@ -166,11 +168,12 @@ export async function getLatestSnapshot(env: Env) {
     subscores_json: string;
     clocks_json: string;
     ledger_impact_json: string | null;
+    run_key: string | null;
   }>();
   return row ?? null;
 }
 
-export async function getLatestRunEvidence(env: Env) {
+async function getLatestScoreRunKey(env: Env): Promise<string | null> {
   const run = await env.DB.prepare(
     `
     SELECT run_key
@@ -180,10 +183,12 @@ export async function getLatestRunEvidence(env: Env) {
     LIMIT 1
     `
   ).first<{ run_key: string }>();
+  return run?.run_key ?? null;
+}
 
-  if (!run) {
-    return [];
-  }
+export async function getRunEvidenceBySnapshotRunKey(env: Env, snapshotRunKey: string | null) {
+  const runKey = snapshotRunKey ?? (await getLatestScoreRunKey(env));
+  if (!runKey) return [];
 
   const result = await env.DB.prepare(
     `
@@ -193,7 +198,7 @@ export async function getLatestRunEvidence(env: Env) {
     ORDER BY observed_at DESC
     `
   )
-    .bind(run.run_key)
+    .bind(runKey)
     .all<{
       evidence_key: string;
       evidence_group: string;
