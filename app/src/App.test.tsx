@@ -80,6 +80,40 @@ const mockSnakeCaseState = {
   evidence_ids: ["ev1"],
 };
 
+const mockSnakeCaseStateWithNonCanonicalNestedKeys = {
+  generated_at: "2026-04-16T20:00:00.000Z",
+  mismatch_score: 0.72,
+  dislocation_state: "persistent_divergence",
+  state_rationale: "Physical pressure persists while market recognition lags.",
+  actionability_state: "actionable",
+  confidence: {
+    coverage: 0.9,
+    sourceQuality: {
+      physical_stress: "fresh",
+      price_signal: "fresh",
+      market_response: "stale",
+    },
+  },
+  subscores: {
+    physical_stress: 0.75,
+    price_signal: 0.25,
+    market_response: 0.68,
+  },
+  clocks: {
+    shock: { ageSeconds: 259200, label: "3 days", classification: "acute" },
+    dislocation: { ageSeconds: 432000, label: "5 days", classification: "chronic" },
+    transmission: { ageSeconds: 86400, label: "24 hours", classification: "chronic" },
+  },
+  ledger_impact: null,
+  coverage_confidence: 0.9,
+  source_freshness: {
+    physical_stress: "fresh",
+    price_signal: "fresh",
+    market_response: "stale",
+  },
+  evidence_ids: ["ev1"],
+};
+
 function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -164,6 +198,17 @@ describe("App", () => {
     expect(screen.getByText("Price signal")).toBeInTheDocument();
     expect(screen.getByText("Market response")).toBeInTheDocument();
     // Percentages from mockState: 75%, 25%, 68%.
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("68%")).toBeInTheDocument();
+  });
+
+  it("renders concrete subscore percentages from snake_case top-level and non-canonical nested keys", async () => {
+    stubFetchWithStatePayload(mockSnakeCaseStateWithNonCanonicalNestedKeys);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    expect(screen.queryAllByText("NaN%")).toHaveLength(0);
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();
     expect(screen.getByText("68%")).toBeInTheDocument();
