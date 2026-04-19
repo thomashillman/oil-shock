@@ -1,26 +1,146 @@
 [
   {
     "window": "stress_case",
-    "physicalPressure": 0.88,
-    "recognition": 0.22,
-    "transmission": 0.73,
+    "physicalStress": 0.88,
+    "priceSignal": 0.22,
+    "marketResponse": 0.73,
     "freshness": {
-      "physical": "fresh",
-      "recognition": "fresh",
-      "transmission": "fresh"
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
     },
-    "expectedState": "actionable"
+    "durationHours": null,
+    "expectedDislocationState": "mild_divergence",
+    "expectedActionabilityState": "actionable"
   },
   {
     "window": "soft_case",
-    "physicalPressure": 0.42,
-    "recognition": 0.38,
-    "transmission": 0.31,
+    "physicalStress": 0.42,
+    "priceSignal": 0.38,
+    "marketResponse": 0.31,
     "freshness": {
-      "physical": "fresh",
-      "recognition": "fresh",
-      "transmission": "fresh"
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
     },
-    "expectedState": "watch"
+    "durationHours": null,
+    "expectedDislocationState": "aligned",
+    "expectedActionabilityState": "none"
+  },
+  {
+    "window": "duration_mild",
+    "physicalStress": 0.65,
+    "priceSignal": 0.3,
+    "marketResponse": 0.35,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 48,
+    "expectedDislocationState": "mild_divergence",
+    "expectedActionabilityState": "watch"
+  },
+  {
+    "window": "duration_persistent",
+    "physicalStress": 0.75,
+    "priceSignal": 0.25,
+    "marketResponse": 0.55,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 96,
+    "expectedDislocationState": "persistent_divergence",
+    "expectedActionabilityState": "watch"
+  },
+  {
+    "window": "duration_deep",
+    "physicalStress": 0.85,
+    "priceSignal": 0.2,
+    "marketResponse": 0.7,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 144,
+    "expectedDislocationState": "deep_divergence",
+    "expectedActionabilityState": "actionable"
+  },
+  {
+    "window": "null_duration_high_score",
+    "physicalStress": 0.85,
+    "priceSignal": 0.2,
+    "marketResponse": 0.7,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": null,
+    "expectedDislocationState": "mild_divergence",
+    "expectedActionabilityState": "actionable"
+  },
+  {
+    "window": "stale_critical_downgrade",
+    "physicalStress": 0.85,
+    "priceSignal": 0.2,
+    "marketResponse": 0.7,
+    "freshness": {
+      "physicalStress": "stale",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 144,
+    "expectedDislocationState": "aligned",
+    "expectedActionabilityState": "actionable"
+  },
+  {
+    "window": "ledger_push_over",
+    "physicalStress": 0.75,
+    "priceSignal": 0.2,
+    "marketResponse": 0.55,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 96,
+    "ledgerEntries": [
+      {
+        "entryKey": "push-test",
+        "impactDirection": "increase",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "retiredAt": null,
+        "reviewDueAt": "2026-06-01T00:00:00.000Z"
+      }
+    ],
+    "expectedDislocationState": "persistent_divergence",
+    "expectedActionabilityState": "watch"
+  },
+  {
+    "window": "ledger_pull_under",
+    "physicalStress": 0.7,
+    "priceSignal": 0.25,
+    "marketResponse": 0.55,
+    "freshness": {
+      "physicalStress": "fresh",
+      "priceSignal": "fresh",
+      "marketResponse": "fresh"
+    },
+    "durationHours": 48,
+    "ledgerEntries": [
+      {
+        "entryKey": "pull-test",
+        "impactDirection": "decrease",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "retiredAt": null,
+        "reviewDueAt": "2026-06-01T00:00:00.000Z"
+      }
+    ],
+    "expectedDislocationState": "mild_divergence",
+    "expectedActionabilityState": "watch"
   }
 ]

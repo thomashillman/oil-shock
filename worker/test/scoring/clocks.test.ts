@@ -11,7 +11,17 @@ const thresholds: ScoringThresholds = {
   stateDeepMin: 0.75,
   shockAgeThresholdHours: 72,
   dislocationPersistenceHours: 72,
-  ledgerAdjustmentMagnitude: 0.1
+  ledgerAdjustmentMagnitude: 0.1,
+  mismatchMarketResponseWeight: 0.15,
+  confirmationPhysicalStressMin: 0.6,
+  confirmationPriceSignalMax: 0.45,
+  confirmationMarketResponseMin: 0.5,
+  coverageMissingPenalty: 0.34,
+  coverageStalePenalty: 0.16,
+  coverageMaxPenalty: 1.0,
+  stateDeepPersistenceHours: 120,
+  statePersistentPersistenceHours: 72,
+  ledgerStaleThresholdDays: 30
 };
 
 describe("computeClocks", () => {
@@ -83,5 +93,18 @@ describe("computeClocks", () => {
 
     expect(clocks.transmission.classification).toBe("emerging");
     expect(clocks.transmission.label).toBe("none yet");
+  });
+
+  it("marks transmission as chronic when signal is older than shockAgeThresholdHours", () => {
+    const oldSignal = new Date(now.getTime() - 80 * 60 * 60 * 1000).toISOString(); // 80 hours ago
+    const clocks = computeClocks({
+      nowIso,
+      durationInCurrentStateSeconds: 3600,
+      firstTransmissionSignalObservedAt: oldSignal,
+      firstMismatchObservedAt: null,
+      thresholds,
+    });
+
+    expect(clocks.transmission.classification).toBe("chronic");
   });
 });

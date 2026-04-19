@@ -30,6 +30,20 @@ function safeValue(value: number | null): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function avgSafe(values: (number | null)[]): number {
+  const valid = values.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (valid.length === 0) return 0;
+  return safeValue(valid.reduce((a, b) => a + b, 0) / valid.length);
+}
+
+function newestObservedAt(...rows: ({ observedAt: string } | null)[]): string | null {
+  const timestamps = rows
+    .filter((r): r is { observedAt: string } => r !== null)
+    .map((r) => r.observedAt);
+  if (timestamps.length === 0) return null;
+  return timestamps.reduce((latest, ts) => (ts > latest ? ts : latest));
+}
+
 export async function runScore(env: Env, now = new Date()): Promise<void> {
   const runKey = `score-${now.getTime()}`;
   const nowIso = now.toISOString();
@@ -38,43 +52,65 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
   const thresholds = await loadThresholds(env);
 
   try {
-    const physical = await getLatestSeriesValue(env, "physical.inventory_draw");
-    const utilization = await getLatestSeriesValue(env, "physical.utilization");
-    const recognition = await getLatestSeriesValue(env, "recognition.curve_signal");
-    const transmission = await getLatestSeriesValue(env, "transmission.crack_signal");
-    const transmissionFilings = await getLatestSeriesValue(env, "transmission.impairment_mentions");
+    // physical_stress: EIA crude stocks + refinery utilization + ENTSOG flows + GIE storage
+    const inventoryDraw = await getLatestSeriesValue(env, "physical_stress.inventory_draw");
+    const refineryUtil = await getLatestSeriesValue(env, "physical_stress.refinery_utilization");
+    const euPipelineFlow = await getLatestSeriesValue(env, "physical_stress.eu_pipeline_flow");
+    const euGasStorage = await getLatestSeriesValue(env, "physical_stress.eu_gas_storage");
 
-    const physicalPressure = safeValue(
-      ((physical?.value ?? 0) + (utilization?.value ?? 0)) / (utilization ? 2 : 1)
-    );
-    const recognitionValue = safeValue(recognition?.value ?? 0);
-    const transmissionValue = safeValue(
-      ((transmission?.value ?? 0) + (transmissionFilings?.value ?? 0)) / (transmissionFilings ? 2 : 1)
-    );
+    // price_signal: WTI spot + futures curve slope
+    const spotWti = await getLatestSeriesValue(env, "price_signal.spot_wti");
+    const curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
+
+    // market_response: 3:2:1 crack spread + SEC impairment filings
+    const crackSpread = await getLatestSeriesValue(env, "market_response.crack_spread");
+    const secImpairment = await getLatestSeriesValue(env, "market_response.sec_impairment");
+
+    const physicalStress = avgSafe([
+      inventoryDraw?.value ?? null,
+      refineryUtil?.value ?? null,
+      euPipelineFlow?.value ?? null,
+      euGasStorage?.value ?? null
+    ]);
+
+    const priceSignal = avgSafe([
+      spotWti?.value ?? null,
+      curveSlope?.value ?? null
+    ]);
+
+    const marketResponse = avgSafe([
+      crackSpread?.value ?? null,
+      secImpairment?.value ?? null
+    ]);
+
+    const physicalStressObservedAt = newestObservedAt(inventoryDraw, refineryUtil, euPipelineFlow, euGasStorage);
+    const priceSignalObservedAt = newestObservedAt(spotWti, curveSlope);
+    const marketResponseObservedAt = newestObservedAt(crackSpread, secImpairment);
 
     const freshness = evaluateFreshness({
-      physicalObservedAt: physical?.observedAt ?? null,
-      recognitionObservedAt: recognition?.observedAt ?? null,
-      transmissionObservedAt: transmission?.observedAt ?? null
+      physicalStressObservedAt,
+      priceSignalObservedAt,
+      marketResponseObservedAt
     });
 
     // Compute initial snapshot with subscores
     let { snapshot, evidence } = computeSnapshot({
       nowIso,
-      physicalPressure,
-      recognition: recognitionValue,
-      transmission: transmissionValue,
-      physicalObservedAt: physical?.observedAt ?? null,
-      recognitionObservedAt: recognition?.observedAt ?? null,
-      transmissionObservedAt: transmission?.observedAt ?? null,
-      freshness
+      physicalStress,
+      priceSignal,
+      marketResponse,
+      physicalStressObservedAt,
+      priceSignalObservedAt,
+      marketResponseObservedAt,
+      freshness,
+      thresholds
     });
 
     // Apply ledger adjustments to mismatch score
     const ledgerEntries = await getLedgerEntries(env);
     const { adjustedMismatchScore, ledgerImpact } = applyLedgerAdjustments({
       mismatchScore: snapshot.mismatchScore,
-      physicalScore: snapshot.subscores.physical,
+      physicalStress: snapshot.subscores.physicalStress,
       ledgerEntries,
       nowIso,
       thresholds
@@ -107,7 +143,7 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
         previousState: previousStateEvent?.new_state ?? null,
         newState: dislocationState,
         stateDurationSeconds: previousStateEvent ? durationInCurrentStateSeconds : null,
-        transmissionChanged: transmissionValue >= 0.5
+        transmissionChanged: marketResponse >= thresholds.confirmationMarketResponseMin
       });
     }
 
@@ -128,9 +164,9 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       const { classification, reason } = classifyEvidence({
         evidenceKey: evt.evidenceKey,
         contribution: evt.contribution,
-        physicalScore: snapshot.subscores.physical,
-        recognitionScore: snapshot.subscores.recognition,
-        transmissionScore: snapshot.subscores.transmission
+        physicalStress: snapshot.subscores.physicalStress,
+        priceSignal: snapshot.subscores.priceSignal,
+        marketResponse: snapshot.subscores.marketResponse
       });
 
       const { coverage } = evaluateEvidenceCoverage({

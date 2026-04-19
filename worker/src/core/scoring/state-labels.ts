@@ -1,9 +1,9 @@
 import type { DislocationState, Subscores, FreshnessSummary, ScoringThresholds } from "../../types";
 
 interface StateContext {
-  physicalScore: number;
-  recognitionScore: number;
-  transmissionScore: number;
+  physicalStress: number;
+  priceSignal: number;
+  marketResponse: number;
   freshness: FreshnessSummary;
   durationInCurrentStateSeconds: number | null;
 }
@@ -20,49 +20,47 @@ export function computeDislocationState(
   thresholds: ScoringThresholds
 ): { state: DislocationState; rationale: string } {
   const context: StateContext = {
-    physicalScore: subscores.physical,
-    recognitionScore: subscores.recognition,
-    transmissionScore: subscores.transmission,
+    physicalStress: subscores.physicalStress,
+    priceSignal: subscores.priceSignal,
+    marketResponse: subscores.marketResponse,
     freshness,
     durationInCurrentStateSeconds
   };
 
   const durationHours = secondsToHours(durationInCurrentStateSeconds);
 
-  // Determine state based on score and confirmation gates
   let state: DislocationState = "aligned";
   let rationale = "";
 
-  // Check for stale data; if critical data is stale, downgrade confidence
-  const hasStaleCritical = freshness.physical === "stale" || freshness.recognition === "stale";
+  const hasStaleCritical = freshness.physicalStress === "stale" || freshness.priceSignal === "stale";
 
-  // aligned: score < aligned_max AND physical pressure is low
-  if (mismatchScore < thresholds.stateAlignedMax && context.physicalScore < 0.5) {
+  // aligned: score < aligned_max AND physical stress is low
+  if (mismatchScore < thresholds.stateAlignedMax && context.physicalStress < 0.5) {
     state = "aligned";
     rationale = "Physical pressure is modest; market recognition aligned.";
   }
-  // deep_divergence: score >= deep_min AND >= 2 confirmations AND persisted 5+ days
+  // deep_divergence: score >= deep_min AND all confirmations met AND persisted stateDeepPersistenceHours+
   else if (
     mismatchScore >= thresholds.stateDeepMin &&
-    context.physicalScore >= 0.6 &&
-    context.recognitionScore <= 0.45 &&
-    context.transmissionScore >= 0.5 &&
-    (!durationHours || durationHours >= 120) // 5 days = 120 hours
+    context.physicalStress >= thresholds.confirmationPhysicalStressMin &&
+    context.priceSignal <= thresholds.confirmationPriceSignalMax &&
+    context.marketResponse >= thresholds.confirmationMarketResponseMin &&
+    durationHours !== null && durationHours >= thresholds.stateDeepPersistenceHours
   ) {
     state = "deep_divergence";
-    if (context.transmissionScore >= 0.7) {
+    if (context.marketResponse >= 0.7) {
       rationale = "Physical deterioration severe; market recognition significantly lags; transmission signals accelerating. Persistent state now deep.";
     } else {
       rationale = "Physical deterioration sustained; market recognition lags; transmission pressure building. Persistent state now deep.";
     }
   }
-  // persistent_divergence: score persistent_min–persistent_max AND persisted dislocationPersistenceHours+
+  // persistent_divergence: score persistent_min–persistent_max AND all confirmations met AND persisted statePersistentPersistenceHours+
   else if (
     mismatchScore >= thresholds.statePersistentMin &&
     mismatchScore < thresholds.statePersistentMax &&
-    context.physicalScore >= 0.6 &&
-    context.recognitionScore <= 0.45 &&
-    (!durationHours || durationHours >= thresholds.dislocationPersistenceHours)
+    context.physicalStress >= thresholds.confirmationPhysicalStressMin &&
+    context.priceSignal <= thresholds.confirmationPriceSignalMax &&
+    durationHours !== null && durationHours >= thresholds.statePersistentPersistenceHours
   ) {
     state = "persistent_divergence";
     rationale = "Physical pressure persists while market recognition lags; transmission signals emerging. Divergence now sustained.";
@@ -70,21 +68,21 @@ export function computeDislocationState(
   // mild_divergence: score mild_min–persistent_min
   else if (mismatchScore >= thresholds.stateMildMin && mismatchScore < thresholds.statePersistentMin) {
     state = "mild_divergence";
-    if (context.transmissionScore >= 0.6) {
+    if (context.marketResponse >= 0.6) {
       rationale = "Physical pressure emerging; market recognition beginning to respond; transmission signals rising.";
     } else {
       rationale = "Physical pressure emerging; market recognition lagging; early transmission signals.";
     }
   }
-  // catch-all for score-driven transitions
+  // catch-all for score-driven transitions not yet meeting duration gates
   else if (mismatchScore >= thresholds.statePersistentMin) {
-    state = "persistent_divergence";
-    rationale = "Score-driven persistent state: physical elevated, recognition lagging, transmission mixed.";
+    state = "mild_divergence";
+    rationale = "Score elevated but duration gate not yet met; classified as mild pending persistence.";
   }
 
-  // Downgrade confidence if stale
+  // Conservative downgrade: revert to aligned if critical data is stale
   if (hasStaleCritical) {
-    state = "aligned"; // Conservative: revert to aligned if critical data is stale
+    state = "aligned";
     rationale = `${rationale} [STALE DATA: confidence downgraded]`;
   }
 

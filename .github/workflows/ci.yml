@@ -62,6 +62,24 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Apply D1 migrations (remote)
+        run: corepack pnpm wrangler d1 migrations apply energy_dislocation --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Assert config_thresholds row count
+        run: |
+          COUNT=$(corepack pnpm wrangler d1 execute energy_dislocation --remote --command "SELECT COUNT(*) as c FROM config_thresholds" --json | jq '.[0].results[0].c')
+          echo "config_thresholds rows: $COUNT"
+          if [ "$COUNT" -lt 20 ]; then
+            echo "ERROR: Expected at least 20 rows in config_thresholds, got $COUNT"
+            exit 1
+          fi
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy worker (preview)
         run: corepack pnpm --filter @oil-shock/worker run deploy:preview
         env:

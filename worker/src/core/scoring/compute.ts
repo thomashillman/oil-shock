@@ -1,32 +1,28 @@
-import type { ActionabilityState, FreshnessSummary, ScoreEvidence, StateSnapshot, Confidence, Subscores } from "../../types";
+import type { ActionabilityState, FreshnessSummary, ScoreEvidence, StateSnapshot, Confidence, Subscores, ScoringThresholds } from "../../types";
 
 interface ScoreInputs {
   nowIso: string;
-  physicalPressure: number;
-  recognition: number;
-  transmission: number;
-  physicalObservedAt: string | null;
-  recognitionObservedAt: string | null;
-  transmissionObservedAt: string | null;
+  physicalStress: number;
+  priceSignal: number;
+  marketResponse: number;
+  physicalStressObservedAt: string | null;
+  priceSignalObservedAt: string | null;
+  marketResponseObservedAt: string | null;
   freshness: FreshnessSummary;
+  thresholds: ScoringThresholds;
 }
 
 const clamp = (value: number): number => Math.max(0, Math.min(1, value));
 
 export function computeSnapshot(inputs: ScoreInputs): { snapshot: StateSnapshot; evidence: ScoreEvidence[] } {
-  // Compute subscores: physical, recognition, and transmission
-  const physicalScore = inputs.physicalPressure;
-  const recognitionScore = inputs.recognition;
-  const transmissionScore = inputs.transmission;
+  const { physicalStress, priceSignal, marketResponse, thresholds } = inputs;
 
-  // Mismatch score uses transmission at 0.15 weight
-  const mismatchScore = clamp(physicalScore - recognitionScore + transmissionScore * 0.15);
+  const mismatchScore = clamp(physicalStress - priceSignal + marketResponse * thresholds.mismatchMarketResponseWeight);
 
-  // Count confirmations based on strength + freshness
   const confirmations = [
-    physicalScore >= 0.6 && inputs.freshness.physical === "fresh",
-    recognitionScore <= 0.45 && inputs.freshness.recognition === "fresh",
-    transmissionScore >= 0.5 && inputs.freshness.transmission === "fresh"
+    physicalStress >= thresholds.confirmationPhysicalStressMin && inputs.freshness.physicalStress === "fresh",
+    priceSignal <= thresholds.confirmationPriceSignalMax && inputs.freshness.priceSignal === "fresh",
+    marketResponse >= thresholds.confirmationMarketResponseMin && inputs.freshness.marketResponse === "fresh"
   ].filter(Boolean).length;
 
   let actionabilityState: ActionabilityState = "none";
@@ -40,55 +36,54 @@ export function computeSnapshot(inputs: ScoreInputs): { snapshot: StateSnapshot;
   const freshnessValues = Object.values(inputs.freshness);
   const missingCount = freshnessValues.filter((value) => value === "missing").length;
   const staleCount = freshnessValues.filter((value) => value === "stale").length;
-  const coverageConfidence = clamp(1 - missingCount * 0.34 - staleCount * 0.16);
+  const coverageConfidence = clamp(1 - missingCount * thresholds.coverageMissingPenalty - staleCount * thresholds.coverageStalePenalty);
 
-  // Build source quality metadata
   const sourceQuality = {
-    physical: inputs.freshness.physical,
-    recognition: inputs.freshness.recognition,
-    transmission: inputs.freshness.transmission
+    physicalStress: inputs.freshness.physicalStress,
+    priceSignal: inputs.freshness.priceSignal,
+    marketResponse: inputs.freshness.marketResponse
   };
 
   const evidence: ScoreEvidence[] = [
     {
       evidenceKey: "physical-pressure",
-      evidenceGroup: "physical",
-      evidenceGroupLabel: "physical_reality",
-      observedAt: inputs.physicalObservedAt ?? inputs.nowIso,
-      contribution: physicalScore,
+      evidenceGroup: "physicalStress",
+      evidenceGroupLabel: "physical_stress_indicator",
+      observedAt: inputs.physicalStressObservedAt ?? inputs.nowIso,
+      contribution: physicalStress,
       classification: "confirming",
-      coverage: inputs.freshness.physical === "fresh" ? "well" : inputs.freshness.physical === "stale" ? "weakly" : "not_covered",
-      reason: `Physical pressure indicator at ${(physicalScore * 100).toFixed(0)}% (${inputs.freshness.physical})`,
-      details: { feature: "physical_pressure", freshness: inputs.freshness.physical }
+      coverage: inputs.freshness.physicalStress === "fresh" ? "well" : inputs.freshness.physicalStress === "stale" ? "weakly" : "not_covered",
+      reason: `Physical stress indicator at ${(physicalStress * 100).toFixed(0)}% (${inputs.freshness.physicalStress})`,
+      details: { feature: "physical_stress", freshness: inputs.freshness.physicalStress }
     },
     {
       evidenceKey: "recognition-gap",
-      evidenceGroup: "recognition",
-      evidenceGroupLabel: "market_recognition",
-      observedAt: inputs.recognitionObservedAt ?? inputs.nowIso,
-      contribution: 1 - recognitionScore,
-      classification: recognitionScore < 0.45 ? "confirming" : "counterevidence",
-      coverage: inputs.freshness.recognition === "fresh" ? "well" : inputs.freshness.recognition === "stale" ? "weakly" : "not_covered",
-      reason: `Market recognition at ${(recognitionScore * 100).toFixed(0)}% (${inputs.freshness.recognition}) - ${recognitionScore < 0.45 ? "lags physical pressure" : "acknowledges pressure"}`,
-      details: { feature: "market_recognition_inverse", freshness: inputs.freshness.recognition }
+      evidenceGroup: "priceSignal",
+      evidenceGroupLabel: "price_signal_pressure",
+      observedAt: inputs.priceSignalObservedAt ?? inputs.nowIso,
+      contribution: 1 - priceSignal,
+      classification: priceSignal < thresholds.confirmationPriceSignalMax ? "confirming" : "counterevidence",
+      coverage: inputs.freshness.priceSignal === "fresh" ? "well" : inputs.freshness.priceSignal === "stale" ? "weakly" : "not_covered",
+      reason: `Price signal at ${(priceSignal * 100).toFixed(0)}% (${inputs.freshness.priceSignal}) - ${priceSignal < thresholds.confirmationPriceSignalMax ? "lags physical stress" : "acknowledges pressure"}`,
+      details: { feature: "price_signal_inverse", freshness: inputs.freshness.priceSignal }
     },
     {
       evidenceKey: "transmission-stress",
-      evidenceGroup: "transmission",
-      evidenceGroupLabel: "transmission_pressure",
-      observedAt: inputs.transmissionObservedAt ?? inputs.nowIso,
-      contribution: transmissionScore,
-      classification: transmissionScore >= 0.5 ? "confirming" : "counterevidence",
-      coverage: inputs.freshness.transmission === "fresh" ? "well" : inputs.freshness.transmission === "stale" ? "weakly" : "not_covered",
-      reason: `Transmission pressure at ${(transmissionScore * 100).toFixed(0)}% (${inputs.freshness.transmission}) - ${transmissionScore >= 0.5 ? "validates price pressure" : "mismatch with physical"}`,
-      details: { feature: "transmission_stress", freshness: inputs.freshness.transmission }
+      evidenceGroup: "marketResponse",
+      evidenceGroupLabel: "market_response_pressure",
+      observedAt: inputs.marketResponseObservedAt ?? inputs.nowIso,
+      contribution: marketResponse,
+      classification: marketResponse >= thresholds.confirmationMarketResponseMin ? "confirming" : "counterevidence",
+      coverage: inputs.freshness.marketResponse === "fresh" ? "well" : inputs.freshness.marketResponse === "stale" ? "weakly" : "not_covered",
+      reason: `Market response at ${(marketResponse * 100).toFixed(0)}% (${inputs.freshness.marketResponse}) - ${marketResponse >= thresholds.confirmationMarketResponseMin ? "validates price pressure" : "mismatch with physical"}`,
+      details: { feature: "market_response_stress", freshness: inputs.freshness.marketResponse }
     }
   ];
 
   const subscores: Subscores = {
-    physical: physicalScore,
-    recognition: recognitionScore,
-    transmission: transmissionScore
+    physicalStress,
+    priceSignal,
+    marketResponse
   };
 
   const confidence: Confidence = {

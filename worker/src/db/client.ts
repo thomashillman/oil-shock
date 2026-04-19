@@ -334,7 +334,17 @@ export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
     ["stateDeepMin", "state_deep_threshold_min"],
     ["shockAgeThresholdHours", "shock_age_threshold_hours"],
     ["dislocationPersistenceHours", "dislocation_persistence_threshold_hours"],
-    ["ledgerAdjustmentMagnitude", "ledger_adjustment_magnitude"]
+    ["ledgerAdjustmentMagnitude", "ledger_adjustment_magnitude"],
+    ["mismatchMarketResponseWeight", "mismatch_market_response_weight"],
+    ["confirmationPhysicalStressMin", "confirmation_physical_stress_min"],
+    ["confirmationPriceSignalMax", "confirmation_price_signal_max"],
+    ["confirmationMarketResponseMin", "confirmation_market_response_min"],
+    ["coverageMissingPenalty", "coverage_missing_penalty"],
+    ["coverageStalePenalty", "coverage_stale_penalty"],
+    ["coverageMaxPenalty", "coverage_max_penalty"],
+    ["stateDeepPersistenceHours", "state_deep_persistence_hours"],
+    ["statePersistentPersistenceHours", "state_persistent_persistence_hours"],
+    ["ledgerStaleThresholdDays", "ledger_stale_threshold_days"]
   ];
 
   const thresholds = {} as ScoringThresholds;

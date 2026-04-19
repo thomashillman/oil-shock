@@ -38,7 +38,17 @@ const SEED_CONFIG_THRESHOLDS: Row[] = [
   { key: "shock_age_threshold_hours", value: 72 },
   { key: "dislocation_persistence_threshold_hours", value: 72 },
   { key: "transmission_freshness_threshold_days", value: 8 },
-  { key: "ledger_adjustment_magnitude", value: 0.1 }
+  { key: "ledger_adjustment_magnitude", value: 0.1 },
+  { key: "mismatch_market_response_weight", value: 0.15 },
+  { key: "confirmation_physical_stress_min", value: 0.6 },
+  { key: "confirmation_price_signal_max", value: 0.45 },
+  { key: "confirmation_market_response_min", value: 0.5 },
+  { key: "coverage_missing_penalty", value: 0.34 },
+  { key: "coverage_stale_penalty", value: 0.16 },
+  { key: "coverage_max_penalty", value: 1.0 },
+  { key: "state_deep_persistence_hours", value: 120 },
+  { key: "state_persistent_persistence_hours", value: 72 },
+  { key: "ledger_stale_threshold_days", value: 30 }
 ];
 
 export class FakeD1Database {

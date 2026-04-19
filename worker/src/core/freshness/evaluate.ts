@@ -14,13 +14,13 @@ function evaluateRecency(observedAt: string | null, maxAgeDays: number): "fresh"
 }
 
 export function evaluateFreshness(inputs: {
-  physicalObservedAt: string | null;
-  recognitionObservedAt: string | null;
-  transmissionObservedAt: string | null;
+  physicalStressObservedAt: string | null;
+  priceSignalObservedAt: string | null;
+  marketResponseObservedAt: string | null;
 }): FreshnessSummary {
   return {
-    physical: evaluateRecency(inputs.physicalObservedAt, 8),
-    recognition: evaluateRecency(inputs.recognitionObservedAt, 3),
-    transmission: evaluateRecency(inputs.transmissionObservedAt, 8)
+    physicalStress: evaluateRecency(inputs.physicalStressObservedAt, 8),
+    priceSignal: evaluateRecency(inputs.priceSignalObservedAt, 3),
+    marketResponse: evaluateRecency(inputs.marketResponseObservedAt, 8)
   };
 }

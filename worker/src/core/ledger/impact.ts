@@ -10,29 +10,29 @@ interface LedgerEntry {
 
 interface LedgerImpactInput {
   mismatchScore: number;
-  physicalScore: number;
+  physicalStress: number;
   ledgerEntries: LedgerEntry[];
   nowIso: string;
   thresholds: ScoringThresholds;
 }
 
-const LEDGER_STALE_THRESHOLD_DAYS = 30;
-
-function isLedgerEntryActive(entry: LedgerEntry, nowIso: string): boolean {
+function isLedgerEntryActive(entry: LedgerEntry, nowIso: string, staleThresholdDays: number): boolean {
   if (entry.retiredAt) {
     return false;
   }
   const reviewDueAt = new Date(entry.reviewDueAt).getTime();
   const now = new Date(nowIso).getTime();
   const daysSinceReview = (now - reviewDueAt) / (1000 * 60 * 60 * 24);
-  return daysSinceReview <= LEDGER_STALE_THRESHOLD_DAYS;
+  return daysSinceReview <= staleThresholdDays;
 }
 
 export function applyLedgerAdjustments(input: LedgerImpactInput): {
   adjustedMismatchScore: number;
   ledgerImpact: LedgerImpact | null;
 } {
-  const activeEntries = input.ledgerEntries.filter((entry) => isLedgerEntryActive(entry, input.nowIso));
+  const activeEntries = input.ledgerEntries.filter((entry) =>
+    isLedgerEntryActive(entry, input.nowIso, input.thresholds.ledgerStaleThresholdDays)
+  );
 
   if (activeEntries.length === 0) {
     return {

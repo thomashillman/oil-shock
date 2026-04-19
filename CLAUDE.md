@@ -55,71 +55,194 @@ corepack pnpm ci:preflight        # lint + typecheck + test + build
 
 ## Core Scoring Logic
 
-The scoring pipeline (`worker/src/jobs/score.ts`) is the central domain logic:
+The scoring pipeline (`worker/src/jobs/score.ts`) is the central domain logic. **All formula constants and gate thresholds are seeded into `config_thresholds` (see [Configurable Thresholds](#configurable-thresholds)) — never hardcode them in code.**
 
-1. **Collection** (`runCollection`): Fetches from EIA, Gas, and SEC sources; normalizes into `series_points` (time-series rows) in D1.
+1. **Collection** (`runCollection`): Fetches from EIA, ENTSOG/GIE, and SEC EDGAR; normalizes into `series_points` rows in D1. Each `series_key` is namespaced under one of three dimensions: `price_signal.*`, `physical_stress.*`, `market_response.*`. See [Data Sources & API Endpoints](#data-sources--api-endpoints) for the full mapping.
 
-2. **Scoring** (`runScore`): Reads signals, checks freshness, then computes multi-layer state:
-   - **Subscores** (physical, recognition, transmission): Extracted as independent 0–1 metrics.
-   - **Mismatch score**: `mismatchScore = clamp(physical - recognition + transmission * 0.15)`.
-   - **Dislocation state** (computed in `worker/src/core/scoring/state-labels.ts`):
-     - `aligned`: Low mismatch + low physical.
-     - `mild_divergence`: Mismatch 0.3–0.5; market beginning to respond.
-     - `persistent_divergence`: Mismatch 0.5–0.75; state held 3+ days.
-     - `deep_divergence`: Mismatch ≥0.75; state held 5+ days; ≥2 confirmations.
-   - **Actionability state** (legacy): `none` / `watch` / `actionable` for backward compatibility.
-   - **Three clocks**:
-     - `shockAge`: Time since mismatch first detected (acute < 72h, else chronic).
-     - `dislocationAge`: Time in current dislocation state.
-     - `transmissionAge`: Time since transmission signal emerged.
-   - **Evidence classification** (per evidence item):
-     - `confirming`: Supports dislocation thesis.
-     - `counterevidence`: Weakens dislocation thesis.
-     - `falsifier`: Directly contradicts thesis.
-   - **Evidence coverage** (per evidence item):
-     - `well`: Fresh source data.
-     - `weakly`: Stale but not expired.
-     - `not_covered`: Missing data.
-   - **Ledger impact**: Applies 5–10% adjustment per active ledger entry (increase/decrease).
+2. **Scoring** (`runScore`): Loads thresholds, reads the latest series points, evaluates freshness, then computes:
+
+   - **Three subscores** (each clamped to `[0, 1]`):
+     - `physicalStress` — physical supply pressure (crude inventory draw, refinery utilization, EU pipeline flow stress, EU gas storage stress).
+     - `priceSignal` — what spot/forward prices are saying (WTI spot vs. rolling p95, futures curve slope as backwardation indicator).
+     - `marketResponse` — downstream market recognition (3:2:1 crack spread vs. baseline, SEC filing impairment language).
+   - **Mismatch score**:
+     ```
+     mismatchScore = clamp01(
+       physicalStress
+       − priceSignal
+       + marketResponse × thresholds.mismatchMarketResponseWeight
+     )
+     ```
+     The `mismatchMarketResponseWeight` (default `0.15`) is read from `config_thresholds`, not literal in code.
+   - **Coverage penalty** (applied to the snapshot's coverage score, not to `mismatchScore`):
+     ```
+     coverageScore = clamp01(
+       1
+       − missingCount × thresholds.coverageMissingPenalty       // 0.34
+       − staleCount   × thresholds.coverageStalePenalty         // 0.16
+     )
+     ```
+     Coverage is a **first-class scoring dimension**, not a display-only decoration.
+   - **Dislocation state** — see [Dislocation State Computation](#dislocation-state-computation).
+   - **Actionability state** (legacy `none` / `watch` / `actionable`) is computed pre-ledger in `compute.ts` for backward compatibility with older API consumers. Ledger adjustments do **not** influence actionability — only `dislocationState`.
+   - **Three clocks** (`worker/src/core/scoring/clocks.ts`):
+     - `shockAge` — hours since mismatch first detected. `< thresholds.shockAgeThresholdHours` (default 72h) → `"emerging"`, else `"chronic"`.
+     - `dislocationAge` — duration in the current dislocation state, from `state_change_events`.
+     - `transmissionAge` — hours since `marketResponse` signal first emerged.
+   - **Evidence classification** per item (`confirming` / `counterevidence` / `falsifier`).
+   - **Evidence coverage** per item (`well` / `weakly` / `not_covered`).
+   - **Ledger impact** (`worker/src/core/ledger/impact.ts`): for each active (non-retired, non-stale) entry, apply `±thresholds.ledgerAdjustmentMagnitude` (default `0.10`) to the post-formula score, then re-derive `dislocationState`. Stale entries are those older than `thresholds.ledgerStaleThresholdDays` (default `30`).
    - Writes results to `signal_snapshots` and `run_evidence`.
 
 The API routes are **read-only** against precomputed snapshots — no computation happens at request time.
 
 ## Dislocation State Computation
 
-The dislocation state is determined by regime rules (not a simple function of score):
+`worker/src/core/scoring/state-labels.ts` evaluates regime rules in priority order. **All numeric thresholds come from `config_thresholds`** — the values shown below are current defaults.
 
 ```
-IF score < 0.3 AND physicalScore < 0.5
+IF mismatchScore < stateAlignedMax (0.3) AND physicalStress < 0.5
   → aligned
 
-ELSE IF score >= 0.3 AND score < 0.5
-  → mild_divergence
-
-ELSE IF score >= 0.5 AND score < 0.75 AND durationInState >= 3 days
-  → persistent_divergence
-
-ELSE IF score >= 0.75 AND physicalScore >= 0.6 AND recognitionScore <= 0.45 AND transmissionScore >= 0.5 AND durationInState >= 5 days
+ELSE IF mismatchScore >= stateDeepMin (0.75)
+     AND physicalStress >= confirmationPhysicalStressMin (0.6)
+     AND priceSignal    <= confirmationPriceSignalMax    (0.45)
+     AND marketResponse >= confirmationMarketResponseMin (0.5)
+     AND durationHours  != null
+     AND durationHours  >= stateDeepPersistenceHours     (120 = 5 days)
   → deep_divergence
 
-IF critical data (physical OR recognition) is stale
-  → downgrade to aligned (conservative)
+ELSE IF mismatchScore IN [statePersistentMin (0.5), statePersistentMax (0.75))
+     AND physicalStress >= confirmationPhysicalStressMin
+     AND priceSignal    <= confirmationPriceSignalMax
+     AND durationHours  != null
+     AND durationHours  >= statePersistentPersistenceHours (72 = 3 days)
+  → persistent_divergence
+
+ELSE IF mismatchScore IN [stateMildMin (0.3), statePersistentMin (0.5))
+  → mild_divergence
+
+ELSE IF mismatchScore >= statePersistentMin
+  → mild_divergence  // catch-all: high score but duration gate not yet met (or null duration)
+
+IF freshness.physicalStress == "stale" OR freshness.priceSignal == "stale"
+  → downgrade to aligned (rationale appended with [STALE DATA: confidence downgraded])
 ```
 
+**Critical invariant**: a `null` `durationHours` (first-ever snapshot, or no prior `state_change_events`) must **never** advance to `persistent_divergence` or `deep_divergence` — the `null`-duration check above is what prevents a cold-start jump to deep. The replay fixture `null_duration_high_score` enforces this.
+
 The three clocks track temporal persistence:
-- **Shock age** < 72 hours = "acute" phase (early-stage mismatch).
-- **Dislocation age** measures how long the current state has held.
-- **Transmission age** measures how long price signals have been responding.
+- **Shock age** < `shockAgeThresholdHours` (default 72h) → `"emerging"`, else `"chronic"`.
+- **Dislocation age** measures how long the current dislocation state has held.
+- **Transmission age** measures how long the `marketResponse` signal has been elevated.
 
 Evidence classification follows the signal direction:
-- **physical-pressure high** → confirming.
-- **recognition gap large** → confirming (market lags).
-- **transmission high** → confirming (prices responding).
-- Opposite conditions = counterevidence or falsifier.
+- **`physicalStress` high** → confirming (real physical pressure).
+- **`priceSignal` low while `physicalStress` high** → confirming (market lags; this is the dislocation thesis).
+- **`marketResponse` high** → confirming (downstream recognition emerging).
+- Opposite conditions → counterevidence or falsifier.
 
-Ledger adjustments apply when entries are active (not retired, not stale):
-- Each increase entry: +10% to final score (clamped 0–1).
-- Each decrease entry: −10% to final score.
+Ledger adjustments apply when entries are active (not retired, not older than `ledgerStaleThresholdDays`):
+- Each `increase` entry: `+ledgerAdjustmentMagnitude` to the score (clamped to `[0, 1]`).
+- Each `decrease` entry: `−ledgerAdjustmentMagnitude` to the score.
+- Default magnitude is `0.10` per entry, configurable via `ledger_adjustment_magnitude`.
+
+## Data Sources & API Endpoints
+
+All collectors live in `worker/src/jobs/collectors/`. Each collector emits `NormalizedPoint`s with a `seriesKey` namespaced under exactly one dimension (`price_signal.*`, `physical_stress.*`, `market_response.*`). The `observedAt` field comes from the upstream feed (EIA `period`, ENTSOG `periodFrom`, GIE `gasDayStart`, SEC `filingDate`) — never from the wall clock unless the upstream omits it (warning is logged in that case).
+
+### EIA — `worker/src/jobs/collectors/eia.ts`
+
+Base: `https://api.eia.gov/v2/`. Auth: `EIA_API_KEY` query param. Date window is rolling: `endDate = today`, `startDate = today − 60 days` (daily) or `today − 26 weeks` (weekly). **No hardcoded dates** — historic bug was a fixed `2026-02-01 → 2026-04-18` window.
+
+| Endpoint | Series ID(s) | Frequency | Series key | Normalization |
+|---|---|---|---|---|
+| `petroleum/pri/spt/data` | `RWTC` (WTI Cushing spot) | daily | `price_signal.spot_wti` | `value / p95(rolling 180-day history)` clamped to `[0, 1]`. Falls back to `value / 120` if no baseline yet. |
+| `petroleum/pri/fut/data` | `RCLC1` (front month), `RCLC12` (12-month-out) | daily | `price_signal.curve_slope` | `slope = (front − far) / abs(front)`. Linear rescale `[−0.15, +0.15] → [1, 0]` (backwardation = high signal, contango = low). |
+| `petroleum/stoc/wstk/data` | `WCESTUS1` (US crude stocks ex-SPR) | weekly | `physical_stress.inventory_draw` | `(seasonal_5yr_avg − latest) / seasonal_5yr_avg` clamped `[0, 1]`. Falls back to prior-week delta if baseline missing. |
+| `petroleum/pnp/unc/data` | refinery operable capacity utilization | monthly | `physical_stress.refinery_utilization` | `value / 100` clamped `[0, 1]`. (Note: high utilization = high physical stress signal.) |
+| `petroleum/pri/spt/data` | `EER_EPMRR_PF4_RGC_DPG` (RBOB gasoline), `EER_EPD2F_PF4_RGC_DPG` (ULSD distillate), `RWTC` (crude) | daily | `market_response.crack_spread` | 3:2:1 crack: `(2·gasoline·42 + distillate·42 − 3·crude) / crude`. Z-scored against rolling 180-day baseline, clamped `[0, 1]`. |
+
+`observedAt` is taken from the EIA `period` field on each row (e.g. `"2026-04-15"`). If `period` is missing, `extractPeriod()` falls back to `nowIso` and logs a warning.
+
+### Gas (ENTSOG + GIE AGSI+) — `worker/src/jobs/collectors/gas.ts`
+
+**ENTSOG** (EU pipeline flows, no auth):
+- Endpoint: `https://transparency.entsog.eu/api/v1/operationaldatas`
+- Indicators queried: `Nomination`, `Physical Flow`, `Firm Available`, `Firm Technical`, `Firm Booked`
+- Window: 30-day rolling
+- Output series key: `physical_stress.eu_pipeline_flow`
+- Normalization: `stress = 1 − (physical_flow / nomination)` aggregated across operators, clamped `[0, 1]`. Missing values emit no point (do not default to `0.5`) so freshness correctly flags the gap.
+- `observedAt` from `periodFrom`.
+
+**GIE AGSI+** (EU gas storage):
+- Endpoint: `https://agsi.gie.eu/api?type=eu`
+- Auth header: `x-key: <env.GIE_API_KEY>` — **never hardcode this key** (a previous version had it inline at `gas.ts:102`; rotate any exposed key out-of-band).
+- Output series key: `physical_stress.eu_gas_storage`
+- Normalization: `stress = 1 − (gasInStorage / workingGasVolume)`, clamped `[0, 1]`. Higher = more depleted = more physical stress.
+- `observedAt` from `gasDayStart`.
+
+### SEC EDGAR — `worker/src/jobs/collectors/sec.ts`
+
+No auth. SEC requests should send a real User-Agent (handled in `worker/src/lib/http-client.ts`).
+
+1. `GET https://www.sec.gov/files/company_tickers.json` → builds CIK lookup map. If this fails, the collector returns `[]` (no stub data) so the series goes `missing` and coverage degrades.
+2. For each ticker in `TICKERS_BY_SECTOR` (5 sectors × 4–6 tickers — airlines/logistics: `DAL UAL AAL FDX UPS JBHT`; chemicals: `DOW LYB EMN WLK DD`; retail: `WMT COST TGT KR`; utilities: `DUK SO NEE SRE LNG`; producers/refiners: `XOM CVX COP MPC VLO`):
+   - `GET https://data.sec.gov/submissions/CIK{cik10}.json` → recent filings list.
+   - For up to the 4 most recent filings of form `10-K`, `10-Q`, or `8-K`: `GET https://www.sec.gov/Archives/edgar/data/{cikNum}/{accessionNoDashes}/{primaryDocument}`.
+3. Filing text is HTML-stripped, then scored:
+   - **Keyword match** (per-sector list, e.g. `fuel`, `jet fuel`, `diesel`, `feedstock`, `crack spread`): word-boundary regex `\b<keyword>\b` (so `fuel` does **not** match `refuel`). Any match → `hasOilLinkage = 1`.
+   - **Negative guidance** patterns: `lowered guidance`, `cut guidance`, `withdrew guidance`, `softer demand`, `margin pressure`, `higher fuel costs`, etc. Counter-balanced by positive patterns (`raised guidance`, `reaffirmed guidance`, `offset`, `cost recovery`).
+   - `impairmentScore = hasOilLinkage × 0.5 + guidanceRisk × 0.5`.
+4. Average across all scored companies → emitted as **single point** with series key `market_response.sec_impairment`, value `min(1, avgScore)`.
+5. `observedAt` is the most recent `filingDate` across scored tickers (falls back to `nowIso` if none parseable).
+
+### Freshness windows — `worker/src/core/freshness/evaluate.ts`
+
+Each dimension's most recent `observedAt` is compared to `Date.now()`:
+- `physicalStress` → `fresh` if ≤ **8 days** old, else `stale`. `null` → `missing`.
+- `priceSignal` → `fresh` if ≤ **3 days** old, else `stale`.
+- `marketResponse` → `fresh` if ≤ **8 days** old, else `stale`.
+
+These windows are currently inlined in `evaluate.ts` (not yet promoted to `config_thresholds`). If you need to tune them, change the literals there and update this section.
+
+## Configurable Thresholds
+
+All scoring constants live in `config_thresholds` (key/value rows). The TypeScript view is `ScoringThresholds` in `worker/src/types.ts`, loaded by `loadThresholds` in `worker/src/db/client.ts`. **Every key listed below is in the `required` tuple in `loadThresholds` — a missing seed row throws `MISSING_THRESHOLD` at startup.** This is intentional; see the "Data-seed migrations" landmine below.
+
+After applying migrations, the table must contain **20 rows** (10 from `0004_config_thresholds.sql`, 10 from `0006_promote_scoring_constants.sql`).
+
+### From `db/migrations/0004_config_thresholds.sql`
+
+| Key | Default | Used by | Purpose |
+|---|---|---|---|
+| `state_aligned_threshold_max` | `0.3` | state-labels | upper bound for `aligned` |
+| `state_mild_threshold_min` | `0.3` | state-labels | lower bound for `mild_divergence` |
+| `state_mild_threshold_max` | `0.5` | state-labels | upper bound for `mild_divergence` |
+| `state_persistent_threshold_min` | `0.5` | state-labels | lower bound for `persistent_divergence` |
+| `state_persistent_threshold_max` | `0.75` | state-labels | upper bound for `persistent_divergence` |
+| `state_deep_threshold_min` | `0.75` | state-labels | lower bound for `deep_divergence` |
+| `shock_age_threshold_hours` | `72` | clocks | `< threshold` → `"emerging"`, else `"chronic"` |
+| `dislocation_persistence_threshold_hours` | `72` | clocks (legacy) | retained for backward compatibility |
+| `transmission_freshness_threshold_days` | `8` | clocks (legacy) | retained for backward compatibility |
+| `ledger_adjustment_magnitude` | `0.1` | ledger/impact | per-entry `±` adjustment to score |
+
+### From `db/migrations/0006_promote_scoring_constants.sql`
+
+| Key | Default | Used by | Purpose |
+|---|---|---|---|
+| `mismatch_market_response_weight` | `0.15` | compute | weight on `marketResponse` in mismatch formula |
+| `confirmation_physical_stress_min` | `0.6` | state-labels | confirmation gate for persistent/deep |
+| `confirmation_price_signal_max` | `0.45` | state-labels | confirmation gate for persistent/deep |
+| `confirmation_market_response_min` | `0.5` | state-labels | confirmation gate for deep only |
+| `coverage_missing_penalty` | `0.34` | compute | per-missing-dimension penalty on coverage |
+| `coverage_stale_penalty` | `0.16` | compute | per-stale-dimension penalty on coverage |
+| `coverage_max_penalty` | `1.0` | compute | hard cap on coverage penalty |
+| `state_deep_persistence_hours` | `120` | state-labels | minimum dwell time before `deep_divergence` (5 days) |
+| `state_persistent_persistence_hours` | `72` | state-labels | minimum dwell time before `persistent_divergence` (3 days) |
+| `ledger_stale_threshold_days` | `30` | ledger/impact | ledger entries older than this are ignored |
+
+**To change a threshold**: write a new sequentially-numbered migration that does `INSERT OR REPLACE INTO config_thresholds (key, value) VALUES (...)`. Never edit `0004` or `0006` after they have been applied to any environment. After applying, re-run `corepack pnpm replay:validate` to confirm the new value still produces deterministic, expected behavior on all fixture windows.
 
 ## Key Conventions
 
@@ -135,6 +258,12 @@ Ledger adjustments apply when entries are active (not retired, not stale):
 **Worker** (set in `wrangler.jsonc` or via Cloudflare dashboard):
 - `APP_ENV`: `local` | `preview` | `production`
 - `PRODUCTION_ORIGIN`: frontend origin for CORS
+
+**Secrets** (never committed — inject via `wrangler secret put`):
+- `EIA_API_KEY`: EIA v2 API key (https://www.eia.gov/opendata/)
+- `GIE_API_KEY`: GIE AGSI+ API key (https://agsi.gie.eu/)
+
+For local development, copy `worker/.dev.vars.example` to `worker/.dev.vars` and fill in real values. The `.dev.vars` file is gitignored.
 
 **Frontend** (`.env` file in `app/`):
 - `VITE_API_BASE_URL`: defaults to `http://127.0.0.1:8787` for local dev
@@ -182,7 +311,7 @@ D1 (SQLite). Schema is in `db/migrations/`. Key tables:
 
 - **Data-seed migrations (INSERT-only) are invisible when skipped**: Migrations that only contain `INSERT` statements (e.g. `0004_config_thresholds.sql`) leave no schema evidence if skipped — the table exists, it's just empty. The scoring pipeline will boot and collect data normally, but `runScore` will throw `MISSING_THRESHOLD` on the very first call to `loadThresholds`, which is invoked *outside* the try-catch in `score.ts`. This means `finishRun` is never called, runs stay stuck at `status = 'running'` forever, no new snapshots are written, and the Recalculate button on the frontend will spin until the 90-second poll timeout with no visible error. After any migration apply, verify config data is present:
   ```sql
-  SELECT COUNT(*) FROM config_thresholds; -- must return 10
+  SELECT COUNT(*) FROM config_thresholds; -- must return 20 (10 from 0004 + 10 from 0006)
   ```
 
 - **Stuck `running` runs mean the error is before the try-catch in `score.ts`**: If `SELECT status, COUNT(*) FROM runs GROUP BY status` shows runs permanently stuck at `running` with no `failed` rows, the error is thrown before the try block — not caught, `finishRun` never called. Check `config_thresholds` row count first. Do not add new `INSERT` calls or schema changes to diagnose; fix the root cause (missing seed data or missing migration).
@@ -195,4 +324,4 @@ D1 (SQLite). Schema is in `db/migrations/`. Key tables:
 
 - Worker tests use an in-memory D1 mock (`worker/test/helpers/fake-d1.ts`).
 - App tests use `@testing-library/react` with jest-dom matchers (setup in `app/src/test/setup.ts`).
-- `scripts/replay-validate.mjs` runs the scoring pipeline against fixture inputs and asserts deterministic output — update fixtures when intentionally changing scoring behavior.
+- `scripts/replay-validate.ts` runs the **real scoring engine** (imports `computeSnapshot`, `applyLedgerAdjustments`, `computeDislocationState` from `worker/src/core/scoring/`) against fixture inputs in `worker/test/fixtures/replay-windows.json`, and asserts deterministic output across two identical runs. Update fixtures when intentionally changing scoring behavior. Each fixture must specify both `expectedDislocationState` and `expectedActionabilityState`. Critical fixture `null_duration_high_score` enforces the cold-start guard (high score with `durationHours = null` must NOT advance to `deep_divergence`).
