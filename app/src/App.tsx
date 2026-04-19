@@ -177,8 +177,24 @@ export function App() {
       const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`);
       if (res.ok) {
         const data = (await res.json()) as { history?: unknown };
+        const isHistoryPoint = (value: unknown): value is HistoryPoint => {
+          if (!value || typeof value !== "object") return false;
+          const item = value as Record<string, unknown>;
+          return (
+            typeof item.generatedAt === "string" &&
+            typeof item.dislocationState === "string" &&
+            typeof item.mismatchScore === "number" &&
+            Number.isFinite(item.mismatchScore)
+          );
+        };
         if (Array.isArray(data.history)) {
-          setHistoryData(data.history as HistoryPoint[]);
+          setHistoryData(
+            data.history.filter(isHistoryPoint).map((item) => ({
+              generatedAt: item.generatedAt,
+              mismatchScore: item.mismatchScore,
+              dislocationState: item.dislocationState,
+            })),
+          );
         }
       }
     } catch {
