@@ -105,6 +105,20 @@ const mockStringifiedNumericState = {
   },
 };
 
+const mockSnakeCaseStateWithNonCanonicalNestedKeys = {
+  ...mockSnakeCaseState,
+  subscores: {
+    physical_stress: 0.75,
+    price_signal: 0.25,
+    market_response: 0.68,
+  },
+  source_freshness: {
+    physical_stress: "fresh",
+    price_signal: "fresh",
+    market_response: "stale",
+  },
+};
+
 function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -196,6 +210,7 @@ describe("App", () => {
     expect(screen.getByText("35%")).toBeInTheDocument();
     expect(screen.getByText("30%")).toBeInTheDocument();
     expect(screen.getByText("20%")).toBeInTheDocument();
+    expect(screen.queryByText("NaN%")).not.toBeInTheDocument();
   });
 
   it("renders subscore bars with non-zero percentages for all three dimensions", async () => {
@@ -207,6 +222,17 @@ describe("App", () => {
     expect(screen.getByText("Price signal")).toBeInTheDocument();
     expect(screen.getByText("Market response")).toBeInTheDocument();
     // Percentages from mockState: 75%, 25%, 68%.
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("68%")).toBeInTheDocument();
+  });
+
+  it("renders concrete subscore percentages from snake_case top-level and non-canonical nested keys", async () => {
+    stubFetchWithStatePayload(mockSnakeCaseStateWithNonCanonicalNestedKeys);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    expect(screen.queryAllByText("NaN%")).toHaveLength(0);
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();
     expect(screen.getByText("68%")).toBeInTheDocument();
