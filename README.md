@@ -118,4 +118,5 @@ The workflow runs on `push` and `pull_request` against `main` and executes:
 ## Deployment
 
 See [docs/deploy.md](docs/deploy.md) for Cloudflare and Vercel deployment
-details, environment setup, and preview/production routing.
+details, environment setup, and preview/production routing. For the frontend,
+set `VITE_API_BASE_URL` in both Vercel preview and production environments.
