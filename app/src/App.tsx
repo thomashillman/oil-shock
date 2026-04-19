@@ -23,7 +23,7 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const pickNestedSubscoreKeys = (value: unknown) => {
-    if (!value || typeof value !== "object") return value;
+    if (!value || typeof value !== "object") return undefined;
     const nested = value as Record<string, unknown>;
     return {
       physicalStress: nested.physicalStress ?? nested.physical_stress,
