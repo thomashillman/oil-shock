@@ -80,6 +80,20 @@ const mockSnakeCaseState = {
   evidence_ids: ["ev1"],
 };
 
+const mockNestedSnakeCaseState = {
+  ...mockSnakeCaseState,
+  subscores: {
+    physical_stress: 0.75,
+    price_signal: 0.25,
+    market_response: 0.68,
+  },
+  source_freshness: {
+    physical_stress: "fresh",
+    price_signal: "fresh",
+    market_response: "stale",
+  },
+};
+
 function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -153,6 +167,15 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     expect(screen.getAllByText("Persistent divergence").length).toBeGreaterThan(0);
+  });
+
+  it("renders subscore bars from nested snake_case payloads", async () => {
+    stubFetchWithStatePayload(mockNestedSnakeCaseState);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("68%")).toBeInTheDocument();
   });
 
   it("renders subscore bars with non-zero percentages for all three dimensions", async () => {
