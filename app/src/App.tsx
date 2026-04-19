@@ -22,24 +22,14 @@ function relativeAge(iso: string): string {
 function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
-  const normalizeSubscores = (value: unknown): StateData["subscores"] | undefined => {
-    if (!value || typeof value !== "object") return undefined;
-    const subscores = value as Record<string, unknown>;
+  const pickNestedSubscoreKeys = (value: unknown) => {
+    if (!value || typeof value !== "object") return value;
+    const nested = value as Record<string, unknown>;
     return {
-      physicalStress: subscores.physicalStress ?? subscores.physical_stress,
-      priceSignal: subscores.priceSignal ?? subscores.price_signal,
-      marketResponse: subscores.marketResponse ?? subscores.market_response,
-    } as StateData["subscores"];
-  };
-
-  const normalizeSourceFreshness = (value: unknown): StateData["sourceFreshness"] | undefined => {
-    if (!value || typeof value !== "object") return undefined;
-    const sourceFreshness = value as Record<string, unknown>;
-    return {
-      physicalStress: sourceFreshness.physicalStress ?? sourceFreshness.physical_stress,
-      priceSignal: sourceFreshness.priceSignal ?? sourceFreshness.price_signal,
-      marketResponse: sourceFreshness.marketResponse ?? sourceFreshness.market_response,
-    } as StateData["sourceFreshness"];
+      physicalStress: nested.physicalStress ?? nested.physical_stress,
+      priceSignal: nested.priceSignal ?? nested.price_signal,
+      marketResponse: nested.marketResponse ?? nested.market_response,
+    };
   };
 
   const data = payload as Record<string, unknown>;
@@ -75,11 +65,13 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     stateRationale: data.stateRationale ?? fromSnake.stateRationale,
     actionabilityState: data.actionabilityState ?? fromSnake.actionabilityState,
     confidence: data.confidence ?? fromSnake.confidence,
-    subscores: normalizeSubscores(data.subscores ?? fromSnake.subscores),
+    subscores: pickNestedSubscoreKeys(data.subscores ?? fromSnake.subscores) as StateData["subscores"],
     clocks: data.clocks ?? fromSnake.clocks,
     ledgerImpact: data.ledgerImpact ?? fromSnake.ledgerImpact,
     coverageConfidence: data.coverageConfidence ?? fromSnake.coverageConfidence,
-    sourceFreshness: normalizeSourceFreshness(data.sourceFreshness ?? fromSnake.sourceFreshness),
+    sourceFreshness: pickNestedSubscoreKeys(
+      data.sourceFreshness ?? fromSnake.sourceFreshness,
+    ) as StateData["sourceFreshness"],
     evidenceIds: data.evidenceIds ?? fromSnake.evidenceIds,
   } as StateData;
 
