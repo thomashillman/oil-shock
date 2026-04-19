@@ -81,7 +81,7 @@ async function getTickerMap(): Promise<Map<string, string>> {
     }
     return map;
   } catch (error) {
-    log("warn", "Failed to fetch SEC ticker map, using mock data", {
+    log("warn", "Failed to fetch SEC ticker map", {
       error: error instanceof Error ? error.message : String(error)
     });
     return new Map();
@@ -102,39 +102,24 @@ async function getSubmissions(cik: string): Promise<SubmissionsResponse | null> 
   }
 }
 
-async function getCompanyFacts(cik: string): Promise<CompanyFactsResponse | null> {
-  try {
-    return await fetchJson<CompanyFactsResponse>(
-      `${BASE_DATA}/api/xbrl/companyfacts/CIK${cik}.json`,
-      { timeout: 10000 }
-    );
-  } catch (error) {
-    log("warn", `Failed to fetch company facts for CIK ${cik}`, {
-      error: error instanceof Error ? error.message : String(error)
-    });
-    return null;
-  }
-}
-
 function stripHtml(text: string): string {
-  let result = text
+  return text
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return result;
 }
 
 function countKeywordMatches(text: string, keywords: string[]): number {
   const lower = text.toLowerCase();
   let count = 0;
   for (const kw of keywords) {
-    const parts = kw.toLowerCase().split(/\s+/);
-    for (const part of parts) {
-      if (lower.includes(part)) {
-        count += 1;
-      }
+    // Use word-boundary regex so "fuel" doesn't match "refuel"
+    const escaped = kw.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`\\b${escaped}\\b`, "i");
+    if (pattern.test(lower)) {
+      count += 1;
     }
   }
   return count;
@@ -159,11 +144,11 @@ function hasNegativeGuidance(text: string): boolean {
 async function fetchRecentFilingText(
   cik: string,
   submissions: SubmissionsResponse
-): Promise<string> {
+): Promise<{ text: string; filingDate: string | null }> {
   try {
     const recent = submissions.filings?.recent;
     if (!recent?.form || !recent.accessionNumber || !recent.primaryDocument) {
-      return "";
+      return { text: "", filingDate: null };
     }
 
     for (let i = 0; i < Math.min(4, recent.form.length); i++) {
@@ -174,6 +159,7 @@ async function fetchRecentFilingText(
 
       const accession = recent.accessionNumber[i];
       const primaryDoc = recent.primaryDocument[i];
+      const filingDate = recent.filingDate?.[i] ?? null;
 
       if (!accession || !primaryDoc) {
         continue;
@@ -185,7 +171,7 @@ async function fetchRecentFilingText(
 
       try {
         const text = await fetchText(url, { timeout: 15000 });
-        return stripHtml(text);
+        return { text: stripHtml(text), filingDate };
       } catch (error) {
         log("warn", `Failed to fetch filing text for ${form}`, {
           cik,
@@ -200,7 +186,7 @@ async function fetchRecentFilingText(
     });
   }
 
-  return "";
+  return { text: "", filingDate: null };
 }
 
 function scoreTickerText(
@@ -225,24 +211,15 @@ function scoreTickerText(
 }
 
 export async function collectSec(_env: Env, nowIso: string): Promise<NormalizedPoint[]> {
-  const observedAt = nowIso;
-  const points: NormalizedPoint[] = [];
-
   const tickerMap = await getTickerMap();
   if (tickerMap.size === 0) {
-    log("warn", "SEC: No ticker map available, returning mock data");
-    return normalizePoints("sec", [
-      {
-        seriesKey: "transmission.impairment_mentions",
-        observedAt,
-        value: 0.41,
-        unit: "index"
-      }
-    ]);
+    log("warn", "SEC: No ticker map available, emitting no points");
+    return [];
   }
 
   let totalScore = 0;
   let companiesScored = 0;
+  let latestFilingDate: string | null = null;
 
   for (const [sector, tickers] of Object.entries(TICKERS_BY_SECTOR)) {
     for (const ticker of tickers) {
@@ -257,30 +234,35 @@ export async function collectSec(_env: Env, nowIso: string): Promise<NormalizedP
         continue;
       }
 
-      const filingText = await fetchRecentFilingText(cik, submissions);
+      const { text: filingText, filingDate } = await fetchRecentFilingText(cik, submissions);
       const { impairmentScore } = scoreTickerText(filingText, sector);
 
       totalScore += impairmentScore;
       companiesScored += 1;
 
+      // Track the most recent filing date across all tickers
+      if (filingDate && (!latestFilingDate || filingDate > latestFilingDate)) {
+        latestFilingDate = filingDate;
+      }
+
       log("info", `SEC: ${ticker}`, { sector, impairmentScore: impairmentScore.toFixed(3) });
     }
   }
 
-  const avgScore = companiesScored > 0 ? totalScore / companiesScored : 0.41;
+  if (companiesScored === 0) {
+    log("warn", "SEC: No companies scored, emitting no points");
+    return [];
+  }
 
-  points.push({
-    seriesKey: "transmission.impairment_mentions",
-    observedAt,
-    value: Math.min(1, avgScore),
-    unit: "index",
-    sourceKey: "sec"
-  });
+  const avgScore = totalScore / companiesScored;
+  const observedAt = latestFilingDate ?? nowIso;
 
-  return normalizePoints("sec", points.map(p => ({
-    seriesKey: p.seriesKey,
-    observedAt: p.observedAt,
-    value: p.value,
-    unit: p.unit
-  })));
+  return normalizePoints("sec", [
+    {
+      seriesKey: "market_response.sec_impairment",
+      observedAt,
+      value: Math.min(1, avgScore),
+      unit: "index"
+    }
+  ]);
 }

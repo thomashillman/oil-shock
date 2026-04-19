@@ -80,7 +80,7 @@ The scoring pipeline (`worker/src/jobs/score.ts`) is the central domain logic:
      - `well`: Fresh source data.
      - `weakly`: Stale but not expired.
      - `not_covered`: Missing data.
-   - **Ledger impact**: Applies 5–10% adjustment per active ledger entry (increase/decrease).
+   - **Ledger impact**: Applies fixed 10% per entry (configurable via `ledger_adjustment_magnitude`).
    - Writes results to `signal_snapshots` and `run_evidence`.
 
 The API routes are **read-only** against precomputed snapshots — no computation happens at request time.
@@ -135,6 +135,12 @@ Ledger adjustments apply when entries are active (not retired, not stale):
 **Worker** (set in `wrangler.jsonc` or via Cloudflare dashboard):
 - `APP_ENV`: `local` | `preview` | `production`
 - `PRODUCTION_ORIGIN`: frontend origin for CORS
+
+**Secrets** (never committed — inject via `wrangler secret put`):
+- `EIA_API_KEY`: EIA v2 API key (https://www.eia.gov/opendata/)
+- `GIE_API_KEY`: GIE AGSI+ API key (https://agsi.gie.eu/)
+
+For local development, copy `worker/.dev.vars.example` to `worker/.dev.vars` and fill in real values. The `.dev.vars` file is gitignored.
 
 **Frontend** (`.env` file in `app/`):
 - `VITE_API_BASE_URL`: defaults to `http://127.0.0.1:8787` for local dev

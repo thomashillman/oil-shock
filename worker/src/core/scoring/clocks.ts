@@ -54,7 +54,7 @@ export function computeClocks(inputs: ClockInputs): {
     transmissionAgeSeconds = dateToSeconds(inputs.firstTransmissionSignalObservedAt, nowIso);
   }
   const transmissionAgeHours = transmissionAgeSeconds / 3600;
-  const transmissionClockClassification = transmissionAgeHours === 0 ? "emerging" : "chronic";
+  const transmissionClockClassification = transmissionAgeHours < inputs.thresholds.shockAgeThresholdHours ? "emerging" : "chronic";
 
   return {
     shock: {

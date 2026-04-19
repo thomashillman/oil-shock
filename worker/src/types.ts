@@ -2,7 +2,7 @@ export type ActionabilityState = "none" | "watch" | "actionable";
 export type DislocationState = "aligned" | "mild_divergence" | "persistent_divergence" | "deep_divergence";
 export type EvidenceClassification = "confirming" | "counterevidence" | "falsifier";
 export type CoverageQuality = "well" | "weakly" | "not_covered";
-export type EvidenceGroupLabel = "physical_reality" | "market_recognition" | "transmission_pressure";
+export type EvidenceGroupLabel = "price_signal_pressure" | "physical_stress_indicator" | "market_response_pressure";
 export type ConfidenceLevel = "low" | "medium" | "high";
 
 export interface NormalizedPoint {
@@ -14,9 +14,9 @@ export interface NormalizedPoint {
 }
 
 export interface FreshnessSummary {
-  physical: "fresh" | "stale" | "missing";
-  recognition: "fresh" | "stale" | "missing";
-  transmission: "fresh" | "stale" | "missing";
+  physicalStress: "fresh" | "stale" | "missing";
+  priceSignal: "fresh" | "stale" | "missing";
+  marketResponse: "fresh" | "stale" | "missing";
 }
 
 export interface Clock {
@@ -35,7 +35,7 @@ export interface StateChangeEvent {
 
 export interface ScoreEvidence {
   evidenceKey: string;
-  evidenceGroup: "physical" | "recognition" | "transmission";
+  evidenceGroup: "physicalStress" | "priceSignal" | "marketResponse";
   evidenceGroupLabel: EvidenceGroupLabel;
   observedAt: string;
   contribution: number;
@@ -57,9 +57,9 @@ export interface Confidence {
 }
 
 export interface Subscores {
-  physical: number;
-  recognition: number;
-  transmission: number;
+  physicalStress: number;
+  priceSignal: number;
+  marketResponse: number;
 }
 
 export interface StateSnapshot {
@@ -98,4 +98,14 @@ export interface ScoringThresholds {
   shockAgeThresholdHours: number;
   dislocationPersistenceHours: number;
   ledgerAdjustmentMagnitude: number;
+  mismatchMarketResponseWeight: number;
+  confirmationPhysicalStressMin: number;
+  confirmationPriceSignalMax: number;
+  confirmationMarketResponseMin: number;
+  coverageMissingPenalty: number;
+  coverageStalePenalty: number;
+  coverageMaxPenalty: number;
+  stateDeepPersistenceHours: number;
+  statePersistentPersistenceHours: number;
+  ledgerStaleThresholdDays: number;
 }

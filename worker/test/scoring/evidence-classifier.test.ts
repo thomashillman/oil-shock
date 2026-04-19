@@ -6,9 +6,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "physical-pressure",
       contribution: 0.75,
-      physicalScore: 0.75,
-      recognitionScore: 0.3,
-      transmissionScore: 0.5,
+      physicalStress: 0.75,
+      priceSignal: 0.3,
+      marketResponse: 0.5,
     });
 
     expect(result.classification).toBe("confirming");
@@ -19,9 +19,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "physical-pressure",
       contribution: 0.2,
-      physicalScore: 0.2,
-      recognitionScore: 0.7,
-      transmissionScore: 0.5,
+      physicalStress: 0.2,
+      priceSignal: 0.7,
+      marketResponse: 0.5,
     });
 
     expect(result.classification).toBe("counterevidence");
@@ -32,9 +32,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "recognition-gap",
       contribution: 0.7,
-      physicalScore: 0.8,
-      recognitionScore: 0.25,
-      transmissionScore: 0.6,
+      physicalStress: 0.8,
+      priceSignal: 0.25,
+      marketResponse: 0.6,
     });
 
     expect(result.classification).toBe("confirming");
@@ -45,9 +45,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "recognition-gap",
       contribution: 0.3,
-      physicalScore: 0.5,
-      recognitionScore: 0.5,
-      transmissionScore: 0.4,
+      physicalStress: 0.5,
+      priceSignal: 0.5,
+      marketResponse: 0.4,
     });
 
     expect(result.classification).toBe("counterevidence");
@@ -58,9 +58,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "recognition-gap",
       contribution: 0.1,
-      physicalScore: 0.8,
-      recognitionScore: 0.85,
-      transmissionScore: 0.3,
+      physicalStress: 0.8,
+      priceSignal: 0.85,
+      marketResponse: 0.3,
     });
 
     expect(result.classification).toBe("falsifier");
@@ -71,9 +71,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "transmission-stress",
       contribution: 0.75,
-      physicalScore: 0.7,
-      recognitionScore: 0.2,
-      transmissionScore: 0.75,
+      physicalStress: 0.7,
+      priceSignal: 0.2,
+      marketResponse: 0.75,
     });
 
     expect(result.classification).toBe("confirming");
@@ -84,9 +84,9 @@ describe("classifyEvidence", () => {
     const result = classifyEvidence({
       evidenceKey: "transmission-stress",
       contribution: 0.2,
-      physicalScore: 0.7,
-      recognitionScore: 0.2,
-      transmissionScore: 0.2,
+      physicalStress: 0.7,
+      priceSignal: 0.2,
+      marketResponse: 0.2,
     });
 
     expect(result.classification).toBe("counterevidence");
