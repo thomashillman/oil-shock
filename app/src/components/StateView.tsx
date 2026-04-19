@@ -197,8 +197,10 @@ function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
 }
 
 function SubscoreBar({ score, label, color }: { score: number; label: string; color: string }) {
-  const percentage = Math.round(score * 100);
-  const isMuted = percentage === 0;
+  const isInvalidInput = !Number.isFinite(score);
+  const safeScore = isInvalidInput ? 0 : Math.min(Math.max(score, 0), 1);
+  const percentage = Math.round(safeScore * 100);
+  const isMuted = percentage === 0 || isInvalidInput;
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
       {/* Accent bar */}
@@ -230,6 +232,7 @@ function SubscoreBar({ score, label, color }: { score: number; label: string; co
           >
             {percentage}%
           </span>
+          {isInvalidInput && <span style={{ color: "#9ca3af", fontSize: 10 }}>fallback</span>}
         </div>
 
         {/* Bar */}
