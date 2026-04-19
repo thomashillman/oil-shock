@@ -1,5 +1,5 @@
 {
-  "name": "energy-dislocation-engine",
+  "name": "energy-dislocation-engine-preview",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-04-16",
   "d1_databases": [
