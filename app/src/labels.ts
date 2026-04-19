@@ -25,9 +25,9 @@ export const STATE_SUBTITLE = {
 } as const;
 
 export const FRESHNESS_LABEL = {
-  physical: "Supply data",
-  recognition: "Market data",
-  transmission: "Spread data",
+  physicalStress: "Physical data",
+  priceSignal: "Price data",
+  marketResponse: "Market data",
 } as const;
 
 export const CLASSIFICATION_LABEL = {

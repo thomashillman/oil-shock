@@ -68,6 +68,7 @@ export function App() {
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
+  const [recalcError, setRecalcError] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -126,13 +127,21 @@ export function App() {
   const recalculate = useCallback(async () => {
     if (recalculating) return;
     setRecalculating(true);
+    setRecalcError(null);
 
     const prevGeneratedAt = stateData?.generatedAt ?? null;
 
     try {
-      await fetch(`${apiBaseUrl}/api/admin/run-poc`, { method: "POST" });
+      const postRes = await fetch(`${apiBaseUrl}/api/admin/run-poc`, { method: "POST" });
+      if (!postRes.ok) {
+        setRecalculating(false);
+        setRecalcError(`Recalculation failed (HTTP ${postRes.status}). Try again in a moment.`);
+        return;
+      }
     } catch {
-      // fire-and-forget
+      setRecalculating(false);
+      setRecalcError("Recalculation failed: network error. Check your connection and retry.");
+      return;
     }
 
     const deadline = Date.now() + RECALC_TIMEOUT_MS;
@@ -140,6 +149,7 @@ export function App() {
     const poll = async () => {
       if (Date.now() >= deadline) {
         setRecalculating(false);
+        setRecalcError("Recalculation timed out — the worker may be offline. Try again in a minute.");
         return;
       }
       try {
@@ -151,6 +161,7 @@ export function App() {
             await fetchAll();
             await fetchHistory();
             setRecalculating(false);
+            setRecalcError(null);
             return;
           }
         }
@@ -224,6 +235,41 @@ export function App() {
       </header>
 
       <main style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 40 }}>
+        {recalcError && (
+          <div
+            role="alert"
+            style={{
+              margin: "12px 20px 0",
+              padding: "10px 14px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
+              color: "#991b1b",
+              fontSize: 13,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span>{recalcError}</span>
+            <button
+              onClick={() => setRecalcError(null)}
+              aria-label="Dismiss recalculation error"
+              style={{
+                background: "none",
+                border: "none",
+                color: "#991b1b",
+                fontSize: 16,
+                cursor: "pointer",
+                lineHeight: 1,
+                padding: 2,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
         {loading ? (
           <p style={{ padding: "40px 20px", color: "#9ca3af", fontSize: 14 }}>Loading…</p>
         ) : (
