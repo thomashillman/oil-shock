@@ -23,6 +23,25 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const normalizeSubscores = (value: unknown): StateData["subscores"] | undefined => {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    return {
+      physicalStress: raw.physicalStress ?? raw.physical_stress,
+      priceSignal: raw.priceSignal ?? raw.price_signal,
+      marketResponse: raw.marketResponse ?? raw.market_response,
+    } as StateData["subscores"];
+  };
+  const normalizeSourceFreshness = (value: unknown): StateData["sourceFreshness"] | undefined => {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    return {
+      physicalStress: raw.physicalStress ?? raw.physical_stress,
+      priceSignal: raw.priceSignal ?? raw.price_signal,
+      marketResponse: raw.marketResponse ?? raw.market_response,
+    } as StateData["sourceFreshness"];
+  };
+
   const fromSnake = {
     generatedAt: data.generated_at,
     mismatchScore: data.mismatch_score,
@@ -45,11 +64,11 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     stateRationale: data.stateRationale ?? fromSnake.stateRationale,
     actionabilityState: data.actionabilityState ?? fromSnake.actionabilityState,
     confidence: data.confidence ?? fromSnake.confidence,
-    subscores: data.subscores ?? fromSnake.subscores,
+    subscores: normalizeSubscores(data.subscores ?? fromSnake.subscores),
     clocks: data.clocks ?? fromSnake.clocks,
     ledgerImpact: data.ledgerImpact ?? fromSnake.ledgerImpact,
     coverageConfidence: data.coverageConfidence ?? fromSnake.coverageConfidence,
-    sourceFreshness: data.sourceFreshness ?? fromSnake.sourceFreshness,
+    sourceFreshness: normalizeSourceFreshness(data.sourceFreshness ?? fromSnake.sourceFreshness),
     evidenceIds: data.evidenceIds ?? fromSnake.evidenceIds,
   } as StateData;
 
