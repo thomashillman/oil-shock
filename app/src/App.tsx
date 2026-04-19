@@ -127,8 +127,8 @@ export function App() {
 
   const fetchAll = useCallback(async () => {
     const [stateRes, evidenceRes] = await Promise.allSettled([
-      fetch(`${apiBaseUrl}/api/state`),
-      fetch(`${apiBaseUrl}/api/evidence`),
+      fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" }),
+      fetch(`${apiBaseUrl}/api/evidence`, { cache: "no-store" }),
     ]);
 
     if (stateRes.status === "fulfilled") {
@@ -166,7 +166,7 @@ export function App() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`);
+      const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`, { cache: "no-store" });
       if (res.ok) {
         const data = (await res.json()) as { history?: unknown };
         const isHistoryPoint = (value: unknown): value is HistoryPoint => {
@@ -223,7 +223,7 @@ export function App() {
         return;
       }
       try {
-        const res = await fetch(`${apiBaseUrl}/api/state`);
+        const res = await fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" });
         if (res.ok) {
           const raw = (await res.json()) as Record<string, unknown>;
           const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;
