@@ -112,7 +112,8 @@ export class FakeD1Database {
         state_rationale: params[7],
         subscores_json: params[8],
         clocks_json: params[9],
-        ledger_impact_json: params[10]
+        ledger_impact_json: params[10],
+        run_key: params[11] ?? null
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }

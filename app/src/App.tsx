@@ -133,8 +133,8 @@ export function App() {
 
   const fetchAll = useCallback(async () => {
     const [stateRes, evidenceRes] = await Promise.allSettled([
-      fetch(`${apiBaseUrl}/api/state`),
-      fetch(`${apiBaseUrl}/api/evidence`),
+      fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" }),
+      fetch(`${apiBaseUrl}/api/evidence`, { cache: "no-store" }),
     ]);
 
     if (stateRes.status === "fulfilled") {
@@ -172,7 +172,7 @@ export function App() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`);
+      const res = await fetch(`${apiBaseUrl}/api/state/history?limit=8`, { cache: "no-store" });
       if (res.ok) {
         const data = (await res.json()) as { history?: unknown };
         const isHistoryPoint = (value: unknown): value is HistoryPoint => {
@@ -234,7 +234,7 @@ export function App() {
         const statusUrl = runKey
           ? `${apiBaseUrl}/api/admin/run-status?runKey=${encodeURIComponent(runKey)}`
           : `${apiBaseUrl}/api/admin/run-status`;
-        const res = await fetch(statusUrl);
+        const res = await fetch(statusUrl, { cache: "no-store" });
         if (res.ok) {
           const run = (await res.json()) as RunStatusPayload;
           if (run.status === "failed") {
