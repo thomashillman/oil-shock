@@ -197,7 +197,8 @@ function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
 }
 
 function SubscoreBar({ score, label, color }: { score: number; label: string; color: string }) {
-  const percentage = Math.round(score * 100);
+  const safeScore = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
+  const percentage = Math.round(safeScore * 100);
   const isMuted = percentage === 0;
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>

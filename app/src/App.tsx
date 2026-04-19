@@ -23,6 +23,8 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const pick = (obj: Record<string, unknown> | undefined, camel: string, snake: string) =>
+    obj?.[camel] ?? obj?.[snake];
   const fromSnake = {
     generatedAt: data.generated_at,
     mismatchScore: data.mismatch_score,
@@ -52,6 +54,35 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     sourceFreshness: data.sourceFreshness ?? fromSnake.sourceFreshness,
     evidenceIds: data.evidenceIds ?? fromSnake.evidenceIds,
   } as StateData;
+
+  const rawSubscores =
+    normalized.subscores && typeof normalized.subscores === "object"
+      ? (normalized.subscores as unknown as Record<string, unknown>)
+      : undefined;
+  normalized.subscores = {
+    physicalStress: pick(rawSubscores, "physicalStress", "physical_stress") as number,
+    priceSignal: pick(rawSubscores, "priceSignal", "price_signal") as number,
+    marketResponse: pick(rawSubscores, "marketResponse", "market_response") as number,
+  };
+
+  const rawFreshness =
+    normalized.sourceFreshness && typeof normalized.sourceFreshness === "object"
+      ? (normalized.sourceFreshness as unknown as Record<string, unknown>)
+      : undefined;
+  normalized.sourceFreshness = {
+    physicalStress: pick(rawFreshness, "physicalStress", "physical_stress") as
+      | "fresh"
+      | "stale"
+      | "missing",
+    priceSignal: pick(rawFreshness, "priceSignal", "price_signal") as
+      | "fresh"
+      | "stale"
+      | "missing",
+    marketResponse: pick(rawFreshness, "marketResponse", "market_response") as
+      | "fresh"
+      | "stale"
+      | "missing",
+  };
 
   if (!normalized.dislocationState || !normalized.clocks || !normalized.subscores) {
     return null;
