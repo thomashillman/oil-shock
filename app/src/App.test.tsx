@@ -94,6 +94,17 @@ const mockNestedSnakeCaseState = {
   },
 };
 
+const mockStringifiedNumericState = {
+  ...mockNestedSnakeCaseState,
+  mismatch_score: "0.03",
+  coverage_confidence: "1",
+  subscores: {
+    physical_stress: "0.35",
+    price_signal: "0.3",
+    market_response: "0.2",
+  },
+};
+
 function stubFetch(stateOk: boolean, evidenceOk: boolean) {
   vi.stubGlobal(
     "fetch",
@@ -176,6 +187,15 @@ describe("App", () => {
     expect(screen.getByText("75%")).toBeInTheDocument();
     expect(screen.getByText("25%")).toBeInTheDocument();
     expect(screen.getByText("68%")).toBeInTheDocument();
+  });
+
+  it("renders non-zero subscores when numeric fields are strings", async () => {
+    stubFetchWithStatePayload(mockStringifiedNumericState);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    expect(screen.getByText("35%")).toBeInTheDocument();
+    expect(screen.getByText("30%")).toBeInTheDocument();
+    expect(screen.getByText("20%")).toBeInTheDocument();
   });
 
   it("renders subscore bars with non-zero percentages for all three dimensions", async () => {

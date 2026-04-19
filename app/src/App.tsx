@@ -23,6 +23,14 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const toNumber = (value: unknown): number => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  };
   const pick = (obj: Record<string, unknown> | undefined, camel: string, snake: string) =>
     obj?.[camel] ?? obj?.[snake];
   const fromSnake = {
@@ -60,10 +68,13 @@ function normalizeStatePayload(payload: unknown): StateData | null {
       ? (normalized.subscores as unknown as Record<string, unknown>)
       : undefined;
   normalized.subscores = {
-    physicalStress: pick(rawSubscores, "physicalStress", "physical_stress") as number,
-    priceSignal: pick(rawSubscores, "priceSignal", "price_signal") as number,
-    marketResponse: pick(rawSubscores, "marketResponse", "market_response") as number,
+    physicalStress: toNumber(pick(rawSubscores, "physicalStress", "physical_stress")),
+    priceSignal: toNumber(pick(rawSubscores, "priceSignal", "price_signal")),
+    marketResponse: toNumber(pick(rawSubscores, "marketResponse", "market_response")),
   };
+
+  normalized.mismatchScore = toNumber(normalized.mismatchScore);
+  normalized.coverageConfidence = toNumber(normalized.coverageConfidence);
 
   const rawFreshness =
     normalized.sourceFreshness && typeof normalized.sourceFreshness === "object"
