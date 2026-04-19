@@ -83,7 +83,8 @@ const SUBSCORE_COLOR: Record<SubscoreKey, string> = {
 };
 
 function ThresholdScale({ score }: { score: number }) {
-  const pct = Math.min(Math.round(score * 100), 100);
+  const sanitizedScore = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
+  const pct = Math.round(sanitizedScore * 100);
   return (
     <div style={{ marginTop: 10, marginBottom: 4 }}>
       <div
@@ -197,9 +198,10 @@ function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
 }
 
 function SubscoreBar({ score, label, color }: { score: number; label: string; color: string }) {
-  const safeScore = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
+  const isInvalidInput = !Number.isFinite(score);
+  const safeScore = isInvalidInput ? 0 : Math.min(Math.max(score, 0), 1);
   const percentage = Math.round(safeScore * 100);
-  const isMuted = percentage === 0;
+  const isMuted = percentage === 0 || isInvalidInput;
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
       {/* Accent bar */}
@@ -231,6 +233,7 @@ function SubscoreBar({ score, label, color }: { score: number; label: string; co
           >
             {percentage}%
           </span>
+          {isInvalidInput && <span style={{ color: "#9ca3af", fontSize: 10 }}>fallback</span>}
         </div>
 
         {/* Bar */}
