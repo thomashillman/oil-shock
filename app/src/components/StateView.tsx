@@ -83,7 +83,8 @@ const SUBSCORE_COLOR: Record<SubscoreKey, string> = {
 };
 
 function ThresholdScale({ score }: { score: number }) {
-  const pct = Math.min(Math.round(score * 100), 100);
+  const sanitizedScore = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
+  const pct = Math.round(sanitizedScore * 100);
   return (
     <div style={{ marginTop: 10, marginBottom: 4 }}>
       <div
@@ -197,7 +198,8 @@ function ClockDisplay({ clock, label }: { clock: Clock; label: string }) {
 }
 
 function SubscoreBar({ score, label, color }: { score: number; label: string; color: string }) {
-  const percentage = Math.round(score * 100);
+  const sanitizedScore = Number.isFinite(score) ? Math.min(Math.max(score, 0), 1) : 0;
+  const percentage = Math.round(sanitizedScore * 100);
   const isMuted = percentage === 0;
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 16 }}>
