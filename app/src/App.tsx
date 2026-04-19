@@ -23,6 +23,18 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const rawSubscores = data.subscores as Record<string, unknown> | undefined;
+  const normalizedSubscores = rawSubscores
+    ? {
+        physicalStress:
+          (rawSubscores.physicalStress ?? rawSubscores.physical_stress) as number | undefined,
+        priceSignal:
+          (rawSubscores.priceSignal ?? rawSubscores.price_signal) as number | undefined,
+        marketResponse:
+          (rawSubscores.marketResponse ?? rawSubscores.market_response) as number | undefined,
+      }
+    : undefined;
+
   const fromSnake = {
     generatedAt: data.generated_at,
     mismatchScore: data.mismatch_score,
@@ -30,7 +42,7 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     stateRationale: data.state_rationale,
     actionabilityState: data.actionability_state,
     confidence: data.confidence,
-    subscores: data.subscores,
+    subscores: normalizedSubscores,
     clocks: data.clocks,
     ledgerImpact: data.ledger_impact,
     coverageConfidence: data.coverage_confidence,
@@ -45,7 +57,7 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     stateRationale: data.stateRationale ?? fromSnake.stateRationale,
     actionabilityState: data.actionabilityState ?? fromSnake.actionabilityState,
     confidence: data.confidence ?? fromSnake.confidence,
-    subscores: data.subscores ?? fromSnake.subscores,
+    subscores: normalizedSubscores ?? fromSnake.subscores,
     clocks: data.clocks ?? fromSnake.clocks,
     ledgerImpact: data.ledgerImpact ?? fromSnake.ledgerImpact,
     coverageConfidence: data.coverageConfidence ?? fromSnake.coverageConfidence,
