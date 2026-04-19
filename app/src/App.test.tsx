@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, afterEach } from "vitest";
 
 vi.mock("./config", () => ({
@@ -6,6 +6,7 @@ vi.mock("./config", () => ({
 }));
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
 });
 
@@ -19,12 +20,12 @@ const mockState = {
   actionabilityState: "actionable",
   confidence: {
     coverage: 0.9,
-    sourceQuality: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+    sourceQuality: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
   },
   subscores: {
-    physical: 0.75,
-    recognition: 0.25,
-    transmission: 0.68,
+    physicalStress: 0.75,
+    priceSignal: 0.25,
+    marketResponse: 0.68,
   },
   clocks: {
     shock: { ageSeconds: 259200, label: "3 days", classification: "acute" },
@@ -33,7 +34,7 @@ const mockState = {
   },
   ledgerImpact: null,
   coverageConfidence: 0.9,
-  sourceFreshness: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  sourceFreshness: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
   evidenceIds: ["ev1"],
 };
 
@@ -61,12 +62,12 @@ const mockSnakeCaseState = {
   actionability_state: "actionable",
   confidence: {
     coverage: 0.9,
-    sourceQuality: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+    sourceQuality: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
   },
   subscores: {
-    physical: 0.75,
-    recognition: 0.25,
-    transmission: 0.68,
+    physicalStress: 0.75,
+    priceSignal: 0.25,
+    marketResponse: 0.68,
   },
   clocks: {
     shock: { ageSeconds: 259200, label: "3 days", classification: "acute" },
@@ -75,7 +76,7 @@ const mockSnakeCaseState = {
   },
   ledger_impact: null,
   coverage_confidence: 0.9,
-  source_freshness: { physical: "fresh", recognition: "fresh", transmission: "stale" },
+  source_freshness: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
   evidence_ids: ["ev1"],
 };
 
@@ -152,5 +153,90 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     expect(screen.getAllByText("Persistent divergence").length).toBeGreaterThan(0);
+  });
+
+  it("renders subscore bars with non-zero percentages for all three dimensions", async () => {
+    stubFetch(true, true);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    // Subscore labels must render with the user-selected wording.
+    expect(screen.getByText("Physical pressure")).toBeInTheDocument();
+    expect(screen.getByText("Price signal")).toBeInTheDocument();
+    expect(screen.getByText("Market response")).toBeInTheDocument();
+    // Percentages from mockState: 75%, 25%, 68%.
+    expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("25%")).toBeInTheDocument();
+    expect(screen.getByText("68%")).toBeInTheDocument();
+  });
+
+  it("surfaces a visible error when Recalculate POST returns 500", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
+          return Promise.resolve({ ok: false, status: 500, json: async () => ({}) });
+        }
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        return Promise.resolve({ ok: true, json: async () => mockEvidence });
+      }),
+    );
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    const recalcButton = screen.getByRole("button", { name: /recalculate/i });
+    await act(async () => {
+      fireEvent.click(recalcButton);
+    });
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert").textContent).toMatch(/recalculation failed/i);
+    expect(screen.getByRole("alert").textContent).toMatch(/500/);
+    // Spinner should have stopped — the button shows the idle label again.
+    expect(screen.getByRole("button", { name: /recalculate/i }).textContent).toMatch(/^\s*↺\s*Recalculate\s*$/);
+  });
+
+  it("surfaces a timeout error when the new snapshot never arrives within the deadline", async () => {
+    // POST succeeds. GET /api/state always returns the same generatedAt so the poll
+    // loop never sees a "new" snapshot and the 90s deadline must trip.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
+          return Promise.resolve({ ok: true, status: 202, json: async () => ({}) });
+        }
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        return Promise.resolve({ ok: true, json: async () => mockEvidence });
+      }),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    const recalcButton = screen.getByRole("button", { name: /recalculate/i });
+    await act(async () => {
+      fireEvent.click(recalcButton);
+    });
+
+    // Advance past the 90s deadline — the next poll tick must hit the timeout branch.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(95_000);
+    });
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert").textContent).toMatch(/timed out/i);
+
+    vi.useRealTimers();
   });
 });

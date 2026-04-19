@@ -16,10 +16,18 @@ export interface Clock {
 }
 
 export interface Subscores {
-  physical: number;
-  recognition: number;
-  transmission: number;
+  physicalStress: number;
+  priceSignal: number;
+  marketResponse: number;
 }
+
+export type SubscoreKey = keyof Subscores;
+
+export const SUBSCORE_KEYS: readonly SubscoreKey[] = [
+  "physicalStress",
+  "priceSignal",
+  "marketResponse",
+] as const;
 
 export interface LedgerImpact {
   direction: "increase" | "decrease";
@@ -35,11 +43,7 @@ export interface StateData {
   actionabilityState: "none" | "watch" | "actionable";
   confidence: {
     coverage: number;
-    sourceQuality: {
-      physical: Freshness;
-      recognition: Freshness;
-      transmission: Freshness;
-    };
+    sourceQuality: Record<SubscoreKey, Freshness>;
   };
   subscores: Subscores;
   clocks: {
@@ -49,11 +53,7 @@ export interface StateData {
   };
   ledgerImpact: LedgerImpact | null;
   coverageConfidence: number;
-  sourceFreshness: {
-    physical: Freshness;
-    recognition: Freshness;
-    transmission: Freshness;
-  };
+  sourceFreshness: Record<SubscoreKey, Freshness>;
   evidenceIds: string[];
 }
 
@@ -76,10 +76,10 @@ const FRESHNESS_TEXT: Record<Freshness, string> = {
   missing: "missing",
 };
 
-const SUBSCORE_COLOR: Record<keyof Subscores, string> = {
-  physical: "#dc2626",
-  recognition: "#2563eb",
-  transmission: "#d97706",
+const SUBSCORE_COLOR: Record<SubscoreKey, string> = {
+  physicalStress: "#dc2626",
+  priceSignal: "#2563eb",
+  marketResponse: "#d97706",
 };
 
 function ThresholdScale({ score }: { score: number }) {
@@ -299,9 +299,7 @@ export function StateView({
   const stateLabel = DISLOCATION_STATE_LABEL[data.dislocationState];
   const isAligned = data.dislocationState === "aligned";
 
-  const allFresh = (["physical", "recognition", "transmission"] as const).every(
-    (k) => data.sourceFreshness[k] === "fresh"
-  );
+  const allFresh = SUBSCORE_KEYS.every((k) => data.sourceFreshness[k] === "fresh");
 
   const latestPt = history[0];
   const prevPt = history[1];
@@ -414,7 +412,7 @@ export function StateView({
               <span style={{ fontSize: 11, opacity: 0.9 }}>All sources current</span>
             </div>
           ) : (
-            (["physical", "recognition", "transmission"] as const).map((key) => {
+            SUBSCORE_KEYS.map((key) => {
               const freshness = data.sourceFreshness[key];
               return (
                 <div
@@ -510,19 +508,19 @@ export function StateView({
           Score breakdown
         </div>
         <SubscoreBar
-          score={data.subscores.physical}
+          score={data.subscores.physicalStress}
           label="Physical pressure"
-          color={SUBSCORE_COLOR.physical}
+          color={SUBSCORE_COLOR.physicalStress}
         />
         <SubscoreBar
-          score={data.subscores.recognition}
-          label="Market recognition"
-          color={SUBSCORE_COLOR.recognition}
+          score={data.subscores.priceSignal}
+          label="Price signal"
+          color={SUBSCORE_COLOR.priceSignal}
         />
         <SubscoreBar
-          score={data.subscores.transmission}
-          label="Transmission pressure"
-          color={SUBSCORE_COLOR.transmission}
+          score={data.subscores.marketResponse}
+          label="Market response"
+          color={SUBSCORE_COLOR.marketResponse}
         />
       </div>
 
