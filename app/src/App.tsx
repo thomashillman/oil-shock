@@ -23,6 +23,15 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   if (!payload || typeof payload !== "object") return null;
 
   const data = payload as Record<string, unknown>;
+  const pickNestedSubscoreKeys = (value: unknown) => {
+    if (!value || typeof value !== "object") return value;
+    const nested = value as Record<string, unknown>;
+    return {
+      physicalStress: nested.physicalStress ?? nested.physical_stress,
+      priceSignal: nested.priceSignal ?? nested.price_signal,
+      marketResponse: nested.marketResponse ?? nested.market_response,
+    };
+  };
   const fromSnake = {
     generatedAt: data.generated_at,
     mismatchScore: data.mismatch_score,
@@ -52,6 +61,11 @@ function normalizeStatePayload(payload: unknown): StateData | null {
     sourceFreshness: data.sourceFreshness ?? fromSnake.sourceFreshness,
     evidenceIds: data.evidenceIds ?? fromSnake.evidenceIds,
   } as StateData;
+
+  normalized.subscores = pickNestedSubscoreKeys(normalized.subscores) as StateData["subscores"];
+  normalized.sourceFreshness = pickNestedSubscoreKeys(
+    normalized.sourceFreshness,
+  ) as StateData["sourceFreshness"];
 
   if (!normalized.dislocationState || !normalized.clocks || !normalized.subscores) {
     return null;
