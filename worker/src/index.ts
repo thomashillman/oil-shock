@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { runCollection } from "./jobs/collect";
 import { runScore } from "./jobs/score";
+import { finishRun, startRun } from "./db/client";
 import { withCors } from "./lib/cors";
 import { toAppError } from "./lib/errors";
 import { json } from "./lib/http";
@@ -10,6 +11,7 @@ import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
+import { handleGetRunStatus } from "./routes/run-status";
 
 interface HealthPayload {
   ok: boolean;
@@ -67,8 +69,43 @@ export default {
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
-        ctx.waitUntil(runCollection(env).then(() => runScore(env)));
-        response = json({ ok: true, triggered: true });
+        const runKey = `admin-recalc-${Date.now()}`;
+        const requestId = request.headers.get("x-request-id") ?? request.headers.get("cf-ray") ?? crypto.randomUUID();
+        const requestMeta = {
+          runKey,
+          requestId,
+          method: request.method,
+          path: pathname,
+          userAgent: request.headers.get("user-agent")
+        };
+
+        ctx.waitUntil((async () => {
+          await startRun(env, runKey, "admin_recalc");
+          log("info", "Admin recalculation started", requestMeta);
+          try {
+            await runCollection(env);
+            await runScore(env);
+            await finishRun(env, runKey, "success", { requestId });
+            log("info", "Admin recalculation completed", requestMeta);
+          } catch (error) {
+            const appError = toAppError(error);
+            await finishRun(env, runKey, "failed", {
+              requestId,
+              code: appError.code,
+              error: appError.message
+            });
+            log("error", "Admin recalculation failed", {
+              ...requestMeta,
+              code: appError.code,
+              error: appError.message
+            });
+          }
+        })());
+        response = json({ ok: true, triggered: true, runKey });
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/run-status") {
+        response = await handleGetRunStatus(request, env);
         return withCors(response, request, env);
       }
 

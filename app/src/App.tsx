@@ -9,6 +9,12 @@ const REFRESH_MS = 60_000;
 const RECALC_POLL_MS = 3_000;
 const RECALC_TIMEOUT_MS = 90_000;
 
+interface RunStatusPayload {
+  runKey: string;
+  status: "running" | "success" | "failed";
+  details?: { error?: string };
+}
+
 function relativeAge(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60_000);
@@ -199,7 +205,7 @@ export function App() {
     setRecalculating(true);
     setRecalcError(null);
 
-    const prevGeneratedAt = stateData?.generatedAt ?? null;
+    let runKey: string | null = null;
 
     try {
       const postRes = await fetch(`${apiBaseUrl}/api/admin/run-poc`, { method: "POST" });
@@ -208,6 +214,8 @@ export function App() {
         setRecalcError(`Recalculation failed (HTTP ${postRes.status}). Try again in a moment.`);
         return;
       }
+      const postData = (await postRes.json()) as { runKey?: string };
+      runKey = typeof postData.runKey === "string" ? postData.runKey : null;
     } catch {
       setRecalculating(false);
       setRecalcError("Recalculation failed: network error. Check your connection and retry.");
@@ -223,11 +231,18 @@ export function App() {
         return;
       }
       try {
-        const res = await fetch(`${apiBaseUrl}/api/state`);
+        const statusUrl = runKey
+          ? `${apiBaseUrl}/api/admin/run-status?runKey=${encodeURIComponent(runKey)}`
+          : `${apiBaseUrl}/api/admin/run-status`;
+        const res = await fetch(statusUrl);
         if (res.ok) {
-          const raw = (await res.json()) as Record<string, unknown>;
-          const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;
-          if (newGeneratedAt && newGeneratedAt !== prevGeneratedAt) {
+          const run = (await res.json()) as RunStatusPayload;
+          if (run.status === "failed") {
+            setRecalculating(false);
+            setRecalcError(run.details?.error ?? "Recalculation failed on the backend. Check logs and retry.");
+            return;
+          }
+          if (run.status === "success") {
             await fetchAll();
             await fetchHistory();
             setRecalculating(false);
@@ -246,7 +261,7 @@ export function App() {
     pollTimerRef.current = setTimeout(() => {
       void poll();
     }, RECALC_POLL_MS);
-  }, [recalculating, stateData, fetchAll, fetchHistory]);
+  }, [recalculating, fetchAll, fetchHistory]);
 
   useEffect(() => {
     void fetchAll();

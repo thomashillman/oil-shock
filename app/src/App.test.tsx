@@ -248,6 +248,9 @@ describe("App", () => {
         if (url.includes("/api/state/history")) {
           return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
         }
+        if (url.includes("/api/admin/run-status")) {
+          return Promise.resolve({ ok: true, json: async () => ({ status: "running" }) });
+        }
         if (url.includes("/api/state")) {
           return Promise.resolve({ ok: true, json: async () => mockState });
         }
@@ -270,16 +273,18 @@ describe("App", () => {
   });
 
   it("surfaces a timeout error when the new snapshot never arrives within the deadline", async () => {
-    // POST succeeds. GET /api/state always returns the same generatedAt so the poll
-    // loop never sees a "new" snapshot and the 90s deadline must trip.
+    // POST succeeds, but run-status stays "running" forever so timeout still acts as fallback.
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string, init?: RequestInit) => {
         if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
-          return Promise.resolve({ ok: true, status: 202, json: async () => ({}) });
+          return Promise.resolve({ ok: true, status: 202, json: async () => ({ runKey: "admin-recalc-1" }) });
         }
         if (url.includes("/api/state/history")) {
           return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/admin/run-status")) {
+          return Promise.resolve({ ok: true, json: async () => ({ runKey: "admin-recalc-1", status: "running" }) });
         }
         if (url.includes("/api/state")) {
           return Promise.resolve({ ok: true, json: async () => mockState });
@@ -305,6 +310,46 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.getByRole("alert").textContent).toMatch(/timed out/i);
+
+    vi.useRealTimers();
+  });
+
+  it("surfaces backend run failure immediately while polling", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
+          return Promise.resolve({ ok: true, status: 202, json: async () => ({ runKey: "admin-recalc-2" }) });
+        }
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/admin/run-status")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ runKey: "admin-recalc-2", status: "failed", details: { error: "Collector exploded" } }),
+          });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        return Promise.resolve({ ok: true, json: async () => mockEvidence });
+      }),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    const recalcButton = screen.getByRole("button", { name: /recalculate/i });
+    await act(async () => {
+      fireEvent.click(recalcButton);
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("alert").textContent).toMatch(/collector exploded/i);
 
     vi.useRealTimers();
   });

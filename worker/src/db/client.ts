@@ -2,6 +2,15 @@ import type { Env } from "../env";
 import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState, ScoringThresholds } from "../types";
 import { AppError } from "../lib/errors";
 
+export interface RunStatusRow {
+  run_key: string;
+  run_type: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  details_json: string | null;
+}
+
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
     await env.DB.prepare(
@@ -41,6 +50,35 @@ export async function finishRun(
   )
     .bind(status, new Date().toISOString(), JSON.stringify(details), runKey)
     .run();
+}
+
+export async function getRunByKey(env: Env, runKey: string): Promise<RunStatusRow | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT run_key, run_type, status, started_at, finished_at, details_json
+    FROM runs
+    WHERE run_key = ?
+    LIMIT 1
+    `
+  )
+    .bind(runKey)
+    .first<RunStatusRow>();
+  return row ?? null;
+}
+
+export async function getLatestRunByType(env: Env, runType: string): Promise<RunStatusRow | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT run_key, run_type, status, started_at, finished_at, details_json
+    FROM runs
+    WHERE run_type = ?
+    ORDER BY started_at DESC
+    LIMIT 1
+    `
+  )
+    .bind(runType)
+    .first<RunStatusRow>();
+  return row ?? null;
 }
 
 export async function getLatestSeriesValue(env: Env, seriesKey: string): Promise<NormalizedPoint | null> {
