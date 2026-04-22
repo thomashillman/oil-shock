@@ -81,8 +81,8 @@ async function getTickerMap(): Promise<Map<string, string>> {
       {
         timeout: 15000,
         rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
-        retries: 3,
-        backoffMs: 2000,
+        retries: 1,
+        backoffMs: 100,
         headers: { "User-Agent": SEC_USER_AGENT }
       }
     );
@@ -107,8 +107,8 @@ async function getSubmissions(cik: string): Promise<SubmissionsResponse | null> 
       {
         timeout: 10000,
         rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
-        retries: 3,
-        backoffMs: 2000,
+        retries: 1,
+        backoffMs: 100,
         headers: { "User-Agent": SEC_USER_AGENT }
       }
     );
@@ -197,8 +197,8 @@ async function fetchRecentFilingText(
         const text = await fetchText(url, {
           timeout: 15000,
           rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
-          retries: 3,
-          backoffMs: 2000,
+          retries: 1,
+          backoffMs: 100,
           headers: { "User-Agent": SEC_USER_AGENT }
         });
         const result = { text: stripHtml(text), filingDate };
