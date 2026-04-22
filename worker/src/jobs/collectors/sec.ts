@@ -80,7 +80,9 @@ async function getTickerMap(): Promise<Map<string, string>> {
       `${BASE_SEC}/files/company_tickers.json`,
       {
         timeout: 15000,
-        rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+        rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
+        retries: 3,
+        backoffMs: 2000,
         headers: { "User-Agent": SEC_USER_AGENT }
       }
     );
@@ -104,7 +106,9 @@ async function getSubmissions(cik: string): Promise<SubmissionsResponse | null> 
       `${BASE_DATA}/submissions/CIK${cik}.json`,
       {
         timeout: 10000,
-        rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+        rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
+        retries: 3,
+        backoffMs: 2000,
         headers: { "User-Agent": SEC_USER_AGENT }
       }
     );
@@ -192,17 +196,35 @@ async function fetchRecentFilingText(
       try {
         const text = await fetchText(url, {
           timeout: 15000,
-          rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+          rateLimitDelayMs: 125, // 8 req/s (SEC recommends 8, safer margin than 10)
+          retries: 3,
+          backoffMs: 2000,
           headers: { "User-Agent": SEC_USER_AGENT }
         });
         const result = { text: stripHtml(text), filingDate };
         filingTextCache.set(cacheKey, result);
         return result;
       } catch (error) {
-        log("warn", `Failed to fetch filing text for ${form}`, {
-          cik,
-          error: error instanceof Error ? error.message : String(error)
-        });
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        // Distinguish between recoverable and permanent errors
+        if (errorMsg.includes("503") || errorMsg.includes("SEC_TEMPORARY")) {
+          log("warn", `SEC API temporarily unavailable while fetching ${form}`, {
+            cik,
+            form,
+            error: errorMsg
+          });
+        } else if (errorMsg.includes("403") || errorMsg.includes("SEC_RATE_LIMITED")) {
+          log("error", `SEC rate limit exceeded (403) while fetching ${form}`, {
+            cik,
+            form,
+            error: errorMsg
+          });
+        } else {
+          log("warn", `Failed to fetch filing text for ${form}`, {
+            cik,
+            error: errorMsg
+          });
+        }
       }
     }
   } catch (error) {
