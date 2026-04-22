@@ -7,6 +7,12 @@ import { log } from "../../lib/logging";
 const BASE_DATA = "https://data.sec.gov";
 const BASE_SEC = "https://www.sec.gov";
 
+// SEC API User-Agent (10 req/s is SEC standard - https://www.sec.gov/os/webmaster.html)
+const SEC_USER_AGENT = "John Doe john.doe@bbc.com";
+
+// Cache for fetched filing texts during collection run (avoids duplicate downloads)
+const filingTextCache = new Map<string, { text: string; filingDate: string | null }>();
+
 interface TickerMapEntry {
   ticker: string;
   title: string;
@@ -72,7 +78,11 @@ async function getTickerMap(): Promise<Map<string, string>> {
   try {
     const raw = await fetchJson<Record<string, TickerMapEntry>>(
       `${BASE_SEC}/files/company_tickers.json`,
-      { timeout: 15000 }
+      {
+        timeout: 15000,
+        rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+        headers: { "User-Agent": SEC_USER_AGENT }
+      }
     );
 
     const map = new Map<string, string>();
@@ -92,7 +102,11 @@ async function getSubmissions(cik: string): Promise<SubmissionsResponse | null> 
   try {
     return await fetchJson<SubmissionsResponse>(
       `${BASE_DATA}/submissions/CIK${cik}.json`,
-      { timeout: 10000 }
+      {
+        timeout: 10000,
+        rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+        headers: { "User-Agent": SEC_USER_AGENT }
+      }
     );
   } catch (error) {
     log("warn", `Failed to fetch submissions for CIK ${cik}`, {
@@ -169,9 +183,21 @@ async function fetchRecentFilingText(
       const accessionNodash = accession.replace(/-/g, "");
       const url = `${BASE_SEC}/Archives/edgar/data/${cikNum}/${accessionNodash}/${primaryDoc}`;
 
+      // Check cache first (avoids duplicate downloads in same collection run)
+      const cacheKey = `${cikNum}/${accessionNodash}/${primaryDoc}`;
+      if (filingTextCache.has(cacheKey)) {
+        return filingTextCache.get(cacheKey)!;
+      }
+
       try {
-        const text = await fetchText(url, { timeout: 15000 });
-        return { text: stripHtml(text), filingDate };
+        const text = await fetchText(url, {
+          timeout: 15000,
+          rateLimitDelayMs: 100, // 10 req/s per SEC guidelines
+          headers: { "User-Agent": SEC_USER_AGENT }
+        });
+        const result = { text: stripHtml(text), filingDate };
+        filingTextCache.set(cacheKey, result);
+        return result;
       } catch (error) {
         log("warn", `Failed to fetch filing text for ${form}`, {
           cik,
@@ -211,6 +237,9 @@ function scoreTickerText(
 }
 
 export async function collectSec(_env: Env, nowIso: string): Promise<NormalizedPoint[]> {
+  // Clear cache for this collection run (in-memory caching to prevent duplicate filing downloads)
+  filingTextCache.clear();
+
   const tickerMap = await getTickerMap();
   if (tickerMap.size === 0) {
     log("warn", "SEC: No ticker map available, emitting no points");
