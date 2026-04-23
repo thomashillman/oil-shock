@@ -1,11 +1,11 @@
 import type { Env } from "../../env";
 import { getRuntimeMode } from "../../lib/feature-flags";
 import { runCollection } from "../../jobs/collect";
-import { runScore } from "../../jobs/score";
+import { runOilShockScore } from "./score";
 
 async function runOilShockPipeline(env: Env): Promise<void> {
   await runCollection(env);
-  await runScore(env);
+  await runOilShockScore(env);
 }
 
 async function runMacroSignalsPipeline(env: Env): Promise<void> {
