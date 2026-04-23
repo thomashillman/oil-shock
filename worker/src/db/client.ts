@@ -113,9 +113,14 @@ async function writeScoreRecord(
       snapshot.coverageConfidence,
       JSON.stringify({
         state: snapshot.dislocationState,
+        stateRationale: snapshot.stateRationale,
         actionabilityState: snapshot.actionabilityState,
+        subscores: snapshot.subscores,
+        clocks: snapshot.clocks,
+        ledgerImpact: snapshot.ledgerImpact,
         sourceFreshness: snapshot.sourceFreshness,
-        guardrailFlags: snapshot.guardrailFlags
+        guardrailFlags: snapshot.guardrailFlags,
+        confidence: snapshot.confidence
       }),
       snapshotId,
       runKey

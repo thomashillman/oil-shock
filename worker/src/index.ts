@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { runPipeline } from "./jobs/run-pipeline";
 import { withCors } from "./lib/cors";
 import { toAppError } from "./lib/errors";
-import { getRuntimeMode } from "./lib/feature-flags";
+import { getRuntimeMode, isPhase1ParallelRunningEnabled } from "./lib/feature-flags";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
 import { handleGetCoverage } from "./routes/coverage";
@@ -13,6 +13,7 @@ import { handleGetStateHistory } from "./routes/history";
 import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
 import { handleGetEnergyState } from "./routes/engine-state";
+import { handleCompareScorePaths } from "./routes/admin-compare-paths";
 
 interface HealthPayload {
   ok: boolean;
@@ -129,6 +130,21 @@ export default {
           return withCors(response, request, env);
         }
         response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/compare-score-paths") {
+        if (!isPhase1ParallelRunningEnabled(env)) {
+          response = json(
+            { error: "not_available", message: "Comparison endpoint is only available when Phase 1 parallel running is enabled." },
+            { status: 404 }
+          );
+          return withCors(response, request, env);
+        }
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleCompareScorePaths(env);
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/backfill/rescore") {

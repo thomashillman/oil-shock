@@ -119,9 +119,14 @@ describe("writeSnapshot dual write", () => {
 
     expect(JSON.parse(String(scoreBind[5]))).toEqual({
       state: baseSnapshot.dislocationState,
+      stateRationale: baseSnapshot.stateRationale,
       actionabilityState: baseSnapshot.actionabilityState,
+      subscores: baseSnapshot.subscores,
+      clocks: baseSnapshot.clocks,
+      ledgerImpact: baseSnapshot.ledgerImpact,
       sourceFreshness: baseSnapshot.sourceFreshness,
-      guardrailFlags: baseSnapshot.guardrailFlags
+      guardrailFlags: baseSnapshot.guardrailFlags,
+      confidence: baseSnapshot.confidence
     });
   });
 
