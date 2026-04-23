@@ -49,6 +49,7 @@ Current Worker routes include:
 - `GET /api/evidence`
 - `GET /api/coverage`
 - `GET /api/ledger/review`
+- `GET /api/v1/energy/state`
 - `POST /api/ledger`
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc`
@@ -60,6 +61,7 @@ Current Worker routes include:
 Important contract notes:
 
 - The public read API is based on precomputed snapshots, not request-time scoring.
+- Engine-scoped state APIs (currently `GET /api/v1/energy/state`) are backed by precomputed `scores` rows, not request-time scoring.
 - Rule-based mismatch adjustments are evaluated during scoring runs from active `rules` rows for `oil_shock`.
 - Guardrail flags for stale/missing dimensions and missing feeds are attached to snapshots as `guardrailFlags`.
 - `GET /health` includes `featureFlags.macroSignals` so operators can verify active runtime mode selection.
@@ -136,6 +138,7 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 - Base API: `https://api.eia.gov/v2/`
 - Auth: `EIA_API_KEY`
 - Used for WTI spot, futures curve slope, crude inventory draw, refinery utilisation, and crack spread inputs
+- Stage 4 energy collector also uses EIA spot series for WTI/Brent spread and diesel-vs-WTI crack inputs (`energy_spread.*`)
 - Daily series use a rolling 60-day window
 - Weekly series use a rolling 26-week window
 - Do not hardcode collection windows

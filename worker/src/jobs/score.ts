@@ -11,7 +11,8 @@ import {
   loadThresholds,
   getFirstNonAlignedStateEvent,
   getFirstTransmissionEvent,
-  listActiveRules
+  listActiveRules,
+  writeEngineScore
 } from "../db/client";
 import { evaluateFreshness } from "../core/freshness/evaluate";
 import { evaluateEvidenceCoverage } from "../core/freshness/evidence-coverage";
@@ -45,6 +46,40 @@ function newestObservedAt(...rows: ({ observedAt: string } | null)[]): string | 
     .map((r) => r.observedAt);
   if (timestamps.length === 0) return null;
   return timestamps.reduce((latest, ts) => (ts > latest ? ts : latest));
+}
+
+async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
+  const wtiBrentSpread = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
+  const dieselWtiCrack = await getLatestSeriesValue(env, "energy_spread.diesel_wti_crack");
+  const curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
+
+  if (!wtiBrentSpread || !dieselWtiCrack) {
+    return;
+  }
+
+  const physicalStress = safeValue(wtiBrentSpread.value);
+  const marketResponse = safeValue(dieselWtiCrack.value);
+  const priceSignal = safeValue(curveSlope?.value ?? 0);
+  const rules = await listActiveRules(env, "energy");
+  const ruleEvaluation = evaluateRules(rules, {
+    physicalStress,
+    priceSignal,
+    marketResponse
+  });
+
+  const baseScore = safeValue((physicalStress + marketResponse) / 2);
+  const scoreValue = safeValue(baseScore + ruleEvaluation.totalAdjustment);
+  const flags = curveSlope ? [] : ["missing_price_confirmation"];
+
+  await writeEngineScore(env, {
+    engineKey: "energy",
+    feedKey: "energy.state",
+    scoredAt: nowIso,
+    scoreValue,
+    confidence: flags.length > 0 ? 0.6 : 0.8,
+    flags,
+    runKey
+  });
 }
 
 export async function runScore(env: Env, now = new Date()): Promise<void> {
@@ -207,6 +242,7 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
     });
 
     await writeSnapshot(env, snapshot, runKey);
+    await runEnergyScore(env, nowIso, runKey);
     await writeRunEvidence(env, runKey, evidence);
     await finishRun(env, runKey, "success", {
       mismatchScore: snapshot.mismatchScore,
