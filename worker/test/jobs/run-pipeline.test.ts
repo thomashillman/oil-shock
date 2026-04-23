@@ -3,22 +3,12 @@ import type { Env } from "../../src/env";
 import { runPipeline } from "../../src/jobs/run-pipeline";
 import { createTestEnv } from "../helpers/fake-d1";
 
-const { mockRunCollection, mockRunScore, mockGetRuntimeMode } = vi.hoisted(() => ({
-  mockRunCollection: vi.fn(async (_env: Env) => {}),
-  mockRunScore: vi.fn(async (_env: Env) => {}),
-  mockGetRuntimeMode: vi.fn()
+const { mockRunOilShockRuntimePipeline } = vi.hoisted(() => ({
+  mockRunOilShockRuntimePipeline: vi.fn(async (_env: Env) => {})
 }));
 
-vi.mock("../../src/jobs/collect", () => ({
-  runCollection: mockRunCollection
-}));
-
-vi.mock("../../src/jobs/score", () => ({
-  runScore: mockRunScore
-}));
-
-vi.mock("../../src/lib/feature-flags", () => ({
-  getRuntimeMode: mockGetRuntimeMode
+vi.mock("../../src/engines/oilshock/run-pipeline", () => ({
+  runOilShockRuntimePipeline: mockRunOilShockRuntimePipeline
 }));
 
 function makeEnv(): Env {
@@ -27,26 +17,15 @@ function makeEnv(): Env {
 
 describe("runPipeline", () => {
   beforeEach(() => {
-    mockRunCollection.mockReset().mockResolvedValue(undefined);
-    mockRunScore.mockReset().mockResolvedValue(undefined);
-    mockGetRuntimeMode.mockReset();
+    mockRunOilShockRuntimePipeline.mockReset().mockResolvedValue(undefined);
   });
 
-  it("runs the oil shock pipeline when runtime mode is oilshock", async () => {
-    mockGetRuntimeMode.mockReturnValue("oilshock");
+  it("delegates to oil shock runtime pipeline", async () => {
+    const env = makeEnv();
 
-    await runPipeline(makeEnv());
+    await runPipeline(env);
 
-    expect(mockRunCollection).toHaveBeenCalledTimes(1);
-    expect(mockRunScore).toHaveBeenCalledTimes(1);
-  });
-
-  it("currently falls back to oil shock pipeline when runtime mode is macro-signals", async () => {
-    mockGetRuntimeMode.mockReturnValue("macro-signals");
-
-    await runPipeline(makeEnv());
-
-    expect(mockRunCollection).toHaveBeenCalledTimes(1);
-    expect(mockRunScore).toHaveBeenCalledTimes(1);
+    expect(mockRunOilShockRuntimePipeline).toHaveBeenCalledTimes(1);
+    expect(mockRunOilShockRuntimePipeline).toHaveBeenCalledWith(env);
   });
 });
