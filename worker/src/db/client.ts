@@ -506,6 +506,77 @@ export async function listActiveRules(env: Env, engineKey = "oil_shock"): Promis
   return rows.results.map(normalizeRule);
 }
 
+export async function writeEngineScore(
+  env: Env,
+  score: {
+    engineKey: string;
+    feedKey: string;
+    scoredAt: string;
+    scoreValue: number;
+    confidence: number | null;
+    flags: string[];
+    runKey?: string | null;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO scores (
+      engine_key,
+      feed_key,
+      scored_at,
+      score_value,
+      confidence,
+      flags_json,
+      run_key
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      score.engineKey,
+      score.feedKey,
+      score.scoredAt,
+      score.scoreValue,
+      score.confidence,
+      JSON.stringify(score.flags),
+      score.runKey ?? null
+    )
+    .run();
+}
+
+export async function getLatestEngineScore(
+  env: Env,
+  engineKey: string,
+  feedKey: string
+): Promise<{
+  engine_key: string;
+  feed_key: string;
+  scored_at: string;
+  score_value: number;
+  confidence: number | null;
+  flags_json: string | null;
+} | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, scored_at, score_value, confidence, flags_json
+    FROM scores
+    WHERE engine_key = ? AND feed_key = ?
+    ORDER BY scored_at DESC
+    LIMIT 1
+    `
+  )
+    .bind(engineKey, feedKey)
+    .first<{
+      engine_key: string;
+      feed_key: string;
+      scored_at: string;
+      score_value: number;
+      confidence: number | null;
+      flags_json: string | null;
+    }>();
+  return row ?? null;
+}
+
 export async function updateRuleByKey(
   env: Env,
   ruleKey: string,

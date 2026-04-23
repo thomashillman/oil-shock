@@ -12,6 +12,7 @@ import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
 import { handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
+import { handleGetEnergyState } from "./routes/engine-state";
 
 interface HealthPayload {
   ok: boolean;
@@ -94,6 +95,10 @@ export default {
       }
       if (request.method === "GET" && pathname === "/api/admin/guardrails/failures") {
         response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/v1/energy/state") {
+        response = await handleGetEnergyState(env);
         return withCors(response, request, env);
       }
 

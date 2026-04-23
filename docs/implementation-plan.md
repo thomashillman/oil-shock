@@ -88,9 +88,13 @@ Run only checks relevant to this Stage 1 slice:
 ## Stage 4 – Add new engines
 
 * **Identify candidate engines:** Determine which new markets or signals (e.g. energy price spreads, macroeconomic releases) should be added next.  For each, define required feeds and metrics and add them to the `feeds` table.
+  * **Status: complete** via migration `db/migrations/0012_stage4_new_engines.sql` with initial `energy` and `macro_releases` engine seeds plus feed and metric metadata.
 * **Implement collectors:** Write collectors for each new feed.  Use the pluggable collector interfaces introduced in Stage 1.  Ensure they respect back-off and error-handling policies.
+  * **Status: complete (initial engine slice)** with `worker/src/jobs/collectors/energy.ts` collecting `energy_spread.wti_brent_spread` and `energy_spread.diesel_wti_crack` using retry/backoff-capable HTTP helpers.
 * **Define rules:** Write rule definitions for each new engine, referencing both new and existing feeds as needed.  Validate them against historical data.
+  * **Status: complete (initial engine slice)** with seeded energy rules in `0012_stage4_new_engines.sql` plus scoring integration referencing existing `price_signal.curve_slope` as confirmation.
 * **Add engine-scoped APIs:** Expose new endpoints (e.g. `/api/v1/energy/state`) that return precomputed scores for the new engine.
+  * **Status: complete (energy)** via `GET /api/v1/energy/state`, reading precomputed rows from `scores` for `energy.state`.
 
 ## Stage 5 – User interface and operator shell
 

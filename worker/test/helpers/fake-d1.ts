@@ -31,6 +31,7 @@ type TableName =
   | "runs"
   | "run_evidence"
   | "signal_snapshots"
+  | "scores"
   | "impairment_ledger"
   | "state_change_events"
   | "config_thresholds"
@@ -65,6 +66,7 @@ export class FakeD1Database {
     runs: [],
     run_evidence: [],
     signal_snapshots: [],
+    scores: [],
     impairment_ledger: [],
     state_change_events: [],
     config_thresholds: [...SEED_CONFIG_THRESHOLDS],
@@ -144,6 +146,19 @@ export class FakeD1Database {
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
+    if (normalized.includes("insert into scores")) {
+      this.insert("scores", {
+        engine_key: params[0],
+        feed_key: params[1],
+        scored_at: params[2],
+        score_value: params[3],
+        confidence: params[4] ?? null,
+        flags_json: params[5] ?? null,
+        snapshot_id: normalized.includes("snapshot_id") ? params[6] : null,
+        run_key: normalized.includes("snapshot_id") ? (params[7] ?? null) : (params[6] ?? null)
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
     if (normalized.includes("insert into run_evidence")) {
       this.insert("run_evidence", {
         run_key: params[0],
@@ -219,6 +234,14 @@ export class FakeD1Database {
       )[0];
       return (row as T) ?? null;
     }
+    if (normalized.includes("from scores")) {
+      const engineKey = params[0];
+      const feedKey = params[1];
+      const row = [...this.tables.scores]
+        .filter((item) => item.engine_key === engineKey && item.feed_key === feedKey)
+        .sort((a, b) => String(b.scored_at).localeCompare(String(a.scored_at)))[0];
+      return (row as T) ?? null;
+    }
     if (normalized.includes("from runs") && normalized.includes("run_type = 'score'")) {
       const row = [...this.tables.runs]
         .filter((item) => item.run_type === "score")
@@ -276,6 +299,13 @@ export class FakeD1Database {
   private insert(table: TableName, row: Row): void {
     this.tables[table].push({ id: this.nextId++, ...row });
   }
+}
+
+export function createExecutionContext(): ExecutionContext {
+  return {
+    waitUntil() {},
+    passThroughOnException() {}
+  } as unknown as ExecutionContext;
 }
 
 export function createTestEnv() {
