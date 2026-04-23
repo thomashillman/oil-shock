@@ -29,6 +29,7 @@ export async function handleGetState(env: Env): Promise<Response> {
     ledgerImpact: snapshot.ledger_impact_json ? JSON.parse(snapshot.ledger_impact_json) : null,
     coverageConfidence: snapshot.coverage_confidence,
     sourceFreshness: JSON.parse(snapshot.source_freshness_json),
-    evidenceIds: JSON.parse(snapshot.evidence_ids_json)
+    evidenceIds: JSON.parse(snapshot.evidence_ids_json),
+    guardrailFlags: snapshot.guardrail_flags_json ? JSON.parse(snapshot.guardrail_flags_json) : []
   });
 }

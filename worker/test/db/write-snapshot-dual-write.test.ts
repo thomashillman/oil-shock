@@ -34,7 +34,8 @@ const baseSnapshot: StateSnapshot = {
     dislocation: { ageSeconds: 100, label: "fresh", classification: "acute" },
     transmission: { ageSeconds: 100, label: "fresh", classification: "acute" }
   },
-  ledgerImpact: null
+  ledgerImpact: null,
+  guardrailFlags: []
 };
 
 function makeEnv(prepare: (query: string) => { bind: (...params: unknown[]) => { run: () => Promise<unknown> } }, dualWrite?: string): Env {
@@ -119,7 +120,8 @@ describe("writeSnapshot dual write", () => {
     expect(JSON.parse(String(scoreBind[5]))).toEqual({
       state: baseSnapshot.dislocationState,
       actionabilityState: baseSnapshot.actionabilityState,
-      sourceFreshness: baseSnapshot.sourceFreshness
+      sourceFreshness: baseSnapshot.sourceFreshness,
+      guardrailFlags: baseSnapshot.guardrailFlags
     });
   });
 

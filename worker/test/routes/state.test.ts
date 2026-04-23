@@ -33,6 +33,7 @@ function sampleSnapshot(): StateSnapshot {
     coverageConfidence: 0.85,
     sourceFreshness: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
     evidenceIds: ["physical-pressure", "recognition-gap", "transmission-stress"],
+    guardrailFlags: []
   };
 }
 
