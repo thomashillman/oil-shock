@@ -3,6 +3,7 @@ export interface Env {
   PRODUCTION_ORIGIN?: string;
   ENABLE_MACRO_SIGNALS?: string;
   ENABLE_SCORE_DUAL_WRITE?: string;
+  ADMIN_API_BEARER_TOKEN?: string;
   DB: D1Database;
   EIA_API_KEY: string;
   GIE_API_KEY: string;

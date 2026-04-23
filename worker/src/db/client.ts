@@ -600,3 +600,48 @@ export async function updateRuleByKey(
     )
     .run();
 }
+
+export async function createRule(
+  env: Env,
+  input: {
+    engineKey: string;
+    ruleKey: string;
+    name: string;
+    predicateJson: string;
+    weight: number;
+    isActive: boolean;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO rules (engine_key, rule_key, name, predicate_json, weight, action, is_active)
+    VALUES (?, ?, ?, ?, ?, 'adjust_mismatch', ?)
+    `
+  )
+    .bind(
+      input.engineKey,
+      input.ruleKey,
+      input.name,
+      input.predicateJson,
+      input.weight,
+      input.isActive ? 1 : 0
+    )
+    .run();
+}
+
+export async function getRecentSnapshotsForRescore(
+  env: Env,
+  limit: number
+): Promise<Array<{ generated_at: string; mismatch_score: number; subscores_json: string }>> {
+  const result = await env.DB.prepare(
+    `
+    SELECT generated_at, mismatch_score, subscores_json
+    FROM signal_snapshots
+    ORDER BY generated_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(limit)
+    .all<{ generated_at: string; mismatch_score: number; subscores_json: string }>();
+  return result.results;
+}

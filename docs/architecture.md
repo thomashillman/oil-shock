@@ -54,8 +54,10 @@ Current Worker routes include:
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc`
 - `GET /api/admin/rules`
+- `POST /api/admin/rules`
 - `PATCH /api/admin/rules/:ruleKey`
 - `POST /api/admin/rules/dry-run`
+- `POST /api/admin/backfill/rescore`
 - `GET /api/admin/guardrails/failures`
 
 Important contract notes:

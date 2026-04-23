@@ -10,7 +10,7 @@ import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
-import { handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
+import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
 import { handleGetEnergyState } from "./routes/engine-state";
 
@@ -21,6 +21,12 @@ interface HealthPayload {
   featureFlags: {
     macroSignals: boolean;
   };
+}
+
+function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
+  if (!env.ADMIN_API_BEARER_TOKEN) return true;
+  const authHeader = request.headers.get("authorization") ?? "";
+  return authHeader === `Bearer ${env.ADMIN_API_BEARER_TOKEN}`;
 }
 
 export default {
@@ -76,25 +82,61 @@ export default {
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
         ctx.waitUntil(runPipeline(env));
         response = json({ ok: true, triggered: true });
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/admin/rules") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
         response = await handleListRules(env);
         return withCors(response, request, env);
       }
+      if (request.method === "POST" && pathname === "/api/admin/rules") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleCreateRule(request, env);
+        return withCors(response, request, env);
+      }
       if (request.method === "PATCH" && pathname.startsWith("/api/admin/rules/")) {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
         const ruleKey = pathname.split("/").at(-1) ?? "";
         response = await handleUpdateRule(request, env, ruleKey);
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/rules/dry-run") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
         response = await handleRulesDryRun(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/admin/guardrails/failures") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
         response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/backfill/rescore") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleBackfillRescore(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/v1/energy/state") {
