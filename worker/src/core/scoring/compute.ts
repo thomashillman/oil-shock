@@ -108,7 +108,8 @@ export function computeSnapshot(inputs: ScoreInputs): { snapshot: StateSnapshot;
       ledgerImpact: null,
       coverageConfidence,
       sourceFreshness: inputs.freshness,
-      evidenceIds: evidence.map((item) => item.evidenceKey)
+      evidenceIds: evidence.map((item) => item.evidenceKey),
+      guardrailFlags: []
     },
     evidence
   };

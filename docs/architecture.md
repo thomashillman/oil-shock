@@ -52,10 +52,16 @@ Current Worker routes include:
 - `POST /api/ledger`
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc`
+- `GET /api/admin/rules`
+- `PATCH /api/admin/rules/:ruleKey`
+- `POST /api/admin/rules/dry-run`
+- `GET /api/admin/guardrails/failures`
 
 Important contract notes:
 
 - The public read API is based on precomputed snapshots, not request-time scoring.
+- Rule-based mismatch adjustments are evaluated during scoring runs from active `rules` rows for `oil_shock`.
+- Guardrail flags for stale/missing dimensions and missing feeds are attached to snapshots as `guardrailFlags`.
 - `GET /health` includes `featureFlags.macroSignals` so operators can verify active runtime mode selection.
 - `POST /api/admin/run-poc` triggers collection and scoring asynchronously.
 - If routes change, update this document, any frontend consumers, and tests in the same change set where practical.

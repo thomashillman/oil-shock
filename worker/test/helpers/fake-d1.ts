@@ -26,7 +26,15 @@ class FakePreparedStatement {
   }
 }
 
-type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger" | "state_change_events" | "config_thresholds";
+type TableName =
+  | "series_points"
+  | "runs"
+  | "run_evidence"
+  | "signal_snapshots"
+  | "impairment_ledger"
+  | "state_change_events"
+  | "config_thresholds"
+  | "rules";
 
 const SEED_CONFIG_THRESHOLDS: Row[] = [
   { key: "state_aligned_threshold_max", value: 0.3 },
@@ -59,7 +67,25 @@ export class FakeD1Database {
     signal_snapshots: [],
     impairment_ledger: [],
     state_change_events: [],
-    config_thresholds: [...SEED_CONFIG_THRESHOLDS]
+    config_thresholds: [...SEED_CONFIG_THRESHOLDS],
+    rules: [
+      {
+        id: 1,
+        engine_key: "oil_shock",
+        rule_key: "oilshock.recognition_gap_bonus",
+        name: "Recognition gap bonus",
+        predicate_json: JSON.stringify({
+          type: "all",
+          predicates: [
+            { type: "threshold", metric: "physicalStress", operator: ">=", value: 0.6 },
+            { type: "threshold", metric: "priceSignal", operator: "<=", value: 0.45 }
+          ]
+        }),
+        weight: 0.03,
+        action: "adjust_mismatch",
+        is_active: 1
+      }
+    ]
   };
 
   private nextId = 1;
@@ -113,7 +139,8 @@ export class FakeD1Database {
         subscores_json: params[8],
         clocks_json: params[9],
         ledger_impact_json: params[10],
-        run_key: params[11] ?? null
+        guardrail_flags_json: params[11],
+        run_key: params[12] ?? null
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -151,6 +178,16 @@ export class FakeD1Database {
         row.review_due_at = params[2] ?? row.review_due_at;
         row.retired_at = params[3] ?? row.retired_at;
         row.updated_at = new Date().toISOString();
+      }
+      return { success: true, meta: { last_row_id: 0 } };
+    }
+    if (normalized.startsWith("update rules")) {
+      const ruleKey = String(params[3]);
+      const row = this.tables.rules.find((item) => item.rule_key === ruleKey);
+      if (row) {
+        row.weight = params[0] ?? row.weight;
+        row.predicate_json = params[1] ?? row.predicate_json;
+        row.is_active = params[2] ?? row.is_active;
       }
       return { success: true, meta: { last_row_id: 0 } };
     }
@@ -225,6 +262,13 @@ export class FakeD1Database {
     }
     if (normalized.includes("from config_thresholds")) {
       return { results: this.tables.config_thresholds as T[] };
+    }
+    if (normalized.includes("from rules")) {
+      return {
+        results: this.tables.rules
+          .filter((row) => row.engine_key === params[0] && row.is_active === 1)
+          .sort((a, b) => Number(a.id) - Number(b.id)) as T[]
+      };
     }
     return { results: [] };
   }

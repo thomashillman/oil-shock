@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState, ScoringThresholds } from "../types";
 import { AppError } from "../lib/errors";
+import { isRulePredicate, type RuleDefinition } from "../core/rules/engine";
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
@@ -113,7 +114,8 @@ async function writeScoreRecord(
       JSON.stringify({
         state: snapshot.dislocationState,
         actionabilityState: snapshot.actionabilityState,
-        sourceFreshness: snapshot.sourceFreshness
+        sourceFreshness: snapshot.sourceFreshness,
+        guardrailFlags: snapshot.guardrailFlags
       }),
       snapshotId,
       runKey
@@ -136,9 +138,10 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
       subscores_json,
       clocks_json,
       ledger_impact_json,
+      guardrail_flags_json,
       run_key
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -153,6 +156,7 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
       JSON.stringify(snapshot.subscores),
       JSON.stringify(snapshot.clocks),
       JSON.stringify(snapshot.ledgerImpact),
+      JSON.stringify(snapshot.guardrailFlags),
       runKey
     )
     .run();
@@ -220,6 +224,7 @@ export async function getLatestSnapshot(env: Env) {
     subscores_json: string;
     clocks_json: string;
     ledger_impact_json: string | null;
+    guardrail_flags_json: string | null;
     run_key: string | null;
   }>();
   return row ?? null;
@@ -450,4 +455,77 @@ export async function getLedgerEntries(env: Env): Promise<
     retiredAt: row.retired_at,
     reviewDueAt: row.review_due_at
   }));
+}
+
+interface RuleRow {
+  id: number;
+  engine_key: string;
+  rule_key: string;
+  name: string;
+  predicate_json: string;
+  weight: number | null;
+  action: string;
+}
+
+function normalizeRule(row: RuleRow): RuleDefinition {
+  let predicate: unknown;
+  try {
+    predicate = JSON.parse(row.predicate_json);
+  } catch {
+    throw new AppError(`Invalid predicate_json for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+  if (!isRulePredicate(predicate)) {
+    throw new AppError(`Unsupported predicate for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+  if (row.action !== "adjust_mismatch") {
+    throw new AppError(`Unsupported action for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+
+  return {
+    id: row.id,
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    name: row.name,
+    action: row.action as RuleDefinition["action"],
+    weight: Number(row.weight ?? 0),
+    predicate
+  };
+}
+
+export async function listActiveRules(env: Env, engineKey = "oil_shock"): Promise<RuleDefinition[]> {
+  const rows = await env.DB.prepare(
+    `
+    SELECT id, engine_key, rule_key, name, predicate_json, weight, action
+    FROM rules
+    WHERE engine_key = ? AND is_active = 1
+    ORDER BY id ASC
+    `
+  )
+    .bind(engineKey)
+    .all<RuleRow>();
+  return rows.results.map(normalizeRule);
+}
+
+export async function updateRuleByKey(
+  env: Env,
+  ruleKey: string,
+  updates: { weight?: number; predicateJson?: string; isActive?: boolean }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    UPDATE rules
+    SET
+      weight = COALESCE(?, weight),
+      predicate_json = COALESCE(?, predicate_json),
+      is_active = COALESCE(?, is_active)
+    WHERE engine_key = 'oil_shock' AND rule_key = ?
+    `
+  )
+    .bind(
+      updates.weight ?? null,
+      updates.predicateJson ?? null,
+      typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
+      ruleKey
+    )
+    .run();
 }

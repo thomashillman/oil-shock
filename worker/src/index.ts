@@ -10,6 +10,8 @@ import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
+import { handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
+import { handleGuardrailFailures } from "./routes/admin-guardrails";
 
 interface HealthPayload {
   ok: boolean;
@@ -75,6 +77,23 @@ export default {
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
         ctx.waitUntil(runPipeline(env));
         response = json({ ok: true, triggered: true });
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/rules") {
+        response = await handleListRules(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "PATCH" && pathname.startsWith("/api/admin/rules/")) {
+        const ruleKey = pathname.split("/").at(-1) ?? "";
+        response = await handleUpdateRule(request, env, ruleKey);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/rules/dry-run") {
+        response = await handleRulesDryRun(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/guardrails/failures") {
+        response = await handleGuardrailFailures(env);
         return withCors(response, request, env);
       }
 

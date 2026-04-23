@@ -22,7 +22,8 @@ function sampleSnapshot(generatedAt: string): StateSnapshot {
     ledgerImpact: null,
     coverageConfidence: 0.85,
     sourceFreshness: { physicalStress: "fresh", priceSignal: "fresh", marketResponse: "stale" },
-    evidenceIds: ["physical-pressure"]
+    evidenceIds: ["physical-pressure"],
+    guardrailFlags: []
   };
 }
 

@@ -77,9 +77,13 @@ Run only checks relevant to this Stage 1 slice:
 ## Stage 3 – Rule engine and guardrails
 
 * **Implement rule evaluation:** Build a rule engine that loads rules from the database, evaluates predicates against current metrics and produces score adjustments.  Start with simple threshold rules and expand to cross-feed conditions.
+  * **Status: complete** with threshold and cross-feed (`all`) predicate support, D1-backed active rule loading, and mismatch score adjustments during scoring.
 * **Implement guardrails:** Add a guardrail subsystem that checks feed freshness and completeness before scoring.  Integrate guardrail flags into the score output.
+  * **Status: complete** with guardrail flags for stale/missing dimensions and missing feeds, persisted into snapshots and score dual-write payload flags.
 * **Define initial rules:** For Oil Shock, translate existing hard-coded thresholds into rule definitions.  Validate that the rule engine reproduces the current scoring behaviour.
+  * **Status: complete** via additive migration `db/migrations/0011_stage3_rules_guardrails.sql` seeding initial Oil Shock confirmation rules from existing threshold semantics.
 * **Operator tooling:** Provide a basic UI or CLI to list rules, modify them and review guardrail failures.  Include a dry-run mode for testing rule changes.
+  * **Status: complete** via admin endpoints for listing rules, updating rules, reviewing latest guardrail failures, and dry-run evaluation against ad-hoc metrics.
 
 ## Stage 4 – Add new engines
 

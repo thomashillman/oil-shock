@@ -10,7 +10,8 @@ import {
   getLedgerEntries,
   loadThresholds,
   getFirstNonAlignedStateEvent,
-  getFirstTransmissionEvent
+  getFirstTransmissionEvent,
+  listActiveRules
 } from "../db/client";
 import { evaluateFreshness } from "../core/freshness/evaluate";
 import { evaluateEvidenceCoverage } from "../core/freshness/evidence-coverage";
@@ -19,6 +20,8 @@ import { computeDislocationState } from "../core/scoring/state-labels";
 import { computeClocks } from "../core/scoring/clocks";
 import { classifyEvidence } from "../core/scoring/evidence-classifier";
 import { applyLedgerAdjustments } from "../core/ledger/impact";
+import { evaluateRules } from "../core/rules/engine";
+import { evaluateGuardrails } from "../core/guardrails/evaluate";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 import type { DislocationState } from "../types";
@@ -92,6 +95,25 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       priceSignalObservedAt,
       marketResponseObservedAt
     });
+    const guardrails = evaluateGuardrails({
+      freshness,
+      feedCompleteness: {
+        "physical_stress.inventory_draw": inventoryDraw !== null,
+        "physical_stress.refinery_utilization": refineryUtil !== null,
+        "physical_stress.eu_pipeline_flow": euPipelineFlow !== null,
+        "physical_stress.eu_gas_storage": euGasStorage !== null,
+        "price_signal.spot_wti": spotWti !== null,
+        "price_signal.curve_slope": curveSlope !== null,
+        "market_response.crack_spread": crackSpread !== null,
+        "market_response.sec_impairment": secImpairment !== null
+      }
+    });
+    const rules = await listActiveRules(env);
+    const ruleEvaluation = evaluateRules(rules, {
+      physicalStress,
+      priceSignal,
+      marketResponse
+    });
 
     // Compute initial snapshot with subscores
     let { snapshot, evidence } = computeSnapshot({
@@ -105,6 +127,8 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       freshness,
       thresholds
     });
+    snapshot.guardrailFlags = guardrails.flags;
+    snapshot.mismatchScore = Math.max(0, Math.min(1, snapshot.mismatchScore + ruleEvaluation.totalAdjustment));
 
     // Apply ledger adjustments to mismatch score
     const ledgerEntries = await getLedgerEntries(env);
