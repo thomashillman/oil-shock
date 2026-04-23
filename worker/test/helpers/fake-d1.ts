@@ -206,6 +206,18 @@ export class FakeD1Database {
       }
       return { success: true, meta: { last_row_id: 0 } };
     }
+    if (normalized.includes("insert into rules")) {
+      this.insert("rules", {
+        engine_key: params[0],
+        rule_key: params[1],
+        name: params[2],
+        predicate_json: params[3],
+        weight: params[4],
+        action: "adjust_mismatch",
+        is_active: params[5]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
     if (normalized.includes("insert into state_change_events")) {
       this.insert("state_change_events", {
         generated_at: params[0],
@@ -292,6 +304,18 @@ export class FakeD1Database {
           .filter((row) => row.engine_key === params[0] && row.is_active === 1)
           .sort((a, b) => Number(a.id) - Number(b.id)) as T[]
       };
+    }
+    if (normalized.includes("from signal_snapshots")) {
+      const limit = Number(params[0] ?? 50);
+      const rows = [...this.tables.signal_snapshots]
+        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))
+        .slice(0, limit)
+        .map((row) => ({
+          generated_at: row.generated_at,
+          mismatch_score: row.mismatch_score,
+          subscores_json: row.subscores_json
+        }));
+      return { results: rows as T[] };
     }
     return { results: [] };
   }

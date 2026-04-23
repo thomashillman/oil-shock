@@ -99,8 +99,12 @@ Run only checks relevant to this Stage 1 slice:
 ## Stage 5 – User interface and operator shell
 
 * **Dashboard:** Build a dashboard showing engines, feeds, their freshness and current scores.  Provide drill-down into rule details and guardrail statuses.
+  * **Status: complete (initial operator shell)** with frontend operator dashboard panel showing current engine score, feed freshness, rule list, and guardrail failures via admin APIs.
+  * **Note:** the frontend currently keeps a static feed catalog fallback for display labels/order; long term this should be sourced from API metadata to avoid contract drift.
 * **Rule editor:** Implement a form or code editor that allows operators to add or modify rules.  Validate rule syntax and provide previews of how rule changes would affect scoring.
+  * **Status: complete (initial operator shell)** with JSON predicate validation, add/update rule actions, and dry-run preview wiring.
 * **Backfill and testing:** Implement a tool to re-score historical data using the new rule engine.  Use this to compare new engines’ outputs against expectations.
+  * **Status: complete (initial operator shell)** with `/api/admin/backfill/rescore` and UI controls to run historical comparisons with optional override rules.
 
 ## Stage 6 – Cut-over and decommissioning
 

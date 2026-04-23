@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBaseUrl } from "./config";
 import { StateView } from "./components/StateView";
 import { EvidenceView } from "./components/EvidenceView";
+import { OperatorShell } from "./components/OperatorShell";
 import type { StateData, HistoryPoint } from "./components/StateView";
 import type { EvidenceData } from "./components/EvidenceView";
 
@@ -346,6 +347,7 @@ export function App() {
           <>
             <StateView data={stateData} error={stateError} history={historyData} />
             <EvidenceView data={evidenceData} error={evidenceError} />
+            <OperatorShell stateData={stateData} />
           </>
         )}
       </main>
