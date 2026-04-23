@@ -27,6 +27,7 @@ The runtime shape is intentionally simple:
 ## Repository map
 
 - `worker/src/core/`: scoring, freshness, normalisation, ledger logic
+- `worker/src/engines/`: engine-scoped runtime slices (currently `oilshock`)
 - `worker/src/jobs/`: collection and scoring pipelines
 - `worker/src/routes/`: HTTP route handlers
 - `worker/src/db/`: D1 access layer
@@ -55,6 +56,7 @@ Current Worker routes include:
 Important contract notes:
 
 - The public read API is based on precomputed snapshots, not request-time scoring.
+- `GET /health` includes `featureFlags.macroSignals` so operators can verify active runtime mode selection.
 - `POST /api/admin/run-poc` triggers collection and scoring asynchronously.
 - If routes change, update this document, any frontend consumers, and tests in the same change set where practical.
 

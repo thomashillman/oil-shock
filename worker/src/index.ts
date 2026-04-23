@@ -1,8 +1,8 @@
 import type { Env } from "./env";
-import { runCollection } from "./jobs/collect";
-import { runScore } from "./jobs/score";
+import { runPipeline } from "./jobs/run-pipeline";
 import { withCors } from "./lib/cors";
 import { toAppError } from "./lib/errors";
+import { getRuntimeMode } from "./lib/feature-flags";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
 import { handleGetCoverage } from "./routes/coverage";
@@ -15,6 +15,9 @@ interface HealthPayload {
   ok: boolean;
   service: string;
   env: Env["APP_ENV"];
+  featureFlags: {
+    macroSignals: boolean;
+  };
 }
 
 export default {
@@ -31,7 +34,10 @@ export default {
         const payload: HealthPayload = {
           ok: true,
           service: "oil-shock-worker",
-          env: env.APP_ENV
+          env: env.APP_ENV,
+          featureFlags: {
+            macroSignals: getRuntimeMode(env) === "macro-signals"
+          }
         };
         response = json(payload);
         return withCors(response, request, env);
@@ -67,7 +73,7 @@ export default {
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
-        ctx.waitUntil(runCollection(env).then(() => runScore(env)));
+        ctx.waitUntil(runPipeline(env));
         response = json({ ok: true, triggered: true });
         return withCors(response, request, env);
       }
@@ -88,7 +94,6 @@ export default {
     }
   },
   async scheduled(_: ScheduledController, env: Env): Promise<void> {
-    await runCollection(env);
-    await runScore(env);
+    await runPipeline(env);
   }
 };
