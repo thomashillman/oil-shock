@@ -10,7 +10,7 @@ This file provides guidance to Claude Code when working in this repository.
 - Current product shape: Oil Shock, a Cloudflare Worker plus D1 backend with a Vite and React frontend
 - Planned direction: Macro Signals, but do not assume the multi-engine design already exists in code
 
-Read `README.md` and `CLAUDE.md` before making non-trivial changes. Use them to understand the current runtime, commands, and scoring model.
+Read `README.md`, `docs/architecture.md`, `docs/current-priorities.md`, and `AGENTS.md` before making non-trivial changes. Use them to understand the current runtime, detailed implementation, current transition priorities, and commands.
 
 ## Working defaults
 
@@ -25,7 +25,7 @@ Read `README.md` and `CLAUDE.md` before making non-trivial changes. Use them to 
 
 1. Explicit user request
 2. Current repository code and tests
-3. Repository docs such as `README.md`, `CLAUDE.md`, and docs under `docs/`
+3. Repository docs such as `README.md`, `AGENTS.md`, `CLAUDE.md`, and docs under `docs/`
 4. Planning material that has not yet been moved into the repo
 
 ## Current architecture, do not hand-wave past it
@@ -80,6 +80,7 @@ corepack pnpm ci:preflight
 - Prefer upstream observation timestamps over wall-clock ingestion time when upstream timestamps are available.
 - Do not silently change collector normalisation, freshness windows, or score composition without tests and docs updates.
 - Keep missing and stale data handling explicit. Conservative downgrade behaviour should remain intentional, not accidental.
+- Update `docs/architecture.md` when routes, formulas, collector behaviour, or threshold handling materially change.
 
 ## Rules for schema and migration work
 
@@ -95,7 +96,7 @@ corepack pnpm ci:preflight
 - The Macro Signals documents describe a target architecture, not a licence to bypass current structure.
 - Prefer foundational abstractions over one-off branching logic when the task genuinely moves toward multi-engine support.
 - Keep backward compatibility where practical, especially for current Oil Shock collection, scoring, and API surfaces.
-- Before a large refactor, move durable context into repository docs, ideally `docs/architecture.md` and `docs/current-priorities.md`.
+- Before a large refactor, move durable context into repository docs, especially `docs/architecture.md` and `docs/current-priorities.md`.
 - If introducing engine-scoped data models, collectors, or rule definitions, do it in a way that keeps the Oil Shock path operational during transition.
 
 ## Rules for frontend work
