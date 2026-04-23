@@ -55,6 +55,7 @@ Current Worker routes include:
 Important contract notes:
 
 - The public read API is based on precomputed snapshots, not request-time scoring.
+- `GET /health` includes `featureFlags.macroSignals` so operators can verify active runtime mode selection.
 - `POST /api/admin/run-poc` triggers collection and scoring asynchronously.
 - If routes change, update this document, any frontend consumers, and tests in the same change set where practical.
 

@@ -11,7 +11,8 @@
   ],
   "vars": {
     "APP_ENV": "local",
-    "PRODUCTION_ORIGIN": ""
+    "PRODUCTION_ORIGIN": "",
+    "ENABLE_MACRO_SIGNALS": "false"
   },
   "env": {
     "preview": {
@@ -24,7 +25,8 @@
       ],
       "vars": {
         "APP_ENV": "preview",
-        "PRODUCTION_ORIGIN": ""
+        "PRODUCTION_ORIGIN": "",
+        "ENABLE_MACRO_SIGNALS": "false"
       }
     },
     "production": {
@@ -37,7 +39,8 @@
       ],
       "vars": {
         "APP_ENV": "production",
-        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app"
+        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app",
+        "ENABLE_MACRO_SIGNALS": "false"
       }
     }
   }

@@ -26,6 +26,7 @@
 
 - `APP_ENV`: `local` | `preview` | `production`
 - `PRODUCTION_ORIGIN`: production frontend origin used in CORS checks
+- `ENABLE_MACRO_SIGNALS`: feature flag (`false` by default) that selects runtime mode. Today, `true` selects `macro-signals` mode but still executes the current Oil Shock pipeline until a dedicated Macro Signals runtime is implemented.
 - Additional upstream keys should be configured as Worker secrets.
 
 ### Frontend (Vercel)
