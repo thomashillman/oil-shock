@@ -326,9 +326,9 @@ export async function getFirstTransmissionEvent(env: Env): Promise<{ generated_a
 export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
   const result = await env.DB.prepare(
     `SELECT key, value FROM config_thresholds`
-  ).all<{ key: string; value: number }>();
+  ).all<{ key: string; value: unknown }>();
 
-  const map = new Map<string, number>(result.results.map((r) => [r.key, r.value]));
+  const map = new Map<string, unknown>(result.results.map((r) => [r.key, r.value]));
 
   const required: Array<[keyof ScoringThresholds, string]> = [
     ["stateAlignedMax", "state_aligned_threshold_max"],
@@ -358,7 +358,11 @@ export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
     if (value === undefined) {
       throw new AppError(`Missing config_thresholds key: ${key}`, 500, "MISSING_THRESHOLD");
     }
-    thresholds[field] = value;
+    const numericValue = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      throw new AppError(`Invalid config_thresholds value for key: ${key}`, 500, "INVALID_THRESHOLD");
+    }
+    thresholds[field] = numericValue;
   }
 
   return thresholds;

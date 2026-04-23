@@ -14,6 +14,55 @@ This document outlines the sequence of work required to migrate from the existin
 * **Directory and namespacing cleanup:** Move engine-specific code into an `engines/oilshock` subfolder.  This will make it obvious where new engines should live.
 * **Tests:** Write or update tests to ensure the refactor does not change current behaviour.  Add integration tests that exercise the external API through the worker.
 
+### Required checklist mapped to Stage 1 deliverables (current code reality)
+
+This is the required checklist mapped to the current repository implementation.
+
+1) **Modularize collectors/scoring behind stable seams** *(Stage 1: Modularise collectors and scoring)*
+   - **Status: complete**
+   - Collectors are already isolated per source module and called from a thin collection job.
+   - Runtime execution is namespaced through `worker/src/engines/oilshock/run-pipeline.ts`.
+   - Scoring now runs through an engine-local seam (`worker/src/engines/oilshock/score.ts`) while preserving the existing `runScore` implementation and outputs.
+
+2) **Unify configuration loading for scoring constants** *(Stage 1: Configuration unification + architecture constraints)*
+   - **Status: complete**
+   - Runtime thresholds are loaded from `config_thresholds` through `loadThresholds`.
+   - Missing required keys fail clearly via `MISSING_THRESHOLD`.
+   - Focused tests now cover both missing required rows and invalid threshold values.
+
+3) **Introduce engine-oriented namespacing for Oil Shock code** *(Stage 1: Directory and namespacing cleanup)*
+   - **Status: complete for the current minimum seam**
+   - The pipeline entrypoint delegates into `worker/src/engines/oilshock/` while preserving existing API contracts and route shapes.
+
+4) **Behavior-preserving test updates** *(Stage 1 tests + repo validation expectations)*
+   - **Status: complete**
+   - Integration coverage exists for collect → score → snapshot flow.
+   - API contract tests exist for state/evidence/coverage/ledger behavior.
+   - Targeted worker tests and replay validation pass after the Stage 1 seam/config test updates.
+
+### Stage 1 completion note
+
+The previously identified final Stage 1 slice is now completed:
+
+1. Added an explicit engine-local scorer seam under `worker/src/engines/oilshock/`.
+2. Kept scoring outputs and API contracts unchanged.
+3. Added focused threshold-loading tests for missing and invalid runtime config values.
+
+### Validation checklist (targeted)
+
+Run only checks relevant to this Stage 1 slice:
+
+- `corepack pnpm -C worker test`
+- `corepack pnpm replay:validate` *(only if scoring behavior path changes)*
+- `corepack pnpm docs:check` *(if docs/contracts change)*
+
+### Done when / stop rule
+
+- Oil Shock collection → scoring → snapshot serving works unchanged.
+- Stage 1 seams exist (module boundaries + namespacing + config loading).
+- Relevant checks pass.
+- No Stage 2 schema tables/work are introduced in this increment.
+
 ## Stage 2 – Data schema migration
 
 * **Create new tables:** Add `engines`, `feeds`, `metrics`, `rules` and `scores` tables as described in the design.  Each table is additive: they can be present without affecting the current code.
