@@ -66,9 +66,13 @@ Run only checks relevant to this Stage 1 slice:
 ## Stage 2 – Data schema migration
 
 * **Create new tables:** Add `engines`, `feeds`, `metrics`, `rules` and `scores` tables as described in the design.  Each table is additive: they can be present without affecting the current code.
+  * **Status: complete** via migration `db/migrations/0010_macro_signals_stage2.sql`.
 * **Seed minimal metadata:** Populate the `engines` table with an entry for Oil Shock.  Populate the `feeds` table with existing feed keys and freshness thresholds.  Defer populating `rules` until the rule engine is in place.
+  * **Status: complete** for `engines` and `feeds`; `rules` remains intentionally unseeded.
 * **Dual writes (optional):** Consider writing Oil Shock scores into the new `scores` table in parallel to the existing tables.  This will surface schema issues early.
+  * **Status: complete (flagged)**. Snapshot writes now optionally dual-write to `scores` when `ENABLE_SCORE_DUAL_WRITE` is enabled.
 * **Migration scripts:** Add migration code to create the new tables and to backfill historical data if dual writes are enabled.  Document how to roll back.
+  * **Status: complete**. Migration includes additive schema creation, metadata seeds, historical backfill into `scores`, and rollback instructions.
 
 ## Stage 3 – Rule engine and guardrails
 
