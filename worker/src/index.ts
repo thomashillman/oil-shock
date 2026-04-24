@@ -15,15 +15,7 @@ import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDr
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
 import { handleGetEnergyState } from "./routes/engine-state";
 import { handleCompareScorePaths } from "./routes/admin-compare-paths";
-
-interface HealthPayload {
-  ok: boolean;
-  service: string;
-  env: Env["APP_ENV"];
-  featureFlags: {
-    macroSignals: boolean;
-  };
-}
+import { handleGetHealth } from "./routes/health";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -46,15 +38,7 @@ export default {
         return withCors(new Response(null, { status: 204 }), request, env);
       }
       if (pathname === "/health") {
-        const payload: HealthPayload = {
-          ok: true,
-          service: "oil-shock-worker",
-          env: env.APP_ENV,
-          featureFlags: {
-            macroSignals: getRuntimeMode(env) === "macro-signals"
-          }
-        };
-        response = json(payload);
+        response = await handleGetHealth(env);
         return withCors(response, request, env);
       }
 
