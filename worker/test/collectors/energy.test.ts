@@ -78,6 +78,7 @@ describe("Energy data freshness", () => {
     const testValue1 = 0.65;
     const testValue2 = 0.63;
 
+    // First collection run
     await writeSeriesPoints(env, [
       {
         seriesKey: "energy_spread.wti_brent_spread",
@@ -98,8 +99,8 @@ describe("Energy data freshness", () => {
     const point1 = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
     expect(point1?.value).toBe(testValue1);
 
-    const env2 = createTestEnv() as unknown as Env;
-    await writeSeriesPoints(env2, [
+    // Second collection run - to SAME environment
+    await writeSeriesPoints(env, [
       {
         seriesKey: "energy_spread.wti_brent_spread",
         observedAt: "2026-04-21",
@@ -109,9 +110,10 @@ describe("Energy data freshness", () => {
       }
     ]);
 
-    const point2 = await getLatestSeriesValue(env2, "energy_spread.wti_brent_spread");
+    const point2 = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
     expect(point2?.value).toBe(testValue2);
 
+    // Variance within same database over time
     const observedVariance = Math.abs((point2?.value ?? 0) - (point1?.value ?? 0)) / (point1?.value ?? 1);
     expect(observedVariance).toBeLessThan(0.05);
   });

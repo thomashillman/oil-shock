@@ -124,8 +124,9 @@ export async function handleRulesCompare(request: Request, env: Env): Promise<Re
   const rules = await listActiveRules(env, engineKey);
 
   const ruledeltas = rules.map((rule) => {
-    const applies = rule.predicate ? evaluateRules([rule], metrics).totalAdjustment !== 0 : false;
-    const delta = evaluateRules([rule], metrics).totalAdjustment;
+    const evaluation = evaluateRules([rule], metrics);
+    const delta = evaluation.totalAdjustment;
+    const applies = rule.predicate ? delta !== 0 : false;
     return {
       ruleKey: rule.ruleKey,
       name: rule.name,
