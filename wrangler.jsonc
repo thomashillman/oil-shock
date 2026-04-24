@@ -13,8 +13,7 @@
     "APP_ENV": "local",
     "PRODUCTION_ORIGIN": "",
     "ENABLE_MACRO_SIGNALS": "false",
-    "GRAFANA_OTLP_ENDPOINT": "",
-    "GRAFANA_OTLP_API_KEY": ""
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
   },
   "env": {
     "preview": {
@@ -29,8 +28,7 @@
         "APP_ENV": "preview",
         "PRODUCTION_ORIGIN": "",
         "ENABLE_MACRO_SIGNALS": "false",
-        "GRAFANA_OTLP_ENDPOINT": "",
-        "GRAFANA_OTLP_API_KEY": ""
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     },
     "production": {
@@ -45,8 +43,7 @@
         "APP_ENV": "production",
         "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app",
         "ENABLE_MACRO_SIGNALS": "false",
-        "GRAFANA_OTLP_ENDPOINT": "",
-        "GRAFANA_OTLP_API_KEY": ""
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     }
   }

@@ -5,8 +5,8 @@ export interface Env {
   ENABLE_SCORE_DUAL_WRITE?: string;
   ENABLE_PHASE1_PARALLEL_RUNNING?: string;
   ADMIN_API_BEARER_TOKEN?: string;
-  GRAFANA_OTLP_ENDPOINT?: string;
-  GRAFANA_OTLP_API_KEY?: string;
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  OTEL_EXPORTER_OTLP_HEADERS?: string;
   DB: D1Database;
   EIA_API_KEY: string;
   GIE_API_KEY: string;
