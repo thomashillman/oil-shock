@@ -2,6 +2,8 @@
 
 Complete walkthrough for setting up the Oil Shock API health monitoring dashboard in Grafana before Days 22-52 rollout execution.
 
+**PREREQUISITE**: Complete `docs/TELEMETRY_SETUP_GUIDE.md` (Step 0) first to ensure API health metrics are being emitted and recorded to D1. Without telemetry flowing, this dashboard will have no data to display.
+
 ---
 
 ## Prerequisites

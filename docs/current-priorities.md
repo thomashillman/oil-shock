@@ -42,9 +42,22 @@ This document captures the current sequencing and decision constraints for work 
 **Stream 3: Production Rollout (Days 22-52)** — 🔄 IN PROGRESS
 
 Preparation Phase (Before Day 22):
+
+**Step 0: Telemetry Setup** (PREREQUISITE - must complete first)
+- [ ] Wire energy collector to use `instrumentedFetch()` instead of `fetchJson()`
+- [ ] Verify metrics are being recorded to `api_health_metrics` table
+- [ ] Test `/api/admin/api-health` endpoint returns data
+- [ ] Verify telemetry flowing in staging environment
+- [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`
+
+**Step 1: Grafana Monitoring Setup**
 - [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
 - [ ] Configure 5 Grafana alert rules (`docs/grafana-api-health-alerts.md`)
 - [ ] Test dashboard queries against live D1 data
+- [ ] Verify alert routing (Slack, PagerDuty)
+- [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
+
+**Step 2: Team Communication & Procedures**
 - [ ] Update team comms (schedule, phases, success criteria)
 - [ ] Create incident response runbook (rollback procedures, root cause investigation)
 - [ ] Rehearse rollback procedure (ENERGY_ROLLOUT_PERCENT=0)
