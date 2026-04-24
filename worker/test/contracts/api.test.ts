@@ -14,7 +14,8 @@ describe("api contracts", () => {
     await runCollection(env, new Date("2026-04-16T00:00:00.000Z"));
     await runScore(env, new Date("2026-04-16T00:00:00.000Z"));
 
-    const stateResponse = await handleGetState(env);
+    const stateRequest = new Request("http://local/api/state");
+    const stateResponse = await handleGetState(stateRequest, env);
     const state = (await stateResponse.json()) as Record<string, unknown>;
     expect(stateResponse.status).toBe(200);
     expect(state).toHaveProperty("generatedAt");
