@@ -126,7 +126,8 @@ describe("writeSnapshot dual write", () => {
       ledgerImpact: baseSnapshot.ledgerImpact,
       sourceFreshness: baseSnapshot.sourceFreshness,
       guardrailFlags: baseSnapshot.guardrailFlags,
-      confidence: baseSnapshot.confidence
+      confidence: baseSnapshot.confidence,
+      evidenceIds: baseSnapshot.evidenceIds
     });
   });
 

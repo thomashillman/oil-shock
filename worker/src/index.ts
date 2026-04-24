@@ -54,7 +54,7 @@ export default {
       }
 
       if (request.method === "GET" && pathname === "/api/state") {
-        response = await handleGetState(env);
+        response = await handleGetState(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/state/history") {

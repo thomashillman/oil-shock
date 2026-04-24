@@ -120,7 +120,8 @@ async function writeScoreRecord(
         ledgerImpact: snapshot.ledgerImpact,
         sourceFreshness: snapshot.sourceFreshness,
         guardrailFlags: snapshot.guardrailFlags,
-        confidence: snapshot.confidence
+        confidence: snapshot.confidence,
+        evidenceIds: snapshot.evidenceIds
       }),
       snapshotId,
       runKey

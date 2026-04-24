@@ -42,7 +42,8 @@ describe("GET /api/state response shape (subscore/freshness contract)", () => {
     const env = createTestEnv() as unknown as Env;
     await writeSnapshot(env, sampleSnapshot());
 
-    const response = await handleGetState(env);
+    const request = new Request("http://local/api/state");
+    const response = await handleGetState(request, env);
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
 
@@ -67,7 +68,8 @@ describe("GET /api/state response shape (subscore/freshness contract)", () => {
 
   it("returns 404 when no snapshot exists", async () => {
     const env = createTestEnv() as unknown as Env;
-    const response = await handleGetState(env);
+    const request = new Request("http://local/api/state");
+    const response = await handleGetState(request, env);
     expect(response.status).toBe(404);
   });
 });
