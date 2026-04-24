@@ -1,7 +1,7 @@
 import { normalizePoints } from "../../core/normalize";
 import type { Env } from "../../env";
 import type { NormalizedPoint } from "../../types";
-import { fetchJson } from "../../lib/http-client";
+import { instrumentedFetch } from "../../lib/api-instrumentation";
 
 const EIA_BASE = "https://api.eia.gov/v2";
 
@@ -31,7 +31,11 @@ function normalizeSpread(absoluteSpread: number, maxSpread = 20): number {
   return Math.max(0, Math.min(1, absoluteSpread / maxSpread));
 }
 
-async function fetchLatestSeriesValue(env: Env, series: string): Promise<{ value: number; observedAt: string } | null> {
+async function fetchLatestSeriesValue(
+  env: Env,
+  series: string,
+  feedName: string
+): Promise<{ value: number; observedAt: string } | null> {
   const { startDate, endDate } = rollingWindow(45);
   const url = new URL(`${EIA_BASE}/petroleum/pri/spt/data`);
   url.searchParams.set("api_key", env.EIA_API_KEY);
@@ -45,12 +49,18 @@ async function fetchLatestSeriesValue(env: Env, series: string): Promise<{ value
   url.searchParams.set("offset", "0");
   url.searchParams.set("length", "1");
 
-  const response = await fetchJson<EiaResponse>(url.toString(), {
-    timeout: 30000,
-    retries: 2,
-    backoffMs: 125,
-    rateLimitDelayMs: 125
-  });
+  const response = await instrumentedFetch<EiaResponse>(
+    env,
+    url.toString(),
+    feedName,
+    "EIA",
+    {
+      timeout: 30000,
+      retries: 2,
+      backoffMs: 125,
+      rateLimitDelayMs: 125
+    }
+  );
   const row = response.response?.data?.[0];
   if (!row) return null;
   const value = toNumeric(row.value);
@@ -61,9 +71,9 @@ async function fetchLatestSeriesValue(env: Env, series: string): Promise<{ value
 
 export async function collectEnergy(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
   const [wti, brent, diesel] = await Promise.all([
-    fetchLatestSeriesValue(env, "RWTC"),
-    fetchLatestSeriesValue(env, "RBRTE"),
-    fetchLatestSeriesValue(env, "EER_EPD2F_PF4_RGC_DPG")
+    fetchLatestSeriesValue(env, "RWTC", "eia_wti"),
+    fetchLatestSeriesValue(env, "RBRTE", "eia_brent"),
+    fetchLatestSeriesValue(env, "EER_EPD2F_PF4_RGC_DPG", "eia_diesel_wti_crack")
   ]);
 
   if (!wti || !brent || !diesel) {
