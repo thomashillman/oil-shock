@@ -250,7 +250,7 @@ export async function handleGetApiHealth(env: Env): Promise<Response> {
     return json(
       {
         error: "Failed to gather API health metrics",
-        message: String(error)
+        message: "Internal server error"
       },
       { status: 500 }
     );
