@@ -1,0 +1,228 @@
+{
+  "dashboard": {
+    "title": "Oil Shock API Health Monitoring",
+    "description": "Comprehensive health dashboard for all data source APIs",
+    "tags": ["oil-shock", "api-health", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Health Status Overview",
+        "type": "stat",
+        "gridPos": {
+          "h": 6,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
+        "targets": [
+          {
+            "name": "System Health",
+            "queryString": "SELECT CASE WHEN COUNT(DISTINCT CASE WHEN status = 'OK' THEN 1 END) = COUNT(*) THEN 1 ELSE 0 END as healthy FROM (SELECT DISTINCT feed_name, provider FROM api_health_metrics WHERE attempted_at >= datetime('now', '-1 hour'))"
+          }
+        ],
+        "options": {
+          "orientation": "auto",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 2,
+        "title": "Per-Feed Status Panel",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 6
+        },
+        "description": "Real-time status for each API feed",
+        "targets": [
+          {
+            "name": "Feed Status",
+            "queryString": "SELECT\n  afr.feed_name as 'Feed Name',\n  afr.display_name as 'Display Name',\n  afr.provider as 'Provider',\n  CASE\n    WHEN ahm_latest.status IS NULL THEN 'UNKNOWN'\n    WHEN ahm_latest.status = 'success' THEN 'OK'\n    WHEN ahm_latest.status = 'failure' THEN 'ERROR'\n    WHEN ahm_latest.status = 'timeout' THEN 'TIMEOUT'\n  END as 'Status',\n  ahm_latest.latency_ms as 'Latest Latency (ms)',\n  CAST(ROUND(100.0 * SUM(CASE WHEN ahm.status != 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(ahm.id), 0), 1) AS INTEGER) as 'Error Rate (%) 1h',\n  MAX(CASE WHEN ahm.status = 'success' THEN ahm.attempted_at END) as 'Last Success'\nFROM api_feed_registry afr\nLEFT JOIN api_health_metrics ahm ON afr.feed_name = ahm.feed_name AND ahm.attempted_at >= datetime('now', '-1 hour')\nLEFT JOIN (\n  SELECT feed_name, provider, status, latency_ms, attempted_at\n  FROM api_health_metrics\n  WHERE (feed_name, attempted_at) IN (\n    SELECT feed_name, MAX(attempted_at)\n    FROM api_health_metrics\n    WHERE attempted_at >= datetime('now', '-24 hours')\n    GROUP BY feed_name\n  )\n) ahm_latest ON afr.feed_name = ahm_latest.feed_name\nWHERE afr.enabled = 1\nGROUP BY afr.feed_name, afr.display_name, afr.provider\nORDER BY afr.feed_name"
+          }
+        ],
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "displayName": "Display Name",
+              "desc": false
+            }
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Latency Trend - Last 24 Hours",
+        "type": "timeseries",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 14
+        },
+        "description": "P95 latency trends per feed",
+        "targets": [
+          {
+            "name": "EIA WTI",
+            "queryString": "SELECT\n  attempted_at as time,\n  latency_ms\nFROM api_health_metrics\nWHERE feed_name = 'eia_wti' AND status = 'success'\nAND attempted_at >= datetime('now', '-24 hours')\nORDER BY attempted_at DESC\nLIMIT 1440"
+          },
+          {
+            "name": "EIA Brent",
+            "queryString": "SELECT\n  attempted_at as time,\n  latency_ms\nFROM api_health_metrics\nWHERE feed_name = 'eia_brent' AND status = 'success'\nAND attempted_at >= datetime('now', '-24 hours')\nORDER BY attempted_at DESC\nLIMIT 1440"
+          },
+          {
+            "name": "EIA Inventory",
+            "queryString": "SELECT\n  attempted_at as time,\n  latency_ms\nFROM api_health_metrics\nWHERE feed_name = 'eia_inventory' AND status = 'success'\nAND attempted_at >= datetime('now', '-24 hours')\nORDER BY attempted_at DESC\nLIMIT 1440"
+          },
+          {
+            "name": "GIE Storage",
+            "queryString": "SELECT\n  attempted_at as time,\n  latency_ms\nFROM api_health_metrics\nWHERE feed_name = 'gie_storage' AND status = 'success'\nAND attempted_at >= datetime('now', '-24 hours')\nORDER BY attempted_at DESC\nLIMIT 1440"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "custom": {
+              "lineWidth": 2
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Error Rate Gauges (Last Hour)",
+        "type": "gauge",
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 22
+        },
+        "description": "Error rate (%) for each feed - last hour",
+        "targets": [
+          {
+            "name": "EIA WTI Error Rate",
+            "queryString": "SELECT\n  ROUND(100.0 * SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) as value\nFROM api_health_metrics\nWHERE feed_name = 'eia_wti' AND attempted_at >= datetime('now', '-1 hour')"
+          }
+        ],
+        "options": {
+          "orientation": "auto",
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 5
+                },
+                {
+                  "color": "red",
+                  "value": 10
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Data Staleness Check (Last Successful)",
+        "type": "table",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 30
+        },
+        "description": "Hours since last successful data point per feed",
+        "targets": [
+          {
+            "name": "Data Age",
+            "queryString": "SELECT\n  afr.feed_name as 'Feed',\n  afr.display_name as 'Display Name',\n  CASE\n    WHEN MAX(CASE WHEN ahm.status = 'success' THEN ahm.attempted_at END) IS NULL THEN 'No data'\n    ELSE CAST(ROUND((julianday('now') - julianday(MAX(CASE WHEN ahm.status = 'success' THEN ahm.attempted_at END))) * 24, 1) AS TEXT) || ' hours ago'\n  END as 'Last Success',\n  CASE\n    WHEN MAX(CASE WHEN ahm.status = 'success' THEN ahm.attempted_at END) IS NULL THEN 'Critical'\n    WHEN (julianday('now') - julianday(MAX(CASE WHEN ahm.status = 'success' THEN ahm.attempted_at END))) * 24 > afr.freshness_window_hours THEN 'Stale'\n    ELSE 'Fresh'\n  END as 'Freshness Status'\nFROM api_feed_registry afr\nLEFT JOIN api_health_metrics ahm ON afr.feed_name = ahm.feed_name\nWHERE afr.enabled = 1\nGROUP BY afr.feed_name, afr.display_name, afr.freshness_window_hours\nORDER BY afr.feed_name"
+          }
+        ],
+        "options": {
+          "showHeader": true
+        }
+      },
+      {
+        "id": 6,
+        "title": "Request Success Rate (24h rolling)",
+        "type": "barchart",
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 38
+        },
+        "description": "Success rate by feed over 24 hours",
+        "targets": [
+          {
+            "name": "Success Rate",
+            "queryString": "SELECT\n  afr.display_name as Feed,\n  ROUND(100.0 * SUM(CASE WHEN ahm.status = 'success' THEN 1 ELSE 0 END) / NULLIF(COUNT(ahm.id), 0), 1) as 'Success Rate %'\nFROM api_feed_registry afr\nLEFT JOIN api_health_metrics ahm ON afr.feed_name = ahm.feed_name AND ahm.attempted_at >= datetime('now', '-24 hours')\nWHERE afr.enabled = 1\nGROUP BY afr.feed_name, afr.display_name\nORDER BY 'Success Rate %' ASC"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "max": 100,
+            "min": 0,
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 90
+                },
+                {
+                  "color": "green",
+                  "value": 99
+                }
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "datasource": "datasource",
+          "enable": true,
+          "hide": true,
+          "iconColor": "red",
+          "name": "API Outages",
+          "target": {
+            "queryString": "SELECT\n  MAX(attempted_at) as time,\n  'API Failure: ' || feed_name as text\nFROM api_health_metrics\nWHERE status != 'success' AND attempted_at >= datetime('now', '-7 days')\nGROUP BY feed_name\nHAVING COUNT(*) > 5"
+          }
+        }
+      ]
+    }
+  },
+  "overwrite": true,
+  "datasource": "D1 - Oil Shock Database"
+}
