@@ -5,6 +5,7 @@ import { toAppError } from "./lib/errors";
 import { getRuntimeMode, isPhase1ParallelRunningEnabled } from "./lib/feature-flags";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
+import { generateRequestId, extractTraceContext, setRequestContext, clearRequestContext } from "./lib/tracing";
 import { handleGetCoverage } from "./routes/coverage";
 import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
@@ -32,14 +33,18 @@ function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return withCors(new Response(null, { status: 204 }), request, env);
-    }
+    // Initialize request context for correlation
+    const requestId = generateRequestId();
+    const traceContext = extractTraceContext(request);
+    setRequestContext({ requestId, ...traceContext });
 
     const { pathname } = new URL(request.url);
     let response: Response;
 
     try {
+      if (request.method === "OPTIONS") {
+        return withCors(new Response(null, { status: 204 }), request, env);
+      }
       if (pathname === "/health") {
         const payload: HealthPayload = {
           ok: true,
@@ -171,8 +176,13 @@ export default {
     } catch (error) {
       const appError = toAppError(error);
       log("error", "Unhandled request error", { path: pathname, code: appError.code });
-      response = json({ error: appError.code, message: appError.message }, { status: appError.status });
+      response = json(
+        { error: appError.code, message: appError.message, req_id: requestId },
+        { status: appError.status }
+      );
       return withCors(response, request, env);
+    } finally {
+      clearRequestContext();
     }
   },
   async scheduled(_: ScheduledController, env: Env): Promise<void> {
