@@ -11,6 +11,7 @@ export async function handleListRules(env: Env): Promise<Response> {
 
 export async function handleUpdateRule(request: Request, env: Env, ruleKey: string): Promise<Response> {
   const body = await parseJsonBody<Record<string, unknown>>(request);
+  const engineKey = typeof body.engineKey === "string" ? body.engineKey : "oil_shock";
   let predicateJson: string | undefined;
   if (typeof body.predicateJson === "string") {
     let parsedPredicate: unknown;
@@ -25,7 +26,7 @@ export async function handleUpdateRule(request: Request, env: Env, ruleKey: stri
     predicateJson = JSON.stringify(parsedPredicate);
   }
 
-  await updateRuleByKey(env, ruleKey, {
+  await updateRuleByKey(env, engineKey, ruleKey, {
     weight: typeof body.weight === "number" ? body.weight : undefined,
     predicateJson,
     isActive: typeof body.isActive === "boolean" ? body.isActive : undefined

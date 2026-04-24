@@ -527,6 +527,7 @@ export async function getLatestEngineScore(
 
 export async function updateRuleByKey(
   env: Env,
+  engineKey: string,
   ruleKey: string,
   updates: { weight?: number; predicateJson?: string; isActive?: boolean }
 ): Promise<void> {
@@ -537,13 +538,14 @@ export async function updateRuleByKey(
       weight = COALESCE(?, weight),
       predicate_json = COALESCE(?, predicate_json),
       is_active = COALESCE(?, is_active)
-    WHERE engine_key = 'oil_shock' AND rule_key = ?
+    WHERE engine_key = ? AND rule_key = ?
     `
   )
     .bind(
       updates.weight ?? null,
       updates.predicateJson ?? null,
       typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
+      engineKey,
       ruleKey
     )
     .run();
