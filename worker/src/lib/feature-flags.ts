@@ -14,6 +14,10 @@ export function isMacroSignalsEnabled(env: Env): boolean {
   return parseBooleanFlag(env.ENABLE_MACRO_SIGNALS);
 }
 
+export function isPhase1ParallelRunningEnabled(env: Env): boolean {
+  return parseBooleanFlag(env.ENABLE_PHASE1_PARALLEL_RUNNING);
+}
+
 export function getRuntimeMode(env: Env): RuntimeMode {
   return isMacroSignalsEnabled(env) ? "macro-signals" : "oilshock";
 }

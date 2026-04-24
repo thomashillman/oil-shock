@@ -9,7 +9,17 @@ type FeedRow = {
   freshness_threshold_seconds: string;
 };
 
+function isSqlite3Available(): boolean {
+  try {
+    execFileSync("sqlite3", ["--version"], { stdio: "pipe", encoding: "utf8" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("Stage 2 macro-signals migration integration", () => {
+  const skipIfNoSqlite3 = isSqlite3Available() ? it : it.skip;
   const tempDirs: string[] = [];
 
   afterEach(() => {
@@ -43,7 +53,7 @@ describe("Stage 2 macro-signals migration integration", () => {
     }
   }
 
-  it("creates all Stage 2 tables and seeds expected metadata", () => {
+  skipIfNoSqlite3("creates all Stage 2 tables and seeds expected metadata", () => {
     const dbPath = createDbPath();
     applyAllMigrations(dbPath);
 
@@ -81,7 +91,7 @@ describe("Stage 2 macro-signals migration integration", () => {
     ]);
   });
 
-  it("backfills historical snapshots into scores with expected mapping and remains idempotent", () => {
+  skipIfNoSqlite3("backfills historical snapshots into scores with expected mapping and remains idempotent", () => {
     const dbPath = createDbPath();
     applyAllMigrations(dbPath);
 
