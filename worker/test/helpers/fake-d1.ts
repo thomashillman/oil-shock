@@ -233,6 +233,12 @@ export class FakeD1Database {
 
   async first<T>(query: string, params: unknown[]): Promise<T | null> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("count(*) as count from config_thresholds")) {
+      return { count: this.tables.config_thresholds.length } as T;
+    }
+    if (normalized === "select 1") {
+      return { "1": 1 } as T;
+    }
     if (normalized.includes("from series_points")) {
       const seriesKey = params[0];
       const row = [...this.tables.series_points]

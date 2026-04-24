@@ -5,6 +5,7 @@ import { toAppError } from "./lib/errors";
 import { getRuntimeMode, isPhase1ParallelRunningEnabled } from "./lib/feature-flags";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
+import { generateRequestId, extractTraceContext, setRequestContext, clearRequestContext } from "./lib/tracing";
 import { handleGetCoverage } from "./routes/coverage";
 import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
@@ -14,15 +15,7 @@ import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDr
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
 import { handleGetEnergyState } from "./routes/engine-state";
 import { handleCompareScorePaths } from "./routes/admin-compare-paths";
-
-interface HealthPayload {
-  ok: boolean;
-  service: string;
-  env: Env["APP_ENV"];
-  featureFlags: {
-    macroSignals: boolean;
-  };
-}
+import { handleGetHealth } from "./routes/health";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -32,24 +25,20 @@ function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return withCors(new Response(null, { status: 204 }), request, env);
-    }
+    // Initialize request context for correlation
+    const requestId = generateRequestId();
+    const traceContext = extractTraceContext(request);
+    setRequestContext({ requestId, ...traceContext });
 
     const { pathname } = new URL(request.url);
     let response: Response;
 
     try {
+      if (request.method === "OPTIONS") {
+        return withCors(new Response(null, { status: 204 }), request, env);
+      }
       if (pathname === "/health") {
-        const payload: HealthPayload = {
-          ok: true,
-          service: "oil-shock-worker",
-          env: env.APP_ENV,
-          featureFlags: {
-            macroSignals: getRuntimeMode(env) === "macro-signals"
-          }
-        };
-        response = json(payload);
+        response = await handleGetHealth(env);
         return withCors(response, request, env);
       }
 
@@ -171,8 +160,13 @@ export default {
     } catch (error) {
       const appError = toAppError(error);
       log("error", "Unhandled request error", { path: pathname, code: appError.code });
-      response = json({ error: appError.code, message: appError.message }, { status: appError.status });
+      response = json(
+        { error: appError.code, message: appError.message, req_id: requestId },
+        { status: appError.status }
+      );
       return withCors(response, request, env);
+    } finally {
+      clearRequestContext();
     }
   },
   async scheduled(_: ScheduledController, env: Env): Promise<void> {

@@ -2,6 +2,16 @@
   "name": "energy-dislocation-engine-preview",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-04-16",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true
+    },
+    "traces": {
+      "enabled": true
+    }
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -12,7 +22,8 @@
   "vars": {
     "APP_ENV": "local",
     "PRODUCTION_ORIGIN": "",
-    "ENABLE_MACRO_SIGNALS": "false"
+    "ENABLE_MACRO_SIGNALS": "false",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
   },
   "env": {
     "preview": {
@@ -26,7 +37,8 @@
       "vars": {
         "APP_ENV": "preview",
         "PRODUCTION_ORIGIN": "",
-        "ENABLE_MACRO_SIGNALS": "false"
+        "ENABLE_MACRO_SIGNALS": "false",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     },
     "production": {
@@ -40,7 +52,8 @@
       "vars": {
         "APP_ENV": "production",
         "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app",
-        "ENABLE_MACRO_SIGNALS": "false"
+        "ENABLE_MACRO_SIGNALS": "false",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     }
   }
