@@ -2,6 +2,16 @@
   "name": "energy-dislocation-engine-preview",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-04-16",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true
+    },
+    "traces": {
+      "enabled": true
+    }
+  },
   "d1_databases": [
     {
       "binding": "DB",
