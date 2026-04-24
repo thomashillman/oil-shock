@@ -137,15 +137,16 @@ function determineStatus(
   lastAttemptedAt: string | null,
   lastSuccessfulAt: string | null,
   errorRatePct: number,
-  freshnessWindowHours: number
+  freshnessWindowHours: number,
+  errorRateThresholdPct: number
 ): "OK" | "ERROR" | "TIMEOUT" | "UNKNOWN" {
   // No attempts recorded
   if (!lastAttemptedAt) {
     return "UNKNOWN";
   }
 
-  // If error rate is high, it's in ERROR state
-  if (errorRatePct > 10) {
+  // If error rate exceeds threshold, it's in ERROR state
+  if (errorRatePct > errorRateThresholdPct) {
     return "ERROR";
   }
 
@@ -195,7 +196,8 @@ export async function handleGetApiHealth(env: Env): Promise<Response> {
         metrics.lastAttemptedAt,
         metrics.lastSuccessfulAt,
         metrics.errorRatePct,
-        feed.freshnessWindowHours
+        feed.freshnessWindowHours,
+        feed.errorRateThresholdPct
       );
 
       const feedHealth: PerFeedHealth = {
@@ -242,7 +244,7 @@ export async function handleGetApiHealth(env: Env): Promise<Response> {
       }
     };
 
-    return json(response, { status: systemHealthy ? 200 : 200 });
+    return json(response, { status: systemHealthy ? 200 : 503 });
   } catch (error) {
     log("error", "API health check failed", { error: String(error) });
     return json(

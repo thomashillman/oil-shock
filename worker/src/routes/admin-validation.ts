@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { json } from "../lib/http";
+import { getGateStatus } from "../db/client";
 
 export interface ValidationGateStatus {
   gate: string;
@@ -9,36 +10,25 @@ export interface ValidationGateStatus {
 }
 
 export async function handleGetValidationStatus(env: Env): Promise<Response> {
-  const gateStatuses: ValidationGateStatus[] = [
-    {
-      gate: "energy_determinism",
-      status: "passed",
-      lastCheckedAt: new Date().toISOString(),
-      details: "safeValue() function is deterministic: clipping, NaN handling verified"
-    },
-    {
-      gate: "energy_data_freshness",
-      status: "passed",
-      lastCheckedAt: new Date().toISOString(),
-      details: "Variance test passed: 0.65 → 0.63 shows 3.1% variance < 5% threshold"
-    },
-    {
-      gate: "energy_rule_consistency",
-      status: "pending",
-      details: "Endpoint available at /api/admin/rules-compare for per-rule delta analysis"
-    },
-    {
-      gate: "energy_guardrail_correctness",
-      status: "pending",
-      details: "Guardrails test suite ready: stale/missing data flagging verified"
-    }
-  ];
+  const gates = await getGateStatus(env, "ENABLE_MACRO_SIGNALS");
 
-  const allPassed = gateStatuses.every((g) => g.status === "passed");
-  const allReady = gateStatuses.every((g) => g.status !== "failed");
+  const gateStatuses: ValidationGateStatus[] = gates.map((g) => ({
+    gate: g.gate_name,
+    status:
+      g.status === "SIGNED_OFF"
+        ? "passed"
+        : g.status === "EXPIRED"
+          ? "failed"
+          : "pending",
+    lastCheckedAt: g.signed_off_at ?? undefined,
+    details: g.notes ?? undefined
+  }));
+
+  const allPassed = gates.every((g) => g.status === "SIGNED_OFF");
+  const allReady = !gates.some((g) => g.status === "EXPIRED");
 
   return json({
-    feature: "ENERGY_ENGINE_VALIDATION",
+    feature: "ENABLE_MACRO_SIGNALS",
     gateCount: gateStatuses.length,
     passedCount: gateStatuses.filter((g) => g.status === "passed").length,
     pendingCount: gateStatuses.filter((g) => g.status === "pending").length,
