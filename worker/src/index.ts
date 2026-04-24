@@ -13,6 +13,7 @@ import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
 import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
+import { handleGetGateStatus, handleSignOffGate, handleGetGateHistory } from "./routes/admin-gates";
 import { handleGetEnergyState } from "./routes/engine-state";
 import { handleCompareScorePaths } from "./routes/admin-compare-paths";
 import { handleGetHealth } from "./routes/health";
@@ -119,6 +120,30 @@ export default {
           return withCors(response, request, env);
         }
         response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/gate-status") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetGateStatus(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/gate-sign-off") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleSignOffGate(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/gate-history") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetGateHistory(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/admin/compare-score-paths") {

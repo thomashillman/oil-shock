@@ -5,8 +5,11 @@ import { getRuntimeMode } from "../lib/feature-flags";
 
 export interface HealthPayload {
   ok: boolean;
+  status?: "healthy" | "degraded" | "unavailable";
   service: string;
   env: Env["APP_ENV"];
+  runtimeMode?: "oilshock" | "macro-signals";
+  degradedComponents?: string[];
   featureFlags: {
     macroSignals: boolean;
   };
@@ -26,12 +29,17 @@ export interface HealthPayload {
 
 export async function handleGetHealth(env: Env): Promise<Response> {
   const startTime = Date.now();
+  const runtimeMode = getRuntimeMode(env);
+  const degradedComponents: string[] = [];
+
   const payload: HealthPayload = {
     ok: true,
     service: "oil-shock-worker",
     env: env.APP_ENV,
+    runtimeMode,
+    degradedComponents,
     featureFlags: {
-      macroSignals: getRuntimeMode(env) === "macro-signals"
+      macroSignals: runtimeMode === "macro-signals"
     },
     timestamp: new Date().toISOString()
   };
@@ -50,6 +58,7 @@ export async function handleGetHealth(env: Env): Promise<Response> {
     }
   } catch (error) {
     databaseHealthy = false;
+    degradedComponents.push("database");
     log("warn", "Database health check failed", { error: String(error) });
   }
 
@@ -66,16 +75,20 @@ export async function handleGetHealth(env: Env): Promise<Response> {
     configHealthy = thresholdCount > 0;
 
     if (!configHealthy) {
+      degradedComponents.push("config");
       log("warn", "Config thresholds not found", { threshold_count: thresholdCount });
     }
   } catch (error) {
     configHealthy = false;
+    degradedComponents.push("config");
     log("warn", "Config health check failed", { error: String(error) });
   }
 
   // Determine overall health
   const overallHealthy = databaseHealthy && configHealthy;
   payload.ok = overallHealthy;
+  payload.status = overallHealthy ? "healthy" : degradedComponents.length > 0 ? "degraded" : "unavailable";
+  payload.degradedComponents = degradedComponents.length > 0 ? degradedComponents : undefined;
   payload.dependencies = {
     database: {
       status: databaseHealthy ? "healthy" : "unhealthy",
