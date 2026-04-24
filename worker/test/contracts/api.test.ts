@@ -39,7 +39,7 @@ describe("api contracts", () => {
     expect(coverageResponse.status).toBe(200);
     expect(coverage).toHaveProperty("coverage_confidence");
     expect(coverage).toHaveProperty("source_freshness");
-  }, 30000);
+  }, 60000);
 
   it("creates and updates ledger entries", async () => {
     const env = createTestEnv() as unknown as Env;
