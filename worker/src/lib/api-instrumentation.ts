@@ -86,12 +86,10 @@ export async function instrumentedFetch<T>(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const timeSinceLastFetch = Date.now() - lastFetch;
-      if (timeSinceLastFetch < rateLimitDelayMs) {
-        await sleep(rateLimitDelayMs - timeSinceLastFetch);
+      // Rate limit delay: respects per-request rate limiting without global state
+      if (attempt > 0 && rateLimitDelayMs > 0) {
+        await sleep(rateLimitDelayMs);
       }
-
-      lastFetch = Date.now();
 
       const response = await fetch(url, {
         signal: controller.signal,
@@ -169,8 +167,6 @@ export async function instrumentedFetch<T>(
 
   throw lastError ?? new Error(`Failed to fetch ${feedName} from ${url} after ${retries + 1} attempts`);
 }
-
-let lastFetch = 0;
 
 async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
