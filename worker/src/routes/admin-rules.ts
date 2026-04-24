@@ -141,7 +141,7 @@ export async function handleRulesCompare(request: Request, env: Env): Promise<Re
     testMetrics: metrics,
     ruleDeltas: ruledeltas,
     totalAdjustment: result.totalAdjustment,
-    allRulesApplied: result.matchedRules.length,
+    allRulesApplied: result.appliedRules.length,
     expectedNewScore: Math.min(1, Math.max(0, (physicalStress + marketResponse) / 2 + result.totalAdjustment))
   });
 }
