@@ -3,10 +3,7 @@ import type { NormalizedPoint } from "../types";
 import { writeSeriesPoints, startRun, finishRun } from "../db/client";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
-import { collectEia } from "./collectors/eia";
 import { collectEnergy } from "./collectors/energy";
-import { collectGas } from "./collectors/gas";
-import { collectSec } from "./collectors/sec";
 
 export async function runCollection(env: Env, now = new Date()): Promise<void> {
   const runKey = `collect-${now.getTime()}`;
@@ -15,10 +12,7 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
   log("info", "Starting collection run", { runKey, nowIso });
   try {
     const results = await Promise.allSettled([
-      collectEia(env, nowIso),
-      collectEnergy(env, nowIso),
-      collectGas(env, nowIso),
-      collectSec(env, nowIso)
+      collectEnergy(env, nowIso)
     ]);
     const points: NormalizedPoint[] = [];
     for (const result of results) {

@@ -76,59 +76,6 @@ export async function getLatestSeriesValue(env: Env, seriesKey: string): Promise
   };
 }
 
-
-function isScoreDualWriteEnabled(env: Env): boolean {
-  const flag = env.ENABLE_SCORE_DUAL_WRITE;
-  if (!flag) return false;
-  const normalized = flag.trim().toLowerCase();
-  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
-}
-
-async function writeScoreRecord(
-  env: Env,
-  snapshot: StateSnapshot,
-  snapshotId: number,
-  runKey: string | null
-): Promise<void> {
-  await env.DB.prepare(
-    `
-    INSERT INTO scores (
-      engine_key,
-      feed_key,
-      scored_at,
-      score_value,
-      confidence,
-      flags_json,
-      snapshot_id,
-      run_key
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `
-  )
-    .bind(
-      "oil_shock",
-      "oil_shock.mismatch_score",
-      snapshot.generatedAt,
-      snapshot.mismatchScore,
-      snapshot.coverageConfidence,
-      JSON.stringify({
-        state: snapshot.dislocationState,
-        stateRationale: snapshot.stateRationale,
-        actionabilityState: snapshot.actionabilityState,
-        subscores: snapshot.subscores,
-        clocks: snapshot.clocks,
-        ledgerImpact: snapshot.ledgerImpact,
-        sourceFreshness: snapshot.sourceFreshness,
-        guardrailFlags: snapshot.guardrailFlags,
-        confidence: snapshot.confidence,
-        evidenceIds: snapshot.evidenceIds
-      }),
-      snapshotId,
-      runKey
-    )
-    .run();
-}
-
 export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: string | null = null): Promise<number> {
   const result = await env.DB.prepare(
     `
@@ -168,11 +115,6 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
     .run();
 
   const snapshotId = Number(result.meta.last_row_id ?? 0);
-
-  if (isScoreDualWriteEnabled(env)) {
-    await writeScoreRecord(env, snapshot, snapshotId, runKey);
-  }
-
   return snapshotId;
 }
 
