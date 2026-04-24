@@ -109,6 +109,43 @@ export async function handleRulesDryRun(request: Request, env: Env): Promise<Res
   return json(result);
 }
 
+export async function handleRulesCompare(request: Request, env: Env): Promise<Response> {
+  const body = await parseJsonBody<Record<string, unknown>>(request);
+  const engineKey = typeof body.engineKey === "string" ? body.engineKey : "energy";
+  const physicalStress = Number(body.physicalStress ?? 0);
+  const priceSignal = Number(body.priceSignal ?? 0);
+  const marketResponse = Number(body.marketResponse ?? 0);
+
+  if (![physicalStress, priceSignal, marketResponse].every((v) => Number.isFinite(v))) {
+    throw new AppError("physicalStress, priceSignal, and marketResponse must be valid numbers", 400, "BAD_REQUEST");
+  }
+
+  const metrics = { physicalStress, priceSignal, marketResponse };
+  const rules = await listActiveRules(env, engineKey);
+
+  const ruledeltas = rules.map((rule) => {
+    const applies = rule.predicate ? evaluateRules([rule], metrics).totalAdjustment !== 0 : false;
+    const delta = evaluateRules([rule], metrics).totalAdjustment;
+    return {
+      ruleKey: rule.ruleKey,
+      name: rule.name,
+      weight: rule.weight,
+      applies,
+      delta
+    };
+  });
+
+  const result = evaluateRules(rules, metrics);
+  return json({
+    engineKey,
+    testMetrics: metrics,
+    ruleDeltas: ruledeltas,
+    totalAdjustment: result.totalAdjustment,
+    allRulesApplied: result.matchedRules.length,
+    expectedNewScore: Math.min(1, Math.max(0, (physicalStress + marketResponse) / 2 + result.totalAdjustment))
+  });
+}
+
 export async function handleBackfillRescore(request: Request, env: Env): Promise<Response> {
   const body = await parseJsonBody<Record<string, unknown>>(request);
   const requestedLimit = Number(body.limit ?? 50);

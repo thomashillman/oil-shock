@@ -11,14 +11,14 @@ import { evaluateRules } from "../core/rules/engine";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 
-function safeValue(value: number | null): number {
+export function safeValue(value: number | null): number {
   if (value === null || Number.isNaN(value)) {
     return 0;
   }
   return Math.max(0, Math.min(1, value));
 }
 
-async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
+export async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
   const wtiBrentSpread = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
   const dieselWtiCrack = await getLatestSeriesValue(env, "energy_spread.diesel_wti_crack");
   const curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
