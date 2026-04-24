@@ -21,3 +21,11 @@ export function isPhase1ParallelRunningEnabled(env: Env): boolean {
 export function getRuntimeMode(env: Env): RuntimeMode {
   return isMacroSignalsEnabled(env) ? "macro-signals" : "oilshock";
 }
+
+export function getEnergyRolloutPercent(env: Env): number {
+  const value = Number(env.ENERGY_ROLLOUT_PERCENT ?? "0");
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round(value)));
+}

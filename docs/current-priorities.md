@@ -4,9 +4,52 @@ This document captures the current sequencing and decision constraints for work 
 
 ## Current status
 
-- The repo currently implements Oil Shock, not a completed Macro Signals platform.
-- `main` is the canonical branch and the implementation source of truth.
-- Macro Signals is the intended direction of travel, but target-state ideas must not be assumed to already exist in code.
+- **Phase 6A (Energy Engine) is in progress** — May 2026, 3-4 week timeline
+  - Energy engine validation and gradual rollout to production (0% → 100%)
+  - Pre-deploy gates framework being implemented
+  - Oil Shock snapshots remain archived and readable as fallback
+- **Phase 6B (Macro Releases) is deferred to Q3 2026** — Requires 8-12 weeks of CPI data + energy stabilization
+- The repo currently implements Oil Shock (retired, snapshots archived) + Energy engine (active, being validated)
+- Macro Signals is the intended direction of travel, but target-state ideas must not be assumed to already exist in code
+- `main` is the canonical branch and the implementation source of truth
+
+## Phase 6A (May 2026): Energy Engine Validation and Rollout
+
+**Timeline**: 3-4 weeks (Days 1-28)
+**Owner**: Energy + Platform teams
+
+### Phase 6A Work Streams
+
+**Stream 1: Gate Infrastructure and Validation (Days 4-21)**
+- [ ] Days 4-7: Implement `/api/admin/gate-status` endpoint (enforced pre-deploy gates)
+- [ ] Days 4-7: Update `/api/health` with `runtimeMode` and `degradedComponents` fields
+- [ ] Days 8-14: Implement energy determinism and data freshness tests
+- [ ] Days 8-14: Implement `/api/admin/rules-compare` endpoint (rule consistency validation)
+- [ ] Days 15-21: Implement per-component error tracking and graceful degradation
+
+**Stream 2: Feature Flags and Monitoring (Days 8-21)**
+- [ ] Add `ENERGY_ROLLOUT_PERCENT` feature flag (0-100 traffic split)
+- [ ] Implement `/api/admin/rollout-status` endpoint
+- [ ] Implement `/api/admin/rollback-status` endpoint
+- [ ] Create observability dashboard (collector rate, scorer latency, guardrails, divergence)
+
+**Stream 3: Production Rollout (Days 22-52)**
+- [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring)
+- [ ] Week 2 (Days 27-35): Gradual public rollout 10% → 20% → 35% → 50%
+- [ ] Week 3 (Days 36-42): Expand to 100% (7-day stability monitoring)
+- [ ] Week 4 (Days 43-52): Stabilization, prepare Phase 6B (Q3)
+
+### Pre-Phase-6A: Documentation (COMPLETE)
+
+- [x] Phase 6A/6B planning docs (8 documents created)
+- [x] Validation strategy clarified (engine-independent, not snapshot comparison)
+- [x] Pre-deploy gate system design documented
+- [x] Failure handling per component documented
+- [x] Rollout strategy (0% → 100%) documented
+- [x] Rollback procedures documented
+- [x] Implementation plan updated (main docs)
+
+See: `/docs/phase-6a-energy.md`, `/docs/validation-strategy.md`, `/docs/pre-deploy-gates.md`, `/docs/energy-rollout-strategy.md`, `/docs/failure-handling.md`, `/docs/phase-6-rollback-procedures.md`, `/docs/phase-6b-macro-releases.md`, `PRE_DEPLOY_CHECKLIST.md`
 
 ## Immediate priorities
 

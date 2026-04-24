@@ -527,6 +527,7 @@ export async function getLatestEngineScore(
 
 export async function updateRuleByKey(
   env: Env,
+  engineKey: string,
   ruleKey: string,
   updates: { weight?: number; predicateJson?: string; isActive?: boolean }
 ): Promise<void> {
@@ -537,13 +538,14 @@ export async function updateRuleByKey(
       weight = COALESCE(?, weight),
       predicate_json = COALESCE(?, predicate_json),
       is_active = COALESCE(?, is_active)
-    WHERE engine_key = 'oil_shock' AND rule_key = ?
+    WHERE engine_key = ? AND rule_key = ?
     `
   )
     .bind(
       updates.weight ?? null,
       updates.predicateJson ?? null,
       typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
+      engineKey,
       ruleKey
     )
     .run();
@@ -591,5 +593,110 @@ export async function getRecentSnapshotsForRescore(
   )
     .bind(limit)
     .all<{ generated_at: string; mismatch_score: number; subscores_json: string }>();
+  return result.results;
+}
+
+// Gate management functions for Phase 6A pre-deploy enforcement
+
+export interface PreDeployGate {
+  id: number;
+  flag_name: string;
+  gate_name: string;
+  status: "PENDING" | "SIGNED_OFF" | "EXPIRED";
+  signed_off_by: string | null;
+  signed_off_at: string | null;
+  expires_at: string | null;
+  notes: string | null;
+  last_validated_at: string | null;
+  validation_result: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGateStatus(env: Env, flagName: string): Promise<PreDeployGate[]> {
+  const now = new Date().toISOString();
+
+  // First update expired gates
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'EXPIRED', updated_at = ?
+    WHERE flag_name = ? AND status = 'SIGNED_OFF' AND expires_at IS NOT NULL AND expires_at < ?
+    `
+  )
+    .bind(now, flagName, now)
+    .run();
+
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      id, flag_name, gate_name, status, signed_off_by, signed_off_at,
+      expires_at, notes, last_validated_at, validation_result, created_at, updated_at
+    FROM pre_deploy_gates
+    WHERE flag_name = ?
+    ORDER BY gate_name
+    `
+  )
+    .bind(flagName)
+    .all<PreDeployGate>();
+
+  return result.results;
+}
+
+export async function canFlipFlag(env: Env, flagName: string): Promise<boolean> {
+  const gates = await getGateStatus(env, flagName);
+  return gates.every(g => g.status === "SIGNED_OFF");
+}
+
+export async function signOffGate(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  signedOffBy: string,
+  notes?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days from now
+
+  // Update the gate
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'SIGNED_OFF', signed_off_by = ?, signed_off_at = ?, expires_at = ?, notes = ?, updated_at = ?
+    WHERE flag_name = ? AND gate_name = ?
+    `
+  )
+    .bind(signedOffBy, now, expiresAt, notes ?? null, now, flagName, gateName)
+    .run();
+
+  // Record in history
+  await env.DB.prepare(
+    `
+    INSERT INTO gate_sign_off_history (flag_name, gate_name, signed_off_by, signed_off_at, expires_at, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(flagName, gateName, signedOffBy, now, expiresAt, notes ?? null, now)
+    .run();
+}
+
+export async function getGateSignOffHistory(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  limit: number = 10
+): Promise<Array<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>> {
+  const result = await env.DB.prepare(
+    `
+    SELECT signed_off_by, signed_off_at, expires_at, notes
+    FROM gate_sign_off_history
+    WHERE flag_name = ? AND gate_name = ?
+    ORDER BY signed_off_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(flagName, gateName, limit)
+    .all<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>();
+
   return result.results;
 }

@@ -11,11 +11,14 @@ import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
 import { handleGetStateHistory } from "./routes/history";
-import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDryRun, handleUpdateRule } from "./routes/admin-rules";
+import { handleBackfillRescore, handleCreateRule, handleListRules, handleRulesDryRun, handleUpdateRule, handleRulesCompare } from "./routes/admin-rules";
 import { handleGuardrailFailures } from "./routes/admin-guardrails";
+import { handleGetGateStatus, handleSignOffGate, handleGetGateHistory } from "./routes/admin-gates";
 import { handleGetEnergyState } from "./routes/engine-state";
 import { handleCompareScorePaths } from "./routes/admin-compare-paths";
 import { handleGetHealth } from "./routes/health";
+import { handleGetRolloutStatus } from "./routes/admin-rollout";
+import { handleGetValidationStatus } from "./routes/admin-validation";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -113,12 +116,44 @@ export default {
         response = await handleRulesDryRun(request, env);
         return withCors(response, request, env);
       }
+      if (request.method === "POST" && pathname === "/api/admin/rules-compare") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleRulesCompare(request, env);
+        return withCors(response, request, env);
+      }
       if (request.method === "GET" && pathname === "/api/admin/guardrails/failures") {
         if (!isAuthorizedAdminRequest(request, env)) {
           response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
           return withCors(response, request, env);
         }
         response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/gate-status") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetGateStatus(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/gate-sign-off") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleSignOffGate(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/gate-history") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetGateHistory(request, env);
         return withCors(response, request, env);
       }
       if (request.method === "GET" && pathname === "/api/admin/compare-score-paths") {
@@ -134,6 +169,22 @@ export default {
           return withCors(response, request, env);
         }
         response = await handleCompareScorePaths(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/rollout-status") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetRolloutStatus(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/validation-status") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetValidationStatus(env);
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/backfill/rescore") {

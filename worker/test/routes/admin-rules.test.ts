@@ -255,4 +255,60 @@ describe("admin rules tooling", () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it("updates oil_shock rules when engineKey is omitted", async () => {
+    const env = createTestEnv() as unknown as Env;
+
+    const response = await worker.fetch(
+      new Request("http://local/api/admin/rules/oilshock.confirmation.spread_widening", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          weight: 0.08,
+          isActive: true
+        })
+      }),
+      env,
+      createExecutionContext()
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("updates energy rules when engineKey is specified", async () => {
+    const env = createTestEnv() as unknown as Env;
+
+    const response = await worker.fetch(
+      new Request("http://local/api/admin/rules/energy.confirmation.spread_widening", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          engineKey: "energy",
+          weight: 0.05,
+          isActive: true
+        })
+      }),
+      env,
+      createExecutionContext()
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("updates macro_releases rules when engineKey is specified", async () => {
+    const env = createTestEnv() as unknown as Env;
+
+    const response = await worker.fetch(
+      new Request("http://local/api/admin/rules/macro.inflation_surprise_high", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          engineKey: "macro_releases",
+          weight: 0.06,
+          isActive: false
+        })
+      }),
+      env,
+      createExecutionContext()
+    );
+    expect(response.status).toBe(200);
+  });
 });

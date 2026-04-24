@@ -106,11 +106,39 @@ Run only checks relevant to this Stage 1 slice:
 * **Backfill and testing:** Implement a tool to re-score historical data using the new rule engine.  Use this to compare new engines’ outputs against expectations.
   * **Status: complete (initial operator shell)** with `/api/admin/backfill/rescore` and UI controls to run historical comparisons with optional override rules.
 
-## Stage 6 – Cut-over and decommissioning
+## Stage 6 – Macro Signals Cut-over (Split into Phase 6A and Phase 6B)
 
-* **Parallel running:** Run the Oil Shock engine and the new Macro Signals engines side by side in production.  Compare outputs and ensure there are no regressions.
-* **Switch default APIs:** Once the new engines are stable, update public API endpoints to serve from Macro Signals.  Provide compatibility shims for old clients if needed.
-* **Retire legacy code:** Remove Oil Shock-specific collectors, scoring functions and routes once all clients have migrated.  Keep legacy data available through archival endpoints or backups.
+**Status: In progress**
+
+Stage 6 is split into two sequential phases based on realistic constraints:
+
+### Phase 6A – Energy Engine (3-4 weeks, May 2026) [IN PROGRESS]
+
+* **Validate energy engine independently:** Energy engine is already active and collecting from EIA APIs. Phase 6A establishes validation gates to confirm reliability before making it the default for `/api/state`.
+* **Implement enforced pre-deploy gates:** 6 gates must pass before feature flag can flip: determinism, data freshness, rule consistency, guardrail correctness, health endpoint schema, rollout monitoring ready.
+* **Gradual rollout to production:** Ramp from 0% → 10% (internal canary, Week 1) → 50% (public rollout, Weeks 2) → 100% (full production, Week 3) with monitoring and automatic rollback triggers.
+* **Establish operational procedures:** Runbooks for monitoring, failure handling, rollback. Pre-deploy checklist tracking gate sign-offs.
+* **Documentation:** See `/docs/phase-6a-energy.md`, `/docs/validation-strategy.md`, `/docs/energy-rollout-strategy.md`, `/docs/failure-handling.md`, `/docs/phase-6-rollback-procedures.md`, `/docs/pre-deploy-gates.md`, `PRE_DEPLOY_CHECKLIST.md`.
+
+**Status: Documentation complete. Implementation starting (Days 4-28).**
+
+### Phase 6B – Macro Releases Engine (Q3 2026, post-stabilization) [DEFERRED]
+
+* **Prerequisites:** Energy engine must be stable in production for 4+ weeks, 8-12 weeks of CPI historical data accumulated, BLS API integration designed and reviewed.
+* **Implement macro_releases engine:** BLS API collector, macro scorer, rules. Comprehensive error handling for transient/permanent API failures.
+* **Multi-engine coordination:** Both energy and macro engines run simultaneously with per-component health tracking and graceful degradation.
+* **Extended gradual rollout:** Similar phased approach as Phase 6A but with multi-engine monitoring.
+* **Complete operator dashboard:** Add macro-specific UI (CPI release tracking, BLS health, combined engine dashboard).
+* **Documentation:** See `/docs/phase-6b-macro-releases.md` (framework complete; detailed implementation deferred to Q3).
+
+**Status: Deferred to Q3 2026 pending Phase 6A stabilization and CPI data accumulation.**
+
+### Post-Phase-6: Snapshot Deprecation
+
+After Phase 6A and Phase 6B are stable for 8+ weeks (target: Q4 2026):
+* Remove Oil Shock snapshot-backed `/api/state` route (was deprecated in Phase 6A Week 4)
+* Archived data remains in `signal_snapshots_archive_oil_shock` for historical query
+* Clients migrated to `/api/v1/energy/state` and `/api/v1/macro_releases/state`
 
 ## Risks and considerations
 
@@ -128,8 +156,16 @@ Run only checks relevant to this Stage 1 slice:
 
 ## References
 
-* `macro-signals-design.md` – detailed description of the target architecture.
-* `docs/architecture.md` – description of the current Oil Shock implementation.
-* `docs/current-priorities.md` – active priorities and near-term work.
+* `macro-signals-design.md` – detailed description of the target architecture
+* `docs/architecture.md` – description of the current Oil Shock implementation
+* `docs/current-priorities.md` – active priorities and near-term work
+* `docs/phase-6a-energy.md` – Phase 6A energy engine implementation (3-4 weeks)
+* `docs/phase-6b-macro-releases.md` – Phase 6B macro releases engine (Q3 2026, deferred)
+* `docs/validation-strategy.md` – What we validate and why (engine-independent, not snapshot comparison)
+* `docs/pre-deploy-gates.md` – Enforced pre-deployment gate system
+* `docs/energy-rollout-strategy.md` – Gradual rollout procedure (0% → 10% → 50% → 100%)
+* `docs/failure-handling.md` – Per-component graceful degradation
+* `docs/phase-6-rollback-procedures.md` – Safe rollback post-migration-0013
+* `PRE_DEPLOY_CHECKLIST.md` – Living checklist tracking gate sign-offs
 
 This plan is a guide, not a contract.  As work progresses and the team learns more, stages may be re-ordered, merged or elaborated.  Update this file as those decisions are made.
