@@ -5,7 +5,7 @@ import { AppError } from "../lib/errors";
 
 export async function handleGetGateStatus(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const flagName = url.searchParams.get("flagName") ?? "ENABLE_MACRO_SIGNALS";
+  const flagName = url.searchParams.get("flagName");
 
   if (!flagName || typeof flagName !== "string") {
     throw new AppError("flagName parameter is required", 400, "BAD_REQUEST");
@@ -20,7 +20,8 @@ export async function handleGetGateStatus(request: Request, env: Env): Promise<R
     canFlip,
     blockingReasons: blockedGates.map(g => {
       if (g.status === "EXPIRED") {
-        return `Gate '${g.gate_name}' expired on ${g.expires_at}. Requires re-validation.`;
+        const expiresText = g.expires_at ?? "unknown date";
+        return `Gate '${g.gate_name}' expired on ${expiresText}. Requires re-validation.`;
       }
       if (g.status === "PENDING") {
         return `Gate '${g.gate_name}' not signed off`;
@@ -67,7 +68,7 @@ export async function handleSignOffGate(request: Request, env: Env): Promise<Res
 
 export async function handleGetGateHistory(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const flagName = url.searchParams.get("flagName") ?? "ENABLE_MACRO_SIGNALS";
+  const flagName = url.searchParams.get("flagName");
   const gateName = url.searchParams.get("gateName");
   const limit = parseInt(url.searchParams.get("limit") ?? "10", 10);
 

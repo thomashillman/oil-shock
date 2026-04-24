@@ -50,6 +50,23 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ---
 
+## Rollout Phases: Overview
+
+The rollout is split into 4 phases controlled by `ENERGY_ROLLOUT_PERCENT`:
+- **Phase 1 (Days 22-26)**: 10% - Internal canary (dev, staging, QA only)
+- **Phase 2 (Days 27-35)**: 50% - Public expansion (50/50 split with Oil Shock)
+- **Phase 3 (Days 36-42)**: 100% - Full rollout (all traffic on energy engine)
+- **Phase 4 (Days 43-52)**: 100% - Stabilization (monitor for long-term stability)
+
+**Important**: The code uses phase boundary ranges:
+- `ENERGY_ROLLOUT_PERCENT < 20%` → "canary-internal" phase
+- `ENERGY_ROLLOUT_PERCENT < 80%` (but ≥ 20%) → "public-expansion" phase  
+- `ENERGY_ROLLOUT_PERCENT ≥ 80%` → "full-rollout" phase
+
+This allows gradual testing within each phase (e.g., 5%, 15%, 25%, etc.) while the standard percentages (10%, 50%, 100%) represent the planned milestones.
+
+---
+
 ## Phase 1: Internal Canary (Days 22-26)
 
 **Setting**: `ENERGY_ROLLOUT_PERCENT = 10`  
