@@ -4,6 +4,7 @@
  * GET /api/admin/rollout-readiness
  *
  * Returns a structured readiness assessment for Energy rollout canary phase.
+ * This evaluates ONLY the Phase 6A required Energy feeds, not all seeded feeds.
  * This is a read-only endpoint that aggregates existing telemetry, validation,
  * and gate data to help operators decide if rollout can proceed.
  *
@@ -22,8 +23,12 @@ import { getEnergyRolloutPercent } from "../lib/feature-flags";
 import { getGateStatus } from "../db/client";
 import { getFeedRegistry } from "../lib/api-instrumentation";
 
+// Phase 6A required feeds for Energy rollout canary decision
+const PHASE_6A_REQUIRED_FEEDS = ["eia_wti", "eia_brent", "eia_diesel_wti_crack"];
+
 /**
- * Calculate P95 latency for feeds in the last hour.
+ * Evaluate API health for Phase 6A required feeds only.
+ * Non-required seeded feeds do not block Phase 6A readiness.
  */
 async function getApiHealthSummary(
   env: Env
@@ -34,13 +39,32 @@ async function getApiHealthSummary(
   healthyFeeds: number;
 }> {
   try {
-    const feedRegistry = await getFeedRegistry(env);
+    const allFeeds = await getFeedRegistry(env);
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    // Filter to only Phase 6A required feeds
+    const requiredFeeds = allFeeds.filter((f) =>
+      PHASE_6A_REQUIRED_FEEDS.includes(f.feedName)
+    );
+
+    // Check that all required feeds are registered
+    const registeredFeedNames = new Set(requiredFeeds.map((f) => f.feedName));
+    const missingFeeds = PHASE_6A_REQUIRED_FEEDS.filter(
+      (f) => !registeredFeedNames.has(f)
+    );
+    if (missingFeeds.length > 0) {
+      return {
+        systemHealthy: false,
+        unhealthyFeeds: missingFeeds.map((f) => `${f} (missing from registry)`),
+        totalFeeds: PHASE_6A_REQUIRED_FEEDS.length,
+        healthyFeeds: 0
+      };
+    }
 
     let healthyCount = 0;
     const unhealthyFeeds: string[] = [];
 
-    for (const feed of feedRegistry) {
+    for (const feed of requiredFeeds) {
       // Get metrics for this feed
       const statsRow = await env.DB.prepare(
         `
@@ -86,7 +110,7 @@ async function getApiHealthSummary(
     return {
       systemHealthy: unhealthyFeeds.length === 0,
       unhealthyFeeds,
-      totalFeeds: feedRegistry.length,
+      totalFeeds: PHASE_6A_REQUIRED_FEEDS.length,
       healthyFeeds: healthyCount
     };
   } catch (error) {

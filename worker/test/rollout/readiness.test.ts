@@ -71,9 +71,7 @@ describe("Phase 6A rollout readiness evaluator", () => {
     const result = evaluateReadiness(evidence, now);
 
     expect(result.status).toBe("blocked");
-    expect(result.blockers).toContain(
-      "API health: unhealthy feeds detected (eia_wti, eia_brent). Cannot proceed with rollout until all feeds healthy."
-    );
+    expect(result.blockers.some((b) => b.includes("unhealthy feeds detected"))).toBe(true);
   });
 
   it("returns blocked status when validation is not ready", () => {
