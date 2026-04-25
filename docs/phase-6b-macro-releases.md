@@ -20,6 +20,33 @@ Phase 6B adds the macro_releases engine, which collects CPI (Consumer Price Inde
 
 5. **Operator dashboard gaps**: Macro-specific UI (CPI release tracking, BLS health) is deferred. Phase 6A establishes baseline; Phase 6B adds macro-specific features.
 
+## Readiness Status (April 2026)
+
+**Parsing and Testing Infrastructure Ready**
+
+The following foundation is in place for Phase 6B readiness (not Phase 6B implementation):
+
+- ✅ BLS CPI response fixtures (realistic API shapes, edge cases)
+- ✅ Deterministic parser tests (CPI value extraction, period handling, malformed data)
+- ✅ Minimal CPI parser implementation (`worker/src/jobs/collectors/macro-releases.ts`)
+- ✅ Disabled-by-default collector shell (not wired into scheduled execution)
+
+**What This Readiness Does NOT Include**
+
+- ❌ Live BLS API fetch (disabled)
+- ❌ CPI observation write path (database integration deferred)
+- ❌ Macro scoring rules (scoring logic deferred)
+- ❌ Scheduled execution (collector not wired into `runCollection`)
+- ❌ UI or dashboard changes
+- ❌ Multi-engine scheduling changes
+
+**Next Steps for Phase 6B Implementation** (after Phase 6A stabilizes)
+
+1. Enable live BLS API fetch behind explicit feature flag
+2. Add observation write path once runtime target decisions are confirmed
+3. Add macro scoring only after Phase 6A stability and sufficient CPI history
+4. Integrate into multi-engine collection and scoring pipeline
+
 ## Phase 6B Prerequisites
 
 Before Phase 6B can begin:

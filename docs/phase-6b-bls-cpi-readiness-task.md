@@ -32,25 +32,34 @@ This is readiness work only. No Phase 6B implementation.
 4. **Disabled Collector Shell** — Optional disabled-by-default collector
 5. **Documentation** — Update Phase 6B readiness status, run final validation
 
-## Files Changed So Far
+## Files Changed (Final)
 
-- `docs/phase-6b-bls-cpi-readiness-task.md` (this file)
+- `docs/phase-6b-bls-cpi-readiness-task.md` (this file — readiness task tracker)
+- `docs/phase-6b-macro-releases.md` (added readiness status section)
+- `docs/current-priorities.md` (updated Phase 6B status summary)
 - `worker/test/fixtures/bls-cpi-responses.json` (BLS API response fixtures)
 - `worker/test/collectors/macro-releases.test.ts` (parser tests + integration tests)
 - `worker/src/jobs/collectors/macro-releases.ts` (minimal parser + disabled collector)
 
-## Validation Run So Far
+## Validation Results (Final)
 
-✅ Commit 1: Task brief created
-✅ Commit 2: Fixtures and parser tests created
-✅ Commit 3: Parser implementation (current)
-  - `corepack pnpm -C worker test -- collectors` — All 9 new tests pass, 85 total tests pass
-  - `corepack pnpm -C worker typecheck` — No type errors
-  - Integration test confirms `collectMacroReleases` is not wired into `runCollection`
+✅ **Commit 1**: Task brief created
+✅ **Commit 2**: Fixtures and parser tests created
+✅ **Commit 3**: Parser implementation + disabled collector shell
+✅ **Commit 4**: Documentation updates and final validation
 
-## Next Step
+**Final Validation**:
+- ✅ `corepack pnpm -C worker test -- collectors` — 85 total tests, 9 new CPI tests pass
+- ✅ `corepack pnpm -C worker typecheck` — No type errors
+- ✅ `corepack pnpm docs:check` — All documentation checks pass
+- ✅ `corepack pnpm -C worker test` — Full suite (85 tests) passes
+- ✅ Integration test confirms `collectMacroReleases` is not wired into `runCollection`
+- ✅ No existing Energy, Oil Shock, or admin routes modified
+- ✅ No live BLS API calls in tests (fixtures only)
 
-Update Phase 6B documentation and run final validation across all test suites.
+## Status
+
+**COMPLETE**: Phase 6B readiness slice ready for PR. CPI parsing infrastructure in place, disabled by default, with documentation clarifying the readiness state and implementation constraints.
 
 ## Out of Scope
 
