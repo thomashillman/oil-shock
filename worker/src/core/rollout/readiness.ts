@@ -87,21 +87,42 @@ export function evaluateReadiness(
     );
   }
 
+  // Check rollout percent (pre-canary must be 0, not already running)
+  if (evidence.rolloutPercent > 10) {
+    blockers.push(
+      `Rollout already in progress (${evidence.rolloutPercent}%). ` +
+        `This pre-canary readiness check is only valid when rollout is at 0%.`
+    );
+  } else if (evidence.rolloutPercent === 10) {
+    warnings.push(
+      `Rollout at 10% canary. This pre-canary readiness check may be stale. ` +
+        `Use ongoing phase monitoring instead.`
+    );
+  }
+
   // Check API health
   if (!evidence.apiHealth) {
     blockers.push(
       "API health data missing. Cannot evaluate feed status."
     );
+  } else if (evidence.apiHealth.totalFeeds === 0) {
+    blockers.push(
+      "No feeds in health summary. Cannot determine feed health."
+    );
   } else if (!evidence.apiHealth.systemHealthy) {
     blockers.push(
       `API health: unhealthy feeds detected (${evidence.apiHealth.unhealthyFeeds.join(", ")}). ` +
-        `Cannot proceed with rollout until all feeds healthy.`
+        `Cannot proceed with rollout until required feeds healthy.`
     );
   }
 
   // Check validation gates
   if (!evidence.validation) {
     blockers.push("Validation data missing. Cannot evaluate gate status.");
+  } else if (evidence.validation.gates.length === 0) {
+    blockers.push(
+      "No validation gates found. Cannot evaluate validation status."
+    );
   } else if (!evidence.validation.allValidationsPassed) {
     const failedGates = evidence.validation.gates
       .filter((g) => g.status !== "passed")
@@ -117,6 +138,10 @@ export function evaluateReadiness(
   if (!evidence.gates) {
     blockers.push(
       "Pre-deploy gate status missing. Cannot evaluate sign-off status."
+    );
+  } else if (evidence.gates.totalCount === 0) {
+    blockers.push(
+      "No pre-deploy gates found. Cannot evaluate sign-off status."
     );
   } else if (!evidence.gates.allSigned) {
     blockers.push(

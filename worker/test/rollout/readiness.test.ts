@@ -299,4 +299,173 @@ describe("Phase 6A rollout readiness evaluator", () => {
     expect(result.status).not.toBe("ready");
     expect(["blocked", "warning"]).toContain(result.status);
   });
+
+  it("returns ready when rollout percent is 0", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 0,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 3,
+        healthyFeeds: 3
+      },
+      validation: {
+        allValidationsPassed: true,
+        readyForRollout: true,
+        gates: [{ gate: "test", status: "passed" }]
+      },
+      gates: {
+        passedCount: 4,
+        totalCount: 4,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("ready");
+    expect(result.blockers).toHaveLength(0);
+  });
+
+  it("returns warning when rollout percent is 10 (canary already active)", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 10,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 3,
+        healthyFeeds: 3
+      },
+      validation: {
+        allValidationsPassed: true,
+        readyForRollout: true,
+        gates: [{ gate: "test", status: "passed" }]
+      },
+      gates: {
+        passedCount: 4,
+        totalCount: 4,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("warning");
+    expect(result.warnings.some((w) => w.includes("10%"))).toBe(true);
+    expect(result.blockers).toHaveLength(0);
+  });
+
+  it("returns blocked when rollout percent > 10", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 50,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 3,
+        healthyFeeds: 3
+      },
+      validation: {
+        allValidationsPassed: true,
+        readyForRollout: true,
+        gates: [{ gate: "test", status: "passed" }]
+      },
+      gates: {
+        passedCount: 4,
+        totalCount: 4,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers.some((b) => b.includes("in progress"))).toBe(true);
+  });
+
+  it("returns blocked when API health has zero feeds", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 0,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 0,
+        healthyFeeds: 0
+      },
+      validation: {
+        allValidationsPassed: true,
+        readyForRollout: true,
+        gates: [{ gate: "test", status: "passed" }]
+      },
+      gates: {
+        passedCount: 4,
+        totalCount: 4,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers.some((b) => b.includes("No feeds"))).toBe(true);
+  });
+
+  it("returns blocked when gates total count is zero", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 0,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 3,
+        healthyFeeds: 3
+      },
+      validation: {
+        allValidationsPassed: true,
+        readyForRollout: true,
+        gates: [{ gate: "test", status: "passed" }]
+      },
+      gates: {
+        passedCount: 0,
+        totalCount: 0,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers.some((b) => b.includes("pre-deploy gates"))).toBe(true);
+  });
+
+  it("returns blocked when validation gates array is empty", () => {
+    const now = "2026-04-25T12:00:00.000Z";
+    const evidence: ReadinessEvidence = {
+      generatedAt: now,
+      rolloutPercent: 0,
+      apiHealth: {
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        totalFeeds: 3,
+        healthyFeeds: 3
+      },
+      validation: {
+        allValidationsPassed: false,
+        readyForRollout: false,
+        gates: []
+      },
+      gates: {
+        passedCount: 4,
+        totalCount: 4,
+        allSigned: true
+      }
+    };
+
+    const result = evaluateReadiness(evidence, now);
+    expect(result.status).toBe("blocked");
+    expect(result.blockers.some((b) => b.includes("validation gates"))).toBe(true);
+  });
 });
