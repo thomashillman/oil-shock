@@ -2,8 +2,8 @@
 
 Generated at: 2026-04-25T22:28:12.249Z
 
-Staging worker: `https://claude-verify-phase6a-st-6f64-energy-dislocation-engine-preview.tj-hillman.workers.dev`
-(Cloudflare Workers preview deployment from PR #79, commit 8a25c8e)
+Staging worker: `https://claude-verify-phase6a-st-6f64-energy-dislocation-engine-preview.tj-hillman.workers.dev`  
+Cloudflare Workers preview deployment from PR #79, latest checked PR head: `9b3072bb`.
 
 ---
 
@@ -38,7 +38,7 @@ GET /api/admin/validation-status
 → D1_ERROR: no such table: pre_deploy_gates: SQLITE_ERROR
 ```
 
-Migrations **0014** (`pre_deploy_gates`), **0015** (`api_health_metrics` + `api_feed_registry`), and **0016** (`add_diesel_crack_feed`) have not been applied to the preview D1 database (`9db64b68-6ffc-4be2-a2c6-667691a5801f`).
+Migrations **0014** (`pre_deploy_gates`), **0015** (`api_health_metrics` + `api_feed_registry`), and **0016** (`add_diesel_crack_feed`) have not been applied to the bound D1 database (`9db64b68-6ffc-4be2-a2c6-667691a5801f`).
 
 Without these tables the following are all non-functional in staging:
 - `/api/admin/api-health` (requires `api_health_metrics`, `api_feed_registry`)
@@ -51,11 +51,13 @@ Without these tables the following are all non-functional in staging:
 ## Service Health
 
 - Service: oil-shock-worker
-- Environment: local
+- Environment: local ⚠️ (see note below)
 - Runtime mode: oilshock
 - Status: healthy ✅
 - Database: healthy (109ms)
 - Config: healthy (20 thresholds)
+
+**Note — APP_ENV/runtime mode mismatch**: The `/health` payload reports `APP_ENV=local` and `runtimeMode=oilshock`, but this is a Cloudflare preview deployment. `wrangler.jsonc` sets `APP_ENV=preview` under `env.preview`, so the branch preview should report `local` only if it was deployed without the `--env preview` flag, or if the Cloudflare Workers CI build does not pass an environment name. This is a configuration verification item and should be confirmed before canary. Do not treat it as fixed.
 
 ---
 
@@ -82,7 +84,9 @@ All code-complete items were independently verified against the local repo:
 | Item | Status |
 |------|--------|
 | Energy collector uses `instrumentedFetch` (`energy.ts` lines 4, 52) | ✅ |
-| Migrations 0015 + 0016 present in `db/migrations/` | ✅ |
+| Migration 0014 (`0014_phase6_pre_deploy_gates.sql`) present in `db/migrations/` | ✅ |
+| Migration 0015 (`0015_api_health_tracking.sql`) present in `db/migrations/` | ✅ |
+| Migration 0016 (`0016_add_diesel_crack_feed.sql`) present in `db/migrations/` | ✅ |
 | `/api/admin/api-health` route implemented | ✅ |
 | `/api/admin/rollout-readiness` route implemented | ✅ |
 | `/api/admin/rollout-status` route implemented | ✅ |
@@ -94,13 +98,16 @@ All code-complete items were independently verified against the local repo:
 
 ## Required Action to Unblock
 
-An operator with Cloudflare credentials must apply pending D1 migrations to the preview database:
+> ⚠️ **Confirm the intended D1 target before applying migrations.**
+> Current `wrangler.jsonc` uses the same D1 database ID (`9db64b68-6ffc-4be2-a2c6-667691a5801f`) for the root, `preview`, and `production` environment configurations. Applying migrations with `--env preview` may affect the same underlying database used by production if this configuration is intentional. Verify the target database with the infrastructure owner before proceeding.
+
+Do not run these commands until the target D1 database has been confirmed.
 
 ```bash
 # Apply all pending migrations to the preview D1 database
 wrangler d1 migrations apply energy_dislocation --env preview
 
-# Or to apply a specific migration:
+# Or to apply specific migrations individually:
 wrangler d1 execute energy_dislocation --env preview \
   --file db/migrations/0014_phase6_pre_deploy_gates.sql
 wrangler d1 execute energy_dislocation --env preview \
@@ -109,7 +116,7 @@ wrangler d1 execute energy_dislocation --env preview \
   --file db/migrations/0016_add_diesel_crack_feed.sql
 ```
 
-After applying migrations, re-run this tool:
+After applying migrations, re-run evidence capture against the same preview URL:
 
 ```bash
 ADMIN_TOKEN=<token> \
@@ -118,11 +125,14 @@ ADMIN_TOKEN=<token> \
   --out docs/evidence/phase6a-staging-telemetry-verification.md
 ```
 
+If `/health` still reports `APP_ENV=local` after re-running, document whether that is expected for branch preview deployments before proceeding to canary.
+
 ---
 
 ## Remaining Steps Before 10% Canary
 
-- [ ] **BLOCKER**: Apply D1 migrations 0014/0015/0016 to preview database
+- [ ] **BLOCKER**: Confirm D1 target database, then apply migrations 0014/0015/0016
+- [ ] **VERIFY**: Confirm whether `APP_ENV=local` in preview deployment is expected or a misconfiguration
 - [ ] Re-run evidence capture and confirm status is "ready" or "warning"
 - [ ] Run staging collection and verify `api_health_metrics` records rows for `eia_wti`, `eia_brent`, `eia_diesel_wti_crack`
 - [ ] Confirm `/api/admin/api-health` returns live Energy feed data
