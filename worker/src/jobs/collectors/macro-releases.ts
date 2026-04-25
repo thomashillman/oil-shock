@@ -1,5 +1,7 @@
 import { normalizePoints } from "../../core/normalize";
+import type { Env } from "../../env";
 import type { NormalizedPoint } from "../../types";
+import { log } from "../../lib/logging";
 
 interface BlsDataPoint {
   year: string;
@@ -76,4 +78,16 @@ export function parseCpiData(response: unknown): NormalizedPoint[] {
   }
 
   return normalizePoints("bls", rawPoints);
+}
+
+// Disabled-by-default collector for Phase 6B CPI data.
+// Not yet wired into runCollection. Phase 6B integration deferred until:
+// - Phase 6A (Energy) is stable for 4+ weeks
+// - 8-12 weeks of CPI data has been accumulated
+// See: docs/phase-6b-macro-releases.md
+export async function collectMacroReleases(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
+  log("info", "Macro Releases collector invoked (not yet enabled in scheduled collection)");
+  // Placeholder: would fetch from BLS API and parse CPI data
+  // Currently returns empty to maintain readiness without affecting production
+  return [];
 }

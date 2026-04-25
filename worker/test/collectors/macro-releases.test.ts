@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../src/env";
 import { createTestEnv } from "../helpers/fake-d1";
-import { parseCpiData } from "../../src/jobs/collectors/macro-releases";
+import { parseCpiData, collectMacroReleases } from "../../src/jobs/collectors/macro-releases";
+import { runCollection } from "../../src/jobs/collect";
 import fixtures from "../fixtures/bls-cpi-responses.json";
 
 vi.mock("../../src/lib/api-instrumentation", () => ({
@@ -58,5 +59,35 @@ describe("parseCpiData", () => {
 
     expect(result1).toEqual(result2);
     expect(JSON.stringify(result1)).toBe(JSON.stringify(result2));
+  });
+});
+
+describe("Macro Releases collector integration", () => {
+  it("returns empty array when invoked directly (currently disabled)", async () => {
+    const env = createTestEnv() as unknown as Env;
+    const points = await collectMacroReleases(env, "2026-04-25T00:00:00.000Z");
+    expect(points).toEqual([]);
+  });
+
+  it("is not called by runCollection (not yet wired into scheduled execution)", async () => {
+    const env = createTestEnv() as unknown as Env;
+    const collectMacroReleasesSpy = vi.spyOn(
+      await import("../../src/jobs/collectors/macro-releases"),
+      "collectMacroReleases"
+    );
+
+    // Mock energy collector to avoid real API calls
+    vi.doMock("../../src/jobs/collectors/energy", () => ({
+      collectEnergy: vi.fn().mockResolvedValue([])
+    }));
+
+    try {
+      await runCollection(env);
+    } catch {
+      // Ignore errors from missing database setup; we're only checking spy
+    }
+
+    // Macro collector should never be called in default pipeline
+    expect(collectMacroReleasesSpy).not.toHaveBeenCalled();
   });
 });

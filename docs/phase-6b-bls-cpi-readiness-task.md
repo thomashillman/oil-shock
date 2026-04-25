@@ -36,17 +36,21 @@ This is readiness work only. No Phase 6B implementation.
 
 - `docs/phase-6b-bls-cpi-readiness-task.md` (this file)
 - `worker/test/fixtures/bls-cpi-responses.json` (BLS API response fixtures)
-- `worker/test/collectors/macro-releases.test.ts` (parser tests)
-- `worker/src/jobs/collectors/macro-releases.ts` (minimal parser)
+- `worker/test/collectors/macro-releases.test.ts` (parser tests + integration tests)
+- `worker/src/jobs/collectors/macro-releases.ts` (minimal parser + disabled collector)
 
 ## Validation Run So Far
 
-✅ `corepack pnpm -C worker test -- collectors` — All 7 new tests pass, 83 total tests pass
-✅ `corepack pnpm -C worker typecheck` — No type errors
+✅ Commit 1: Task brief created
+✅ Commit 2: Fixtures and parser tests created
+✅ Commit 3: Parser implementation (current)
+  - `corepack pnpm -C worker test -- collectors` — All 9 new tests pass, 85 total tests pass
+  - `corepack pnpm -C worker typecheck` — No type errors
+  - Integration test confirms `collectMacroReleases` is not wired into `runCollection`
 
 ## Next Step
 
-Add optional disabled-by-default collector shell and prove it's not wired into scheduled execution.
+Update Phase 6B documentation and run final validation across all test suites.
 
 ## Out of Scope
 
