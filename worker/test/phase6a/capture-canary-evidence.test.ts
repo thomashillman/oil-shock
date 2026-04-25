@@ -135,6 +135,46 @@ describe("Phase 6A Evidence Capture CLI", () => {
       const call = mockFetch.mock.calls[0];
       expect(call[1].headers).toBeUndefined();
     });
+
+    it("marks HTTP 200 with malformed JSON as failed (not ok)", async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as any;
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token");
+        }
+      });
+
+      const result = await fetchEndpoint("/health");
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(200);
+      expect(result.data).toBeNull();
+      expect(result.error).toContain("Failed to parse JSON response");
+    });
+
+    it("marks HTTP 200 with empty body as failed", async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch as any;
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new Error("body is not JSON");
+        }
+      });
+
+      const result = await fetchEndpoint("/health");
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe(200);
+      expect(result.data).toBeNull();
+      expect(result.error).toContain("Failed to parse JSON response");
+    });
   });
 
   describe("collectEvidence", () => {

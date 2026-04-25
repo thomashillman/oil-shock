@@ -181,6 +181,38 @@ export function formatEvidenceReport(
     lines.push("");
   }
 
+  // Endpoint collection status - always show if evidence objects exist
+  if (health || readiness || rolloutStatus || apiHealth) {
+    lines.push("## Endpoint Collection Status");
+    lines.push("");
+
+    if (health) {
+      const icon = health.ok ? "✅" : "❌";
+      const statusStr = health.status === 0 ? "network error" : `HTTP ${health.status}`;
+      const errorStr = health.error ? ` - ${health.error}` : "";
+      lines.push(`${icon} \`/health\`: ${statusStr}${errorStr}`);
+    }
+    if (readiness) {
+      const icon = readiness.ok ? "✅" : "❌";
+      const statusStr = readiness.status === 0 ? "network error" : `HTTP ${readiness.status}`;
+      const errorStr = readiness.error ? ` - ${readiness.error}` : "";
+      lines.push(`${icon} \`/api/admin/rollout-readiness\`: ${statusStr}${errorStr}`);
+    }
+    if (rolloutStatus) {
+      const icon = rolloutStatus.ok ? "✅" : "❌";
+      const statusStr = rolloutStatus.status === 0 ? "network error" : `HTTP ${rolloutStatus.status}`;
+      const errorStr = rolloutStatus.error ? ` - ${rolloutStatus.error}` : "";
+      lines.push(`${icon} \`/api/admin/rollout-status\`: ${statusStr}${errorStr}`);
+    }
+    if (apiHealth) {
+      const icon = apiHealth.ok ? "✅" : "❌";
+      const statusStr = apiHealth.status === 0 ? "network error" : `HTTP ${apiHealth.status}`;
+      const errorStr = apiHealth.error ? ` - ${apiHealth.error}` : "";
+      lines.push(`${icon} \`/api/admin/api-health\`: ${statusStr}${errorStr}`);
+    }
+    lines.push("");
+  }
+
   // Main status section
   if (readiness?.data) {
     lines.push("## Readiness Assessment");

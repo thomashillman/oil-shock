@@ -469,6 +469,61 @@ describe("Evidence Report Formatter", () => {
       expect(report).toContain("HTTP 502");
       expect(report).toContain("Network error");
     });
+
+    it("marks HTTP 200 with JSON parse failure as incomplete with error message", () => {
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: false,
+        status: 200,
+        data: null,
+        error: "Failed to parse JSON response: SyntaxError"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, null, null, null, mockGeneratedAt);
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).toContain("HTTP 200");
+      expect(report).toContain("Failed to parse JSON");
+    });
+
+    it("shows endpoint collection status for all four endpoints", () => {
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: { ok: true, service: "oil-shock-worker", env: "staging", featureFlags: { macroSignals: true } }
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: { status: "ready", blockers: [], warnings: [], manualChecks: [], evidence: { generatedAt: mockGeneratedAt, rolloutPercent: 0, apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 0, healthyFeeds: 0 }, validation: { allValidationsPassed: true, readyForRollout: true, gates: [] }, gates: { passedCount: 0, totalCount: 0, allSigned: true } } }
+      };
+
+      const statusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: false,
+        status: 503,
+        data: { generatedAt: mockGeneratedAt, systemHealthy: false, unhealthyFeeds: ["eia_wti"], feeds: [], summary: { totalFeeds: 1, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 1 } },
+        error: "HTTP 503"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, statusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      expect(report).toContain("Endpoint Collection Status");
+      expect(report).toContain("✅ `/health`: HTTP 200");
+      expect(report).toContain("✅ `/api/admin/rollout-readiness`: HTTP 200");
+      expect(report).toContain("✅ `/api/admin/rollout-status`: HTTP 200");
+      expect(report).toContain("❌ `/api/admin/api-health`: HTTP 503");
+    });
   });
 
   describe("incomplete evidence", () => {

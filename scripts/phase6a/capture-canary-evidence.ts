@@ -122,7 +122,8 @@ It does NOT call any POST endpoints, gate sign-off endpoints, or deployment comm
 
 /**
  * Fetch a read-only endpoint with error handling
- * Returns both status and parsed data, even on error
+ * Returns both status and parsed data, even on error.
+ * Treats JSON parse failures as endpoint failures even on HTTP 200.
  */
 export async function fetchEndpoint<T>(
   url: string,
@@ -141,18 +142,20 @@ export async function fetchEndpoint<T>(
 
     const response = await fetch(url, options);
     let data: T | null = null;
+    let parseError: string | undefined;
 
     try {
       data = await response.json();
-    } catch {
-      // JSON parse failed, but return the status
+    } catch (error) {
+      // JSON parse failed: treat as endpoint failure even on HTTP 200
+      parseError = `Failed to parse JSON response: ${String(error)}`;
     }
 
     return {
-      ok: response.ok,
+      ok: response.ok && data !== null && !parseError,
       status: response.status,
       data,
-      error: !response.ok ? `HTTP ${response.status}` : undefined
+      error: parseError || (!response.ok ? `HTTP ${response.status}` : undefined)
     };
   } catch (error) {
     return {
