@@ -2,7 +2,6 @@ import type { Env } from "./env";
 import { runPipeline } from "./jobs/run-pipeline";
 import { withCors } from "./lib/cors";
 import { toAppError } from "./lib/errors";
-<<<<<<< HEAD
 import { getRuntimeMode, isPhase1ParallelRunningEnabled } from "./lib/feature-flags";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
