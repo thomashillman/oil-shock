@@ -43,6 +43,9 @@
 ### Commit 2
 - `worker/test/rollout/readiness.test.ts` — Readiness evaluator tests (failing as expected)
 
+### Commit 3
+- `worker/src/core/rollout/readiness.ts` — Readiness evaluator implementation (pure, no network calls)
+
 ---
 
 ## Validation Run So Far
@@ -53,13 +56,17 @@
 **Commit 2**:
 - ✅ `corepack pnpm -C worker test -- readiness` (fails as expected: module not found)
 
+**Commit 3**:
+- ✅ `corepack pnpm -C worker test -- readiness` (9 tests pass)
+- ✅ `corepack pnpm -C worker typecheck` (no errors)
+
 ---
 
 ## Current Status
 
-**Phase**: Tests written (Commit 2 complete, waiting to commit)
+**Phase**: Implementation complete (Commit 3 in progress)
 
-**Next Step**: Implement readiness evaluator module
+**Next Step**: Create optional admin endpoint (Commit 4)
 
 ---
 
