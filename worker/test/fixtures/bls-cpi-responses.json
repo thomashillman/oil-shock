@@ -1,0 +1,66 @@
+{
+  "successResponse": {
+    "status": "REQUEST_SUCCEEDED",
+    "message": [],
+    "Results": {
+      "series": [
+        {
+          "seriesID": "CPIAUCSL",
+          "data": [
+            {
+              "year": "2026",
+              "period": "M04",
+              "periodName": "April",
+              "value": "316.582",
+              "latest": true
+            },
+            {
+              "year": "2026",
+              "period": "M03",
+              "periodName": "March",
+              "value": "315.865",
+              "latest": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "emptyDataResponse": {
+    "status": "REQUEST_SUCCEEDED",
+    "message": [],
+    "Results": {
+      "series": [
+        {
+          "seriesID": "CPIAUCSL",
+          "data": []
+        }
+      ]
+    }
+  },
+  "malformedResponse": {
+    "status": "REQUEST_SUCCEEDED",
+    "message": [],
+    "Results": {
+      "series": [
+        {
+          "seriesID": "CPIAUCSL",
+          "data": [
+            {
+              "year": "2026",
+              "period": "M04",
+              "value": null
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "noSeriesResponse": {
+    "status": "REQUEST_SUCCEEDED",
+    "message": [],
+    "Results": {
+      "series": []
+    }
+  }
+}

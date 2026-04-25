@@ -198,18 +198,18 @@ describe("App", () => {
     stubFetchWithStatePayload(mockNestedSnakeCaseState);
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
-    expect(screen.getByText("75%")).toBeInTheDocument();
-    expect(screen.getByText("25%")).toBeInTheDocument();
-    expect(screen.getByText("68%")).toBeInTheDocument();
+    expect(screen.getAllByText("75%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("68%").length).toBeGreaterThan(0);
   });
 
   it("renders non-zero subscores when numeric fields are strings", async () => {
     stubFetchWithStatePayload(mockStringifiedNumericState);
     render(<App />);
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
-    expect(screen.getByText("35%")).toBeInTheDocument();
-    expect(screen.getByText("30%")).toBeInTheDocument();
-    expect(screen.getByText("20%")).toBeInTheDocument();
+    expect(screen.getAllByText("35%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("30%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("20%").length).toBeGreaterThan(0);
     expect(screen.queryByText("NaN%")).not.toBeInTheDocument();
   });
 
@@ -219,12 +219,12 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
     // Subscore labels must render with the user-selected wording.
     expect(screen.getByText("Physical pressure")).toBeInTheDocument();
-    expect(screen.getByText("Price signal")).toBeInTheDocument();
-    expect(screen.getByText("Market response")).toBeInTheDocument();
+    expect(screen.getAllByText("Price signal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Market response").length).toBeGreaterThan(0);
     // Percentages from mockState: 75%, 25%, 68%.
-    expect(screen.getByText("75%")).toBeInTheDocument();
-    expect(screen.getByText("25%")).toBeInTheDocument();
-    expect(screen.getByText("68%")).toBeInTheDocument();
+    expect(screen.getAllByText("75%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("68%").length).toBeGreaterThan(0);
   });
 
   it("renders concrete subscore percentages from snake_case top-level and non-canonical nested keys", async () => {
@@ -233,9 +233,9 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
 
     expect(screen.queryAllByText("NaN%")).toHaveLength(0);
-    expect(screen.getByText("75%")).toBeInTheDocument();
-    expect(screen.getByText("25%")).toBeInTheDocument();
-    expect(screen.getByText("68%")).toBeInTheDocument();
+    expect(screen.getAllByText("75%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("25%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("68%").length).toBeGreaterThan(0);
   });
 
   it("surfaces a visible error when Recalculate POST returns 500", async () => {
@@ -307,5 +307,176 @@ describe("App", () => {
     expect(screen.getByRole("alert").textContent).toMatch(/timed out/i);
 
     vi.useRealTimers();
+  });
+
+  it("loads dashboard drill-down with rules and guardrails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        if (url.includes("/api/evidence")) {
+          return Promise.resolve({ ok: true, json: async () => mockEvidence });
+        }
+        if (url.includes("/api/admin/rules")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({ rules: [{ ruleKey: "oilshock.recognition_gap_bonus", name: "x", weight: 0.03, predicate: {} }] }),
+          });
+        }
+        if (url.includes("/api/admin/guardrails/failures")) {
+          return Promise.resolve({ ok: true, json: async () => ({ failures: ["stale_dimension:priceSignal"] }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "Dashboard" }));
+    });
+
+    await waitFor(() => expect(screen.getByText("stale_dimension:priceSignal")).toBeInTheDocument());
+    expect(screen.getByText(/oilshock.recognition_gap_bonus/)).toBeInTheDocument();
+    expect(screen.getByText("Engine inventory")).toBeInTheDocument();
+    expect(screen.getByText("WTI spot")).toBeInTheDocument();
+  });
+
+  it("validates rule syntax and blocks invalid preview", async () => {
+    stubFetch(true, true);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Rule editor" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /advanced json mode/i }));
+    fireEvent.change(screen.getByLabelText("Predicate JSON"), { target: { value: "{" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/unable to preview rule/i);
+  });
+
+  it("requires numeric weight before previewing rule impact", async () => {
+    stubFetch(true, true);
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Rule editor" }));
+    fireEvent.change(screen.getByLabelText("Rule weight"), { target: { value: "abc" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
+    });
+    expect(screen.getByRole("alert").textContent).toMatch(/weight must be numeric/i);
+  });
+
+
+  it("exports backfill rows as csv", async () => {
+    const createObjectURL = vi.fn(() => "blob:mock");
+    const revokeObjectURL = vi.fn();
+    const clickMock = vi.fn();
+    const realCreateElement = document.createElement.bind(document);
+
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string) => {
+      const element = realCreateElement(tagName);
+      if (tagName.toLowerCase() === "a") {
+        (element as HTMLAnchorElement).click = clickMock;
+      }
+      return element;
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        if (url.includes("/api/evidence")) {
+          return Promise.resolve({ ok: true, json: async () => mockEvidence });
+        }
+        if (url.includes("/api/admin/backfill/rescore")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              comparisons: [{ generatedAt: "2026-04-20T00:00:00.000Z", baselineScore: 0.2, rescoredWithOverride: 0.3 }],
+            }),
+          });
+        }
+        if (url.includes("/api/admin/rules")) {
+          return Promise.resolve({ ok: true, json: async () => ({ rules: [] }) });
+        }
+        if (url.includes("/api/admin/guardrails/failures")) {
+          return Promise.resolve({ ok: true, json: async () => ({ failures: [] }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Backfill" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run historical re-score" }));
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(clickMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+  it("renders backfill analysis table and summary metrics", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/state")) {
+          return Promise.resolve({ ok: true, json: async () => mockState });
+        }
+        if (url.includes("/api/evidence")) {
+          return Promise.resolve({ ok: true, json: async () => mockEvidence });
+        }
+        if (url.includes("/api/admin/backfill/rescore")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => ({
+              comparisons: [
+                { generatedAt: "2026-04-20T00:00:00.000Z", baselineScore: 0.2, rescoredWithOverride: 0.3 },
+                { generatedAt: "2026-04-19T00:00:00.000Z", baselineScore: 0.4, rescoredWithOverride: 0.35 },
+              ],
+            }),
+          });
+        }
+        if (url.includes("/api/admin/rules")) {
+          return Promise.resolve({ ok: true, json: async () => ({ rules: [] }) });
+        }
+        if (url.includes("/api/admin/guardrails/failures")) {
+          return Promise.resolve({ ok: true, json: async () => ({ failures: [] }) });
+        }
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }),
+    );
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: "Backfill" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Run historical re-score" }));
+    });
+    expect(await screen.findByText("Avg delta")).toBeInTheDocument();
+    expect(screen.getByText("Generated")).toBeInTheDocument();
+    expect(screen.getByText("2026-04-20T00:00:00.000Z")).toBeInTheDocument();
   });
 });

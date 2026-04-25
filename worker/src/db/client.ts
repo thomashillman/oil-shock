@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState, ScoringThresholds } from "../types";
 import { AppError } from "../lib/errors";
+import { isRulePredicate, type RuleDefinition } from "../core/rules/engine";
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
@@ -90,9 +91,10 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
       subscores_json,
       clocks_json,
       ledger_impact_json,
+      guardrail_flags_json,
       run_key
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -107,11 +109,13 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
       JSON.stringify(snapshot.subscores),
       JSON.stringify(snapshot.clocks),
       JSON.stringify(snapshot.ledgerImpact),
+      JSON.stringify(snapshot.guardrailFlags),
       runKey
     )
     .run();
 
-  return Number(result.meta.last_row_id ?? 0);
+  const snapshotId = Number(result.meta.last_row_id ?? 0);
+  return snapshotId;
 }
 
 export async function writeRunEvidence(env: Env, runKey: string, evidenceItems: ScoreEvidence[]): Promise<void> {
@@ -168,6 +172,7 @@ export async function getLatestSnapshot(env: Env) {
     subscores_json: string;
     clocks_json: string;
     ledger_impact_json: string | null;
+    guardrail_flags_json: string | null;
     run_key: string | null;
   }>();
   return row ?? null;
@@ -326,9 +331,9 @@ export async function getFirstTransmissionEvent(env: Env): Promise<{ generated_a
 export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
   const result = await env.DB.prepare(
     `SELECT key, value FROM config_thresholds`
-  ).all<{ key: string; value: number }>();
+  ).all<{ key: string; value: unknown }>();
 
-  const map = new Map<string, number>(result.results.map((r) => [r.key, r.value]));
+  const map = new Map<string, unknown>(result.results.map((r) => [r.key, r.value]));
 
   const required: Array<[keyof ScoringThresholds, string]> = [
     ["stateAlignedMax", "state_aligned_threshold_max"],
@@ -358,7 +363,11 @@ export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
     if (value === undefined) {
       throw new AppError(`Missing config_thresholds key: ${key}`, 500, "MISSING_THRESHOLD");
     }
-    thresholds[field] = value;
+    const numericValue = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      throw new AppError(`Invalid config_thresholds value for key: ${key}`, 500, "INVALID_THRESHOLD");
+    }
+    thresholds[field] = numericValue;
   }
 
   return thresholds;
@@ -394,4 +403,300 @@ export async function getLedgerEntries(env: Env): Promise<
     retiredAt: row.retired_at,
     reviewDueAt: row.review_due_at
   }));
+}
+
+interface RuleRow {
+  id: number;
+  engine_key: string;
+  rule_key: string;
+  name: string;
+  predicate_json: string;
+  weight: number | null;
+  action: string;
+}
+
+function normalizeRule(row: RuleRow): RuleDefinition {
+  let predicate: unknown;
+  try {
+    predicate = JSON.parse(row.predicate_json);
+  } catch {
+    throw new AppError(`Invalid predicate_json for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+  if (!isRulePredicate(predicate)) {
+    throw new AppError(`Unsupported predicate for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+  if (row.action !== "adjust_mismatch") {
+    throw new AppError(`Unsupported action for rule: ${row.rule_key}`, 500, "INVALID_RULE");
+  }
+
+  return {
+    id: row.id,
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    name: row.name,
+    action: row.action as RuleDefinition["action"],
+    weight: Number(row.weight ?? 0),
+    predicate
+  };
+}
+
+export async function listActiveRules(env: Env, engineKey = "oil_shock"): Promise<RuleDefinition[]> {
+  const rows = await env.DB.prepare(
+    `
+    SELECT id, engine_key, rule_key, name, predicate_json, weight, action
+    FROM rules
+    WHERE engine_key = ? AND is_active = 1
+    ORDER BY id ASC
+    `
+  )
+    .bind(engineKey)
+    .all<RuleRow>();
+  return rows.results.map(normalizeRule);
+}
+
+export async function writeEngineScore(
+  env: Env,
+  score: {
+    engineKey: string;
+    feedKey: string;
+    scoredAt: string;
+    scoreValue: number;
+    confidence: number | null;
+    flags: string[];
+    runKey?: string | null;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO scores (
+      engine_key,
+      feed_key,
+      scored_at,
+      score_value,
+      confidence,
+      flags_json,
+      run_key
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      score.engineKey,
+      score.feedKey,
+      score.scoredAt,
+      score.scoreValue,
+      score.confidence,
+      JSON.stringify(score.flags),
+      score.runKey ?? null
+    )
+    .run();
+}
+
+export async function getLatestEngineScore(
+  env: Env,
+  engineKey: string,
+  feedKey: string
+): Promise<{
+  engine_key: string;
+  feed_key: string;
+  scored_at: string;
+  score_value: number;
+  confidence: number | null;
+  flags_json: string | null;
+} | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, scored_at, score_value, confidence, flags_json
+    FROM scores
+    WHERE engine_key = ? AND feed_key = ?
+    ORDER BY scored_at DESC
+    LIMIT 1
+    `
+  )
+    .bind(engineKey, feedKey)
+    .first<{
+      engine_key: string;
+      feed_key: string;
+      scored_at: string;
+      score_value: number;
+      confidence: number | null;
+      flags_json: string | null;
+    }>();
+  return row ?? null;
+}
+
+export async function updateRuleByKey(
+  env: Env,
+  engineKey: string,
+  ruleKey: string,
+  updates: { weight?: number; predicateJson?: string; isActive?: boolean }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    UPDATE rules
+    SET
+      weight = COALESCE(?, weight),
+      predicate_json = COALESCE(?, predicate_json),
+      is_active = COALESCE(?, is_active)
+    WHERE engine_key = ? AND rule_key = ?
+    `
+  )
+    .bind(
+      updates.weight ?? null,
+      updates.predicateJson ?? null,
+      typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
+      engineKey,
+      ruleKey
+    )
+    .run();
+}
+
+export async function createRule(
+  env: Env,
+  input: {
+    engineKey: string;
+    ruleKey: string;
+    name: string;
+    predicateJson: string;
+    weight: number;
+    isActive: boolean;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO rules (engine_key, rule_key, name, predicate_json, weight, action, is_active)
+    VALUES (?, ?, ?, ?, ?, 'adjust_mismatch', ?)
+    `
+  )
+    .bind(
+      input.engineKey,
+      input.ruleKey,
+      input.name,
+      input.predicateJson,
+      input.weight,
+      input.isActive ? 1 : 0
+    )
+    .run();
+}
+
+export async function getRecentSnapshotsForRescore(
+  env: Env,
+  limit: number
+): Promise<Array<{ generated_at: string; mismatch_score: number; subscores_json: string }>> {
+  const result = await env.DB.prepare(
+    `
+    SELECT generated_at, mismatch_score, subscores_json
+    FROM signal_snapshots
+    ORDER BY generated_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(limit)
+    .all<{ generated_at: string; mismatch_score: number; subscores_json: string }>();
+  return result.results;
+}
+
+// Gate management functions for Phase 6A pre-deploy enforcement
+
+export interface PreDeployGate {
+  id: number;
+  flag_name: string;
+  gate_name: string;
+  status: "PENDING" | "SIGNED_OFF" | "EXPIRED";
+  signed_off_by: string | null;
+  signed_off_at: string | null;
+  expires_at: string | null;
+  notes: string | null;
+  last_validated_at: string | null;
+  validation_result: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGateStatus(env: Env, flagName: string): Promise<PreDeployGate[]> {
+  const now = new Date().toISOString();
+
+  // First update expired gates
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'EXPIRED', updated_at = ?
+    WHERE flag_name = ? AND status = 'SIGNED_OFF' AND expires_at IS NOT NULL AND expires_at < ?
+    `
+  )
+    .bind(now, flagName, now)
+    .run();
+
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      id, flag_name, gate_name, status, signed_off_by, signed_off_at,
+      expires_at, notes, last_validated_at, validation_result, created_at, updated_at
+    FROM pre_deploy_gates
+    WHERE flag_name = ?
+    ORDER BY gate_name
+    `
+  )
+    .bind(flagName)
+    .all<PreDeployGate>();
+
+  return result.results;
+}
+
+export async function canFlipFlag(env: Env, flagName: string): Promise<boolean> {
+  const gates = await getGateStatus(env, flagName);
+  return gates.every(g => g.status === "SIGNED_OFF");
+}
+
+export async function signOffGate(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  signedOffBy: string,
+  notes?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days from now
+
+  // Update the gate
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'SIGNED_OFF', signed_off_by = ?, signed_off_at = ?, expires_at = ?, notes = ?, updated_at = ?
+    WHERE flag_name = ? AND gate_name = ?
+    `
+  )
+    .bind(signedOffBy, now, expiresAt, notes ?? null, now, flagName, gateName)
+    .run();
+
+  // Record in history
+  await env.DB.prepare(
+    `
+    INSERT INTO gate_sign_off_history (flag_name, gate_name, signed_off_by, signed_off_at, expires_at, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(flagName, gateName, signedOffBy, now, expiresAt, notes ?? null, now)
+    .run();
+}
+
+export async function getGateSignOffHistory(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  limit: number = 10
+): Promise<Array<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>> {
+  const result = await env.DB.prepare(
+    `
+    SELECT signed_off_by, signed_off_at, expires_at, notes
+    FROM gate_sign_off_history
+    WHERE flag_name = ? AND gate_name = ?
+    ORDER BY signed_off_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(flagName, gateName, limit)
+    .all<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>();
+
+  return result.results;
 }

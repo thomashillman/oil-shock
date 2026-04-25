@@ -3,45 +3,83 @@ import {
   finishRun,
   getLatestSeriesValue,
   startRun,
-  writeRunEvidence,
-  writeSnapshot,
-  getLatestStateChangeEvent,
-  writeSateChangeEvent,
-  getLedgerEntries,
   loadThresholds,
-  getFirstNonAlignedStateEvent,
-  getFirstTransmissionEvent
+  listActiveRules,
+  writeEngineScore
 } from "../db/client";
-import { evaluateFreshness } from "../core/freshness/evaluate";
-import { evaluateEvidenceCoverage } from "../core/freshness/evidence-coverage";
-import { computeSnapshot } from "../core/scoring/compute";
-import { computeDislocationState } from "../core/scoring/state-labels";
-import { computeClocks } from "../core/scoring/clocks";
-import { classifyEvidence } from "../core/scoring/evidence-classifier";
-import { applyLedgerAdjustments } from "../core/ledger/impact";
+import { evaluateRules } from "../core/rules/engine";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
-import type { DislocationState } from "../types";
 
-function safeValue(value: number | null): number {
+export function safeValue(value: number | null): number {
   if (value === null || Number.isNaN(value)) {
     return 0;
   }
   return Math.max(0, Math.min(1, value));
 }
 
-function avgSafe(values: (number | null)[]): number {
-  const valid = values.filter((v): v is number => v !== null && Number.isFinite(v));
-  if (valid.length === 0) return 0;
-  return safeValue(valid.reduce((a, b) => a + b, 0) / valid.length);
-}
+export async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
+  let wtiBrentSpread, dieselWtiCrack, curveSlope;
+  const componentErrors: string[] = [];
 
-function newestObservedAt(...rows: ({ observedAt: string } | null)[]): string | null {
-  const timestamps = rows
-    .filter((r): r is { observedAt: string } => r !== null)
-    .map((r) => r.observedAt);
-  if (timestamps.length === 0) return null;
-  return timestamps.reduce((latest, ts) => (ts > latest ? ts : latest));
+  // Phase 1: Collect data with per-component error tracking
+  try {
+    wtiBrentSpread = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
+    dieselWtiCrack = await getLatestSeriesValue(env, "energy_spread.diesel_wti_crack");
+    curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
+  } catch (error) {
+    componentErrors.push("collector");
+    log("error", "Energy collector failed", { runKey, error: String(error) });
+    // Continue with graceful degradation: missing data will cause early return
+  }
+
+  if (!wtiBrentSpread || !dieselWtiCrack) {
+    // No data available: graceful degradation complete
+    if (componentErrors.length > 0) {
+      log("warn", "Energy scoring aborted: insufficient data after collector failure", { runKey, missingFeeds: ["wti_brent_spread", "diesel_wti_crack"] });
+    }
+    return;
+  }
+
+  // Phase 2: Score with per-component error tracking
+  try {
+    const physicalStress = safeValue(wtiBrentSpread.value);
+    const marketResponse = safeValue(dieselWtiCrack.value);
+    const priceSignal = safeValue(curveSlope?.value ?? 0);
+    const rules = await listActiveRules(env, "energy");
+    const ruleEvaluation = evaluateRules(rules, {
+      physicalStress,
+      priceSignal,
+      marketResponse
+    });
+
+    const baseScore = safeValue((physicalStress + marketResponse) / 2);
+    const scoreValue = safeValue(baseScore + ruleEvaluation.totalAdjustment);
+    const flags = curveSlope ? [] : ["missing_price_confirmation"];
+
+    // Add degradation flags if collector had errors
+    if (componentErrors.includes("collector")) {
+      flags.push("degraded_collector");
+    }
+
+    await writeEngineScore(env, {
+      engineKey: "energy",
+      feedKey: "energy.state",
+      scoredAt: nowIso,
+      scoreValue,
+      confidence: flags.length > 0 ? 0.6 : 0.8,
+      flags,
+      runKey
+    });
+
+    if (componentErrors.length > 0) {
+      log("warn", "Energy scoring completed with degraded components", { runKey, degradedComponents: componentErrors });
+    }
+  } catch (error) {
+    componentErrors.push("scorer");
+    log("error", "Energy scorer failed", { runKey, error: String(error), componentErrors });
+    // Graceful degradation: don't re-throw, continue with stale data available for fallback
+  }
 }
 
 export async function runScore(env: Env, now = new Date()): Promise<void> {
@@ -49,152 +87,14 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
   const nowIso = now.toISOString();
   await startRun(env, runKey, "score");
   log("info", "Starting scoring run", { runKey });
-  const thresholds = await loadThresholds(env);
 
   try {
-    // physical_stress: EIA crude stocks + refinery utilization + ENTSOG flows + GIE storage
-    const inventoryDraw = await getLatestSeriesValue(env, "physical_stress.inventory_draw");
-    const refineryUtil = await getLatestSeriesValue(env, "physical_stress.refinery_utilization");
-    const euPipelineFlow = await getLatestSeriesValue(env, "physical_stress.eu_pipeline_flow");
-    const euGasStorage = await getLatestSeriesValue(env, "physical_stress.eu_gas_storage");
-
-    // price_signal: WTI spot + futures curve slope
-    const spotWti = await getLatestSeriesValue(env, "price_signal.spot_wti");
-    const curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
-
-    // market_response: 3:2:1 crack spread + SEC impairment filings
-    const crackSpread = await getLatestSeriesValue(env, "market_response.crack_spread");
-    const secImpairment = await getLatestSeriesValue(env, "market_response.sec_impairment");
-
-    const physicalStress = avgSafe([
-      inventoryDraw?.value ?? null,
-      refineryUtil?.value ?? null,
-      euPipelineFlow?.value ?? null,
-      euGasStorage?.value ?? null
-    ]);
-
-    const priceSignal = avgSafe([
-      spotWti?.value ?? null,
-      curveSlope?.value ?? null
-    ]);
-
-    const marketResponse = avgSafe([
-      crackSpread?.value ?? null,
-      secImpairment?.value ?? null
-    ]);
-
-    const physicalStressObservedAt = newestObservedAt(inventoryDraw, refineryUtil, euPipelineFlow, euGasStorage);
-    const priceSignalObservedAt = newestObservedAt(spotWti, curveSlope);
-    const marketResponseObservedAt = newestObservedAt(crackSpread, secImpairment);
-
-    const freshness = evaluateFreshness({
-      physicalStressObservedAt,
-      priceSignalObservedAt,
-      marketResponseObservedAt
-    });
-
-    // Compute initial snapshot with subscores
-    let { snapshot, evidence } = computeSnapshot({
-      nowIso,
-      physicalStress,
-      priceSignal,
-      marketResponse,
-      physicalStressObservedAt,
-      priceSignalObservedAt,
-      marketResponseObservedAt,
-      freshness,
-      thresholds
-    });
-
-    // Apply ledger adjustments to mismatch score
-    const ledgerEntries = await getLedgerEntries(env);
-    const { adjustedMismatchScore, ledgerImpact } = applyLedgerAdjustments({
-      mismatchScore: snapshot.mismatchScore,
-      physicalStress: snapshot.subscores.physicalStress,
-      ledgerEntries,
-      nowIso,
-      thresholds
-    });
-    snapshot.mismatchScore = adjustedMismatchScore;
-    snapshot.ledgerImpact = ledgerImpact;
-
-    // Get previous state change event to compute duration
-    const previousStateEvent = await getLatestStateChangeEvent(env);
-    let durationInCurrentStateSeconds: number | null = null;
-    if (previousStateEvent) {
-      durationInCurrentStateSeconds = Math.floor((now.getTime() - new Date(previousStateEvent.generated_at).getTime()) / 1000);
-    }
-
-    // Compute dislocation state
-    const { state: dislocationState, rationale: stateRationale } = computeDislocationState(
-      snapshot.mismatchScore,
-      snapshot.subscores,
-      freshness,
-      durationInCurrentStateSeconds,
-      thresholds
-    );
-    snapshot.dislocationState = dislocationState;
-    snapshot.stateRationale = stateRationale;
-
-    // Write state change event if state changed
-    if (!previousStateEvent || previousStateEvent.new_state !== dislocationState) {
-      await writeSateChangeEvent(env, {
-        generatedAt: nowIso,
-        previousState: previousStateEvent?.new_state ?? null,
-        newState: dislocationState,
-        stateDurationSeconds: previousStateEvent ? durationInCurrentStateSeconds : null,
-        transmissionChanged: marketResponse >= thresholds.confirmationMarketResponseMin
-      });
-    }
-
-    // Compute clocks
-    const firstMismatchEvent = await getFirstNonAlignedStateEvent(env);
-    const firstTransmissionEvent = await getFirstTransmissionEvent(env);
-    const clocks = computeClocks({
-      nowIso,
-      durationInCurrentStateSeconds,
-      firstMismatchObservedAt: firstMismatchEvent?.generated_at ?? null,
-      firstTransmissionSignalObservedAt: firstTransmissionEvent?.generated_at ?? null,
-      thresholds
-    });
-    snapshot.clocks = clocks;
-
-    // Classify evidence and evaluate coverage
-    evidence = evidence.map((evt) => {
-      const { classification, reason } = classifyEvidence({
-        evidenceKey: evt.evidenceKey,
-        contribution: evt.contribution,
-        physicalStress: snapshot.subscores.physicalStress,
-        priceSignal: snapshot.subscores.priceSignal,
-        marketResponse: snapshot.subscores.marketResponse
-      });
-
-      const { coverage } = evaluateEvidenceCoverage({
-        evidenceKey: evt.evidenceKey,
-        freshness: freshness[evt.evidenceGroup as keyof typeof freshness]
-      });
-
-      return {
-        ...evt,
-        classification,
-        coverage,
-        reason
-      };
-    });
-
-    await writeSnapshot(env, snapshot, runKey);
-    await writeRunEvidence(env, runKey, evidence);
+    // Phase 3: Oil Shock scoring retired. Only run new Macro Signals engines.
+    await runEnergyScore(env, nowIso, runKey);
     await finishRun(env, runKey, "success", {
-      mismatchScore: snapshot.mismatchScore,
-      dislocationState: snapshot.dislocationState,
-      actionabilityState: snapshot.actionabilityState
+      message: "Macro Signals engines scored"
     });
-    log("info", "Scoring run completed", {
-      runKey,
-      mismatchScore: snapshot.mismatchScore,
-      dislocationState: snapshot.dislocationState,
-      actionabilityState: snapshot.actionabilityState
-    });
+    log("info", "Scoring run completed", { runKey });
   } catch (error) {
     const appError = toAppError(error);
     await finishRun(env, runKey, "failed", {

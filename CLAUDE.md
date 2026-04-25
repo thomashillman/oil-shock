@@ -117,6 +117,22 @@ Match test depth to blast radius.
 
 Do not leave behaviour changes untested.
 
+## Rules for API health instrumentation
+
+The `api_health_metrics` table and `api_feed_registry` table provide extensible health tracking for all data source APIs. When a new API feed is added to Oil Shock:
+
+1. **Register the feed** in `api_feed_registry` via a migration (e.g. `INSERT INTO api_feed_registry (feed_name, provider, display_name, freshness_window_hours, timeout_threshold_ms, error_rate_threshold_pct) VALUES (...)`).
+2. **Instrument the collector** by wrapping the API call with `instrumentedFetch()` from `worker/src/lib/api-instrumentation.ts`.
+3. **Verify Grafana dashboard** includes the new feed in dashboard queries (update `docs/grafana-api-health-dashboard.json`).
+4. **Check alert rules** in `docs/grafana-api-health-alerts.md` cover the new feed's characteristics (especially timeout and freshness thresholds).
+
+Health metrics are recorded automatically by `instrumentedFetch()`. No additional instrumentation code is needed beyond calling the wrapper.
+
+To add a new feed "NOAA Weather" as an example:
+- Add to `api_feed_registry`: `INSERT INTO api_feed_registry (feed_name, provider, display_name, ...) VALUES ('noaa_weather', 'NOAA', 'NOAA Weather Data', ...)`
+- Wrap the fetch in the collector: `const data = await instrumentedFetch(env, url, 'noaa_weather', 'NOAA')`
+- Grafana dashboard queries automatically include all enabled feeds from `api_feed_registry`
+
 ## Repo hygiene
 
 - Never commit secrets, tokens, or real API keys.

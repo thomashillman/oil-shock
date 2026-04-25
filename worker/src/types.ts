@@ -79,6 +79,7 @@ export interface StateSnapshot {
   coverageConfidence: number;
   sourceFreshness: FreshnessSummary;
   evidenceIds: string[];
+  guardrailFlags: string[];
 }
 
 export interface LedgerEntryInput {
