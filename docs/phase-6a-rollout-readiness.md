@@ -12,6 +12,13 @@ This checklist separates code-checkable items (automatic) from manual verificati
 
 ✅ All automatic checks use `/api/admin/rollout-readiness` endpoint
 
+**Important**: This endpoint evaluates **only the Phase 6A required Energy feeds**:
+- `eia_wti` (EIA WTI Spot)
+- `eia_brent` (EIA Brent Spot)
+- `eia_diesel_wti_crack` (EIA Diesel/WTI Crack Spread)
+
+Non-required seeded feeds (inventory, refinery, futures, ENTSOG, GIE, SEC, etc.) do not block Phase 6A canary readiness. The general API health dashboard (`/api/admin/api-health`) tracks all enabled feeds, but this pre-canary assessment focuses only on Energy-specific feeds.
+
 ### 1. Pre-Deploy Gates Signed Off
 **Status**: Code-checkable via endpoint  
 **Command**: `curl -H "Authorization: Bearer $ADMIN_TOKEN" https://worker.example.com/api/admin/rollout-readiness`
@@ -236,7 +243,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ⚠️ **Warning (can proceed with sign-off if)**:
 - Status is "warning" (stale data, etc.)
-- Blockers are explicitly acknowledged in writing
+- Warnings are explicitly acknowledged in writing
 - Team decides risk is acceptable
 
 ❌ **Do NOT proceed if**:

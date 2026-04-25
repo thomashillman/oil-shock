@@ -79,11 +79,29 @@
 
 ---
 
+## Review Findings Fixed
+
+**Commit 1 (fix: make rollout readiness conservative)**:
+- ✅ Added rollout percent checks: 0=ready, 10=warning, >10=blocked
+- ✅ Added empty data validation: totalFeeds=0, totalGates=0, empty validation gates all block
+- ✅ Added 7 pure evaluator tests covering new logic
+
+**Commit 2 (fix: scope rollout readiness to Phase 6A feeds)**:
+- ✅ Phase 6A required feeds constant: `eia_wti`, `eia_brent`, `eia_diesel_wti_crack`
+- ✅ Endpoint filters to only Phase 6A feeds, seeded but inactive feeds don't block readiness
+- ✅ Missing required feed blocks, unhealthy required feed blocks
+- ✅ Added 5 route-level tests for endpoint authorization and feed filtering
+
+**Commit 3 (docs: clarify Phase 6A readiness feed scope)**:
+- ✅ Fixed wording: "Blockers" → "Warnings" in decision criteria
+- ✅ Added prominent clarification that endpoint evaluates only Phase 6A required feeds
+- ✅ Documented that non-required seeded feeds do not block readiness
+
 ## Current Status
 
-**Phase**: All commits complete, ready for final validation
+**Phase**: All review findings fixed, ready for final validation
 
-**Next Step**: Final validation before PR
+**Next Step**: Run validation and confirm all tests pass
 
 ---
 
