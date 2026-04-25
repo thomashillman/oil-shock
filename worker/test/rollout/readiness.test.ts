@@ -28,8 +28,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         ]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -62,8 +62,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         ]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -95,7 +95,7 @@ describe("Phase 6A rollout readiness evaluator", () => {
       },
       gates: {
         passedCount: 2,
-        totalCount: 4,
+        totalCount: 6,
         allSigned: false
       }
     };
@@ -163,8 +163,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         ]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -196,8 +196,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         ]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -233,8 +233,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         ]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -262,8 +262,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -287,8 +287,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -315,8 +315,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -343,8 +343,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -372,8 +372,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -400,8 +400,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: [{ gate: "test", status: "passed" }]
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };
@@ -456,8 +456,8 @@ describe("Phase 6A rollout readiness evaluator", () => {
         gates: []
       },
       gates: {
-        passedCount: 4,
-        totalCount: 4,
+        passedCount: 6,
+        totalCount: 6,
         allSigned: true
       }
     };

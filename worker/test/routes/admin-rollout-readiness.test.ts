@@ -10,6 +10,25 @@ function createExecutionContext(): ExecutionContext {
   } as ExecutionContext;
 }
 
+async function seedPhase6aGates(env: any, now: string): Promise<void> {
+  const phase6aGates = [
+    "energy_determinism",
+    "api_health_metrics_ready",
+    "grafana_dashboard_imported",
+    "alert_routing_configured",
+    "staging_verified",
+    "rollback_rehearsed"
+  ];
+  for (const gateName of phase6aGates) {
+    await env.DB.prepare(
+      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
+       VALUES (?, ?, ?, ?)`
+    )
+      .bind("ENABLE_MACRO_SIGNALS", gateName, "SIGNED_OFF", now)
+      .run();
+  }
+}
+
 describe("admin rollout readiness endpoint", () => {
   it("requires bearer token when ADMIN_API_BEARER_TOKEN is set", async () => {
     const env = createTestEnv() as unknown as Env;
@@ -47,13 +66,8 @@ describe("admin rollout readiness endpoint", () => {
         .run();
     }
 
-    // Seed signed-off pre-deploy gates  - need at least 1 gate
-    await env.DB.prepare(
-      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
-       VALUES (?, ?, ?, ?)`
-    )
-      .bind("ENABLE_MACRO_SIGNALS", "energy_determinism", "SIGNED_OFF", now)
-      .run();
+    // Seed all 6 Phase 6A pre-deploy gates signed off
+    await seedPhase6aGates(env, now);
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -94,12 +108,7 @@ describe("admin rollout readiness endpoint", () => {
     }
 
     // Seed gates
-    await env.DB.prepare(
-      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
-       VALUES (?, ?, ?, ?)`
-    )
-      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
-      .run();
+    await seedPhase6aGates(env, now);
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -116,6 +125,46 @@ describe("admin rollout readiness endpoint", () => {
     // Missing required feed (eia_wti) should block readiness
     expect(payload.status).toBe("blocked");
     expect(payload.blockers.some((b) => b.includes("missing"))).toBe(true);
+  });
+
+  it("blocks when insufficient Phase 6A gates exist (less than 6)", async () => {
+    const env = createTestEnv() as unknown as Env;
+    const now = new Date().toISOString();
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    // Seed healthy metrics for all three Phase 6A required feeds
+    for (const feedName of ["eia_wti", "eia_brent", "eia_diesel_wti_crack"]) {
+      await env.DB.prepare(
+        `INSERT INTO api_health_metrics (feed_name, provider, status, latency_ms, attempted_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(feedName, "EIA", "success", 500, fifteenMinutesAgo)
+        .run();
+    }
+
+    // Seed only ONE signed-off gate (not the required 6)
+    await env.DB.prepare(
+      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
+       VALUES (?, ?, ?, ?)`
+    )
+      .bind("ENABLE_MACRO_SIGNALS", "partial_gate", "SIGNED_OFF", now)
+      .run();
+
+    const response = await worker.fetch(
+      new Request("http://local/api/admin/rollout-readiness"),
+      env,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      status: string;
+      blockers: string[];
+    };
+
+    // Insufficient gate count should block readiness
+    expect(payload.status).toBe("blocked");
+    expect(payload.blockers.some((b) => b.includes("Expected 6 pre-deploy gates"))).toBe(true);
   });
 
   it("ignores extra seeded feeds: only Phase 6A required feeds affect readiness", async () => {
@@ -146,12 +195,7 @@ describe("admin rollout readiness endpoint", () => {
       .run();
 
     // Seed gates
-    await env.DB.prepare(
-      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
-       VALUES (?, ?, ?, ?)`
-    )
-      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
-      .run();
+    await seedPhase6aGates(env, now);
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -209,12 +253,7 @@ describe("admin rollout readiness endpoint", () => {
     }
 
     // Seed gates
-    await env.DB.prepare(
-      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
-       VALUES (?, ?, ?, ?)`
-    )
-      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
-      .run();
+    await seedPhase6aGates(env, now);
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -250,12 +289,7 @@ describe("admin rollout readiness endpoint", () => {
     }
 
     // Seed gates
-    await env.DB.prepare(
-      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
-       VALUES (?, ?, ?, ?)`
-    )
-      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
-      .run();
+    await seedPhase6aGates(env, now);
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -279,6 +313,19 @@ describe("admin rollout readiness endpoint", () => {
 
   it("does not modify configuration or rollout percentage", async () => {
     const env = createTestEnv() as unknown as Env;
+    const now = new Date().toISOString();
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    // Seed test data for a ready state
+    for (const feedName of ["eia_wti", "eia_brent", "eia_diesel_wti_crack"]) {
+      await env.DB.prepare(
+        `INSERT INTO api_health_metrics (feed_name, provider, status, latency_ms, attempted_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(feedName, "EIA", "success", 500, fifteenMinutesAgo)
+        .run();
+    }
+    await seedPhase6aGates(env, now);
 
     // Make multiple requests
     await worker.fetch(

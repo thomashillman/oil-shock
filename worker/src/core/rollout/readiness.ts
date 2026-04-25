@@ -135,13 +135,21 @@ export function evaluateReadiness(
   }
 
   // Check pre-deploy gates signed off
+  // Phase 6A requires exactly 6 pre-deploy gates, all signed
+  const EXPECTED_GATE_COUNT = 6;
   if (!evidence.gates) {
     blockers.push(
       "Pre-deploy gate status missing. Cannot evaluate sign-off status."
     );
   } else if (evidence.gates.totalCount === 0) {
     blockers.push(
-      "No pre-deploy gates found. Cannot evaluate sign-off status."
+      `No pre-deploy gates found. Expected ${EXPECTED_GATE_COUNT} Phase 6A gates.`
+    );
+  } else if (evidence.gates.totalCount !== EXPECTED_GATE_COUNT) {
+    blockers.push(
+      `Expected ${EXPECTED_GATE_COUNT} pre-deploy gates for Phase 6A, ` +
+        `but found ${evidence.gates.totalCount}. ` +
+        `Cannot proceed until all Phase 6A gates are defined.`
     );
   } else if (!evidence.gates.allSigned) {
     blockers.push(
