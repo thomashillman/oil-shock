@@ -20,6 +20,7 @@ import { handleGetHealth } from "./routes/health";
 import { handleGetRolloutStatus } from "./routes/admin-rollout";
 import { handleGetValidationStatus } from "./routes/admin-validation";
 import { handleGetApiHealth } from "./routes/admin-api-health";
+import { handleGetRolloutReadiness } from "./routes/admin-rollout-readiness";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -194,6 +195,14 @@ export default {
           return withCors(response, request, env);
         }
         response = await handleGetApiHealth(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/rollout-readiness") {
+        if (!isAuthorizedAdminRequest(request, env)) {
+          response = json({ error: "unauthorized", message: "Missing or invalid admin bearer token." }, { status: 401 });
+          return withCors(response, request, env);
+        }
+        response = await handleGetRolloutReadiness(env);
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/admin/backfill/rescore") {
