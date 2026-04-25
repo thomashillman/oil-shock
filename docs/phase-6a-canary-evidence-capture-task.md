@@ -1,8 +1,9 @@
 # Phase 6A Canary Evidence Capture Task
 
-**Status**: In Progress  
+**Status**: Complete  
 **Branch**: `phase-6a/canary-evidence-capture`  
 **Timeline**: Before Day 22 (Phase 1 Canary execution)
+**Completed**: 2026-04-25
 
 ## Goal
 
@@ -104,29 +105,43 @@ Add a small, read-only Phase 6A canary evidence capture tool and runbook. This h
   - That Grafana import, alert routing, staging telemetry, rollback rehearsal, and team communication still require manual sign-off
 - **Validation**: `corepack pnpm docs:check`, run full test suite
 
-## Files Changed So Far
+## Files Changed
 
 **Created**:
 - `docs/phase-6a-canary-evidence-capture-task.md`
+- `scripts/phase6a/evidence-report.ts`
+- `scripts/phase6a/evidence-report.test.ts`
+- `scripts/phase6a/capture-canary-evidence.ts`
+- `scripts/phase6a/capture-canary-evidence.test.ts`
+- `docs/phase-6a-canary-evidence-capture.md`
 
 **Modified**:
-- None yet
+- `docs/phase-6a-rollout-readiness.md` (added evidence capture tool section)
+- `docs/current-priorities.md` (added Step 2: Evidence Capture)
+- `package.json` (added `phase6a:evidence` script)
 
-## Validation Run So Far
+## Validation Run Summary
 
-- None yet (before implementation)
+✅ **All tests pass**:
+- `corepack pnpm docs:check` — Documentation checks passed
+- `corepack pnpm -C worker test -- readiness` — 111 passed, 2 skipped
+- `corepack pnpm -C worker test -- routes` — 111 passed, 2 skipped
+- `corepack pnpm -C worker typecheck` — No type errors
+- `corepack pnpm -C worker test` — Full worker suite: 111 passed, 2 skipped
 
 ## Current Status
 
-- ✅ Task brief created
-- ⏳ Report formatter tests pending
-- ⏳ Report formatter implementation pending
-- ⏳ CLI wrapper pending
-- ⏳ Operator docs and package scripts pending
+- ✅ Task brief created and finalized
+- ✅ Report formatter tests (9 tests, all passing)
+- ✅ Report formatter implementation (deterministic, handles all statuses)
+- ✅ CLI wrapper (read-only, no network calls in tests)
+- ✅ Operator docs and package scripts
+- ✅ All validation tests green
+- ✅ 5 commits created on feature branch
 
-## Next Step
+## Ready for PR
 
-Implement Commit 2: Report formatter tests
+All work complete. Branch ready for pull request.
 
 ## Deliberately Out Of Scope
 
