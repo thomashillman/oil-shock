@@ -50,6 +50,9 @@
 - `worker/src/routes/admin-rollout-readiness.ts` — Admin endpoint for rollout readiness (aggregates data and calls evaluator)
 - Updated `worker/src/index.ts` to wire the new endpoint into the router
 
+### Commit 5
+- `docs/phase-6a-rollout-readiness.md` — Comprehensive rollout readiness checklist (automatic + manual steps)
+
 ---
 
 ## Validation Run So Far
@@ -69,13 +72,18 @@
 - ✅ `corepack pnpm -C worker typecheck` (no errors)
 - ✅ Admin endpoint wired and accessible via GET /api/admin/rollout-readiness
 
+**Commit 5**:
+- ✅ `corepack pnpm docs:check` (documentation validation passes)
+- ✅ `corepack pnpm -C worker test -- readiness` (9 tests pass)
+- ✅ `corepack pnpm -C worker typecheck` (no errors)
+
 ---
 
 ## Current Status
 
-**Phase**: Admin endpoint added (Commit 4 complete)
+**Phase**: All commits complete, ready for final validation
 
-**Next Step**: Documentation and checklist (Commit 5)
+**Next Step**: Final validation before PR
 
 ---
 
