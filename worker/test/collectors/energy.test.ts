@@ -5,13 +5,13 @@ import { collectEnergy } from "../../src/jobs/collectors/energy";
 import { runEnergyScore, safeValue } from "../../src/jobs/score";
 import { writeSeriesPoints, getLatestSeriesValue, listActiveRules } from "../../src/db/client";
 
-vi.mock("../../src/lib/http-client", () => ({
-  fetchJson: vi.fn()
+vi.mock("../../src/lib/api-instrumentation", () => ({
+  instrumentedFetch: vi.fn()
 }));
 
-import { fetchJson } from "../../src/lib/http-client";
+import { instrumentedFetch } from "../../src/lib/api-instrumentation";
 
-const mockFetchJson = vi.mocked(fetchJson);
+const mockInstrumentedFetch = vi.mocked(instrumentedFetch);
 
 describe("collectEnergy", () => {
   const env = createTestEnv() as unknown as Env;
@@ -21,13 +21,13 @@ describe("collectEnergy", () => {
   });
 
   it("collects WTI/Brent spread and diesel crack points with upstream periods", async () => {
-    mockFetchJson
+    mockInstrumentedFetch
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "65.0" }], total: 1 } })
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "69.5" }], total: 1 } })
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "95.0" }], total: 1 } });
 
     const points = await collectEnergy(env, "2026-04-23T00:00:00.000Z");
-    expect(mockFetchJson).toHaveBeenCalledTimes(3);
+    expect(mockInstrumentedFetch).toHaveBeenCalledTimes(3);
     expect(points.map((point) => point.seriesKey).sort()).toEqual([
       "energy_spread.diesel_wti_crack",
       "energy_spread.wti_brent_spread"
@@ -41,7 +41,7 @@ describe("collectEnergy", () => {
   });
 
   it("returns no points when one side of a spread is unavailable", async () => {
-    mockFetchJson
+    mockInstrumentedFetch
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "65.0" }], total: 1 } })
       .mockResolvedValueOnce({ response: { data: [], total: 0 } })
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "95.0" }], total: 1 } });

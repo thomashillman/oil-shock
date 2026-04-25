@@ -4,13 +4,15 @@ This document captures the current sequencing and decision constraints for work 
 
 ## Current status
 
-- **Phase 6A (Energy Engine) is in progress** — May 2026, 3-4 week timeline
-  - Energy engine validation and gradual rollout to production (0% → 100%)
-  - Pre-deploy gates framework being implemented
-  - Oil Shock snapshots remain archived and readable as fallback
-- **Phase 6B (Macro Releases) is deferred to Q3 2026** — Requires 8-12 weeks of CPI data + energy stabilization
-- The repo currently implements Oil Shock (retired, snapshots archived) + Energy engine (active, being validated)
-- Macro Signals is the intended direction of travel, but target-state ideas must not be assumed to already exist in code
+- **Phase 6A (Energy Engine) execution phase (Days 22-52)** — May 2026, weeks 4-8
+  - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
+  - **NEXT**: Gradual rollout execution (0% → 10% → 50% → 100% → stabilization)
+  - Phase 1 (Days 22-26): Internal canary at 10%
+  - Phase 2 (Days 27-35): Public expansion 50%
+  - Phase 3 (Days 36-42): Full rollout 100%
+  - Phase 4 (Days 43-52): Stabilization monitoring
+- **Phase 6B (Macro Releases) deferred to Q3 2026** — Requires 8-12 weeks of CPI data + energy stabilization
+- The repo currently implements Oil Shock (archived) + Energy engine (active, being rolled out)
 - `main` is the canonical branch and the implementation source of truth
 
 ## Phase 6A (May 2026): Energy Engine Validation and Rollout
@@ -20,24 +22,58 @@ This document captures the current sequencing and decision constraints for work 
 
 ### Phase 6A Work Streams
 
-**Stream 1: Gate Infrastructure and Validation (Days 4-21)**
-- [ ] Days 4-7: Implement `/api/admin/gate-status` endpoint (enforced pre-deploy gates)
-- [ ] Days 4-7: Update `/api/health` with `runtimeMode` and `degradedComponents` fields
-- [ ] Days 8-14: Implement energy determinism and data freshness tests
-- [ ] Days 8-14: Implement `/api/admin/rules-compare` endpoint (rule consistency validation)
-- [ ] Days 15-21: Implement per-component error tracking and graceful degradation
+**Stream 1: Gate Infrastructure and Validation (Days 4-21)** — ✅ COMPLETE
 
-**Stream 2: Feature Flags and Monitoring (Days 8-21)**
-- [ ] Add `ENERGY_ROLLOUT_PERCENT` feature flag (0-100 traffic split)
-- [ ] Implement `/api/admin/rollout-status` endpoint
-- [ ] Implement `/api/admin/rollback-status` endpoint
-- [ ] Create observability dashboard (collector rate, scorer latency, guardrails, divergence)
+- [x] Days 4-7: Implement `/api/admin/gate-status` endpoint (enforced pre-deploy gates)
+- [x] Days 4-7: Update `/api/health` with `runtimeMode` and `degradedComponents` fields
+- [x] Days 8-14: Implement energy determinism and data freshness tests
+- [x] Days 8-14: Implement `/api/admin/rules-compare` endpoint (rule consistency validation)
+- [x] Days 15-21: Implement per-component error tracking and graceful degradation
+- [x] **Code Review & Fixes**: Comprehensive review identified 11 issues, all fixed and merged
 
-**Stream 3: Production Rollout (Days 22-52)**
+**Stream 2: Feature Flags and Monitoring (Days 8-21)** — ✅ COMPLETE
+
+- [x] Add `ENERGY_ROLLOUT_PERCENT` feature flag (0-100 traffic split)
+- [x] Implement `/api/admin/rollout-status` endpoint
+- [x] Implement `/api/admin/validation-status` endpoint
+- [x] Implement `/api/admin/api-health` endpoint (per-feed monitoring)
+- [x] Create API health tracking (D1 schema + Grafana dashboard)
+
+**Stream 3: Production Rollout (Days 22-52)** — 🔄 IN PROGRESS
+
+Preparation Phase (Before Day 22):
+
+**Step 0: Telemetry Setup** (PREREQUISITE - must complete first)
+- [ ] Wire energy collector to use `instrumentedFetch()` instead of `fetchJson()`
+- [ ] Verify metrics are being recorded to `api_health_metrics` table
+- [ ] Test `/api/admin/api-health` endpoint returns data
+- [ ] Verify telemetry flowing in staging environment
+- [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`
+
+**Step 1: Grafana Monitoring Setup**
+- [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
+- [ ] Configure 5 Grafana alert rules (`docs/grafana-api-health-alerts.md`)
+- [ ] Test dashboard queries against live D1 data
+- [ ] Verify alert routing (Slack, PagerDuty)
+- [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
+
+**Step 2: Team Communication & Procedures**
+- [ ] Update team comms (schedule, phases, success criteria)
+- [ ] Create incident response runbook (rollback procedures, root cause investigation)
+- [ ] Rehearse rollback procedure (ENERGY_ROLLOUT_PERCENT=0)
+
+Execution Phase:
 - [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring)
-- [ ] Week 2 (Days 27-35): Gradual public rollout 10% → 20% → 35% → 50%
-- [ ] Week 3 (Days 36-42): Expand to 100% (7-day stability monitoring)
-- [ ] Week 4 (Days 43-52): Stabilization, prepare Phase 6B (Q3)
+  - Day 22: Deploy ENERGY_ROLLOUT_PERCENT=10, verify canary setup
+  - Days 23-26: Execute daily monitoring checklist
+- [ ] Week 2 (Days 27-35): Public expansion 50%
+  - Day 27: Increase to ENERGY_ROLLOUT_PERCENT=50
+  - Days 28-35: Monitor 50/50 split, compare metrics
+- [ ] Week 3 (Days 36-42): Full rollout 100%
+  - Day 36: Increase to ENERGY_ROLLOUT_PERCENT=100
+  - Days 37-42: Monitor for regressions
+- [ ] Week 4 (Days 43-52): Stabilization
+  - Days 43-52: Long-term stability monitoring, prepare Phase 6B
 
 ### Pre-Phase-6A: Documentation (COMPLETE)
 
