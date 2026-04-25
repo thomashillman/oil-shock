@@ -5,10 +5,8 @@
  * Fetches read-only endpoints and generates an evidence report for operators.
  *
  * Usage:
- *   node capture-canary-evidence.ts --base-url https://worker.example.com
- *   Base URL from env: PHASE6A_BASE_URL=https://... node capture-canary-evidence.ts
- *   Bearer token from env: ADMIN_TOKEN=xxx node capture-canary-evidence.ts
- *   Output to file: --out evidence-report.md
+ *   corepack pnpm phase6a:evidence --base-url https://worker.example.com
+ *   corepack pnpm exec tsx scripts/phase6a/capture-canary-evidence.ts --base-url https://worker.example.com
  *
  * Calls only read-only endpoints:
  *   GET /health
@@ -29,8 +27,9 @@ import type {
   ApiHealthResponse
 } from "./evidence-report";
 import * as fs from "fs";
+import * as path from "path";
 
-interface CliOptions {
+export interface CliOptions {
   baseUrl: string;
   token?: string;
   outPath?: string;
@@ -41,10 +40,17 @@ interface FetchOptions {
   headers?: Record<string, string>;
 }
 
+export interface FetchResult<T> {
+  ok: boolean;
+  status: number;
+  data: T | null;
+  error?: string;
+}
+
 /**
  * Parse command-line arguments
  */
-function parseArgs(): CliOptions {
+export function parseArgs(): CliOptions {
   const args = process.argv.slice(2);
   const options: CliOptions = {
     baseUrl: process.env.PHASE6A_BASE_URL || ""
@@ -80,7 +86,7 @@ function printHelp(): void {
   console.log(`
 Phase 6A Canary Evidence Capture
 
-Usage: node capture-canary-evidence.ts [options]
+Usage: corepack pnpm phase6a:evidence [options]
 
 Options:
   --base-url <url>      Base URL of worker (or PHASE6A_BASE_URL env var)
@@ -104,11 +110,12 @@ It does NOT call any POST endpoints, gate sign-off endpoints, or deployment comm
 
 /**
  * Fetch a read-only endpoint with error handling
+ * Returns both status and parsed data, even on error
  */
-async function fetchEndpoint<T>(
+export async function fetchEndpoint<T>(
   url: string,
   token?: string
-): Promise<T | null> {
+): Promise<FetchResult<T>> {
   try {
     const options: FetchOptions = {
       method: "GET"
@@ -121,52 +128,86 @@ async function fetchEndpoint<T>(
     }
 
     const response = await fetch(url, options);
+    let data: T | null = null;
 
-    if (!response.ok) {
-      console.warn(`⚠️  Endpoint ${url} returned ${response.status}`);
-      return null;
+    try {
+      data = await response.json();
+    } catch {
+      // JSON parse failed, but return the status
     }
 
-    const data = await response.json();
-    return data as T;
+    return {
+      ok: response.ok,
+      status: response.status,
+      data,
+      error: !response.ok ? `HTTP ${response.status}` : undefined
+    };
   } catch (error) {
-    console.warn(`⚠️  Failed to fetch ${url}: ${String(error)}`);
-    return null;
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      error: `Network error: ${String(error)}`
+    };
   }
+}
+
+/**
+ * Collect evidence from all read-only endpoints
+ */
+export async function collectEvidence(baseUrl: string, token?: string) {
+  const [healthResult, readinessResult, statusResult, apiHealthResult] = await Promise.all([
+    fetchEndpoint<HealthPayload>(`${baseUrl}/health`, token),
+    fetchEndpoint<RolloutReadinessResponse>(
+      `${baseUrl}/api/admin/rollout-readiness`,
+      token
+    ),
+    fetchEndpoint<RolloutStatusResponse>(
+      `${baseUrl}/api/admin/rollout-status`,
+      token
+    ),
+    fetchEndpoint<ApiHealthResponse>(
+      `${baseUrl}/api/admin/api-health`,
+      token
+    )
+  ]);
+
+  return {
+    health: healthResult.data,
+    readiness: readinessResult.data,
+    status: statusResult.data,
+    apiHealth: apiHealthResult.data
+  };
 }
 
 /**
  * Main entry point: fetch evidence and generate report
  */
-async function main(): Promise<void> {
-  const options = parseArgs();
+export async function runCli(options: CliOptions): Promise<void> {
   const generatedAt = new Date().toISOString();
 
   console.log("Collecting evidence from read-only endpoints...");
 
   // Fetch all endpoints
-  const [health, readiness, rolloutStatus, apiHealth] = await Promise.all([
-    fetchEndpoint<HealthPayload>(`${options.baseUrl}/health`, options.token),
-    fetchEndpoint<RolloutReadinessResponse>(
-      `${options.baseUrl}/api/admin/rollout-readiness`,
-      options.token
-    ),
-    fetchEndpoint<RolloutStatusResponse>(
-      `${options.baseUrl}/api/admin/rollout-status`,
-      options.token
-    ),
-    fetchEndpoint<ApiHealthResponse>(
-      `${options.baseUrl}/api/admin/api-health`,
-      options.token
-    )
-  ]);
+  const evidence = await collectEvidence(options.baseUrl, options.token);
 
   // Generate report
-  const report = formatEvidenceReport(health, readiness, rolloutStatus, apiHealth, generatedAt);
+  const report = formatEvidenceReport(
+    evidence.health,
+    evidence.readiness,
+    evidence.status,
+    evidence.apiHealth,
+    generatedAt
+  );
 
   // Output report
   if (options.outPath) {
     try {
+      // Create parent directory recursively if needed
+      const parentDir = path.dirname(options.outPath);
+      if (parentDir !== ".") {
+        fs.mkdirSync(parentDir, { recursive: true });
+      }
       fs.writeFileSync(options.outPath, report, "utf-8");
       console.log(`✅ Report written to ${options.outPath}`);
     } catch (error) {
@@ -179,8 +220,11 @@ async function main(): Promise<void> {
   }
 }
 
-// Run main
-main().catch((error) => {
-  console.error("Fatal error:", String(error));
-  process.exit(1);
-});
+// Only run CLI if this is the main module (not imported for testing)
+if (require.main === module) {
+  const options = parseArgs();
+  runCli(options).catch((error) => {
+    console.error("Fatal error:", String(error));
+    process.exit(1);
+  });
+}

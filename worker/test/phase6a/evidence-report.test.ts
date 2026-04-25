@@ -6,7 +6,7 @@ import {
   type RolloutStatusResponse,
   type PerFeedHealth,
   type ApiHealthResponse
-} from "./evidence-report";
+} from "../../../scripts/phase6a/evidence-report";
 
 describe("Evidence Report Formatter", () => {
   const mockGeneratedAt = "2026-04-25T12:00:00.000Z";

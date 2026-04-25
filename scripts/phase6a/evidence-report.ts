@@ -33,16 +33,32 @@ export interface HealthPayload {
   timestamp?: string;
 }
 
-export interface ApiHealthFeed {
-  feed_name: string;
+export interface PerFeedHealth {
+  feedName: string;
   provider: string;
-  status: string;
-  error_rate_pct: number;
-  last_success: string;
+  displayName: string;
+  status: "OK" | "ERROR" | "TIMEOUT" | "UNKNOWN";
+  latencyP95Ms: number | null;
+  errorRatePct: number;
+  lastSuccessfulAt: string | null;
+  lastAttemptedAt: string | null;
+  attemptCount1h: number;
+  successCount1h: number;
+  failureCount1h: number;
+  timeoutCount1h: number;
 }
 
 export interface ApiHealthResponse {
-  feeds: ApiHealthFeed[];
+  generatedAt: string;
+  systemHealthy: boolean;
+  unhealthyFeeds: string[];
+  feeds: PerFeedHealth[];
+  summary: {
+    totalFeeds: number;
+    healthyFeeds: number;
+    degradedFeeds: number;
+    downFeeds: number;
+  };
 }
 
 export interface GateStatus {
@@ -78,8 +94,9 @@ export interface ReadinessEvidenceData {
 }
 
 export interface ManualCheck {
-  item: string;
-  complete: boolean;
+  title: string;
+  description: string;
+  status: "pending" | "completed";
 }
 
 export interface RolloutReadinessResponse {
@@ -272,10 +289,15 @@ export function formatEvidenceReport(
     for (const feed of apiHealth.feeds) {
       const icon = feed.status === "OK" ? "✅" : "❌";
       lines.push(
-        `${icon} **${feed.feed_name}** (${feed.provider}): ${feed.status}`
+        `${icon} **${feed.displayName}** (${feed.feedName}): ${feed.status}`
       );
-      lines.push(`   - Error rate: ${feed.error_rate_pct}%`);
-      lines.push(`   - Last success: ${feed.last_success}`);
+      lines.push(`   - Error rate: ${feed.errorRatePct}%`);
+      if (feed.latencyP95Ms !== null) {
+        lines.push(`   - Latency P95: ${feed.latencyP95Ms}ms`);
+      }
+      if (feed.lastSuccessfulAt) {
+        lines.push(`   - Last success: ${feed.lastSuccessfulAt}`);
+      }
     }
     lines.push("");
   }
@@ -313,8 +335,9 @@ export function formatEvidenceReport(
     lines.push("These items require operator sign-off and cannot be automated:");
     lines.push("");
     for (const check of readiness.manualChecks) {
-      const icon = check.complete ? "✅" : "⏳";
-      lines.push(`${icon} ${check.item}`);
+      const icon = check.status === "completed" ? "✅" : "⏳";
+      lines.push(`${icon} **${check.title}**`);
+      lines.push(`   ${check.description}`);
     }
     lines.push("");
   }

@@ -39,10 +39,10 @@ corepack pnpm install
 
 ## Usage
 
-### Basic: Print report to stdout
+### Basic: Print report to stdout (recommended)
 
 ```bash
-node scripts/phase6a/capture-canary-evidence.ts \
+corepack pnpm phase6a:evidence \
   --base-url https://staging-worker.example.com
 ```
 
@@ -53,31 +53,31 @@ Output is printed directly to the terminal.
 ```bash
 # Option 1: Token as env var
 ADMIN_TOKEN=your-bearer-token \
-  node scripts/phase6a/capture-canary-evidence.ts \
+  corepack pnpm phase6a:evidence \
   --base-url https://staging-worker.example.com
 
 # Option 2: Alternative env var
 ADMIN_API_BEARER_TOKEN=your-bearer-token \
-  node scripts/phase6a/capture-canary-evidence.ts \
+  corepack pnpm phase6a:evidence \
   --base-url https://staging-worker.example.com
 
 # Option 3: Use PHASE6A_BASE_URL env var
 PHASE6A_BASE_URL=https://staging-worker.example.com \
 ADMIN_TOKEN=your-bearer-token \
-  node scripts/phase6a/capture-canary-evidence.ts
+  corepack pnpm phase6a:evidence
 ```
 
 ### Save report to file
 
 ```bash
-node scripts/phase6a/capture-canary-evidence.ts \
+corepack pnpm phase6a:evidence \
   --base-url https://staging-worker.example.com \
   --out docs/evidence/phase6a-canary-readiness-2026-04-25.md
 ```
 
-Report is written to the specified file.
+Report is written to the specified file. Parent directories are created if needed.
 
-### Using tsx for TypeScript execution
+### Using tsx for TypeScript execution (alternative)
 
 ```bash
 corepack pnpm exec tsx scripts/phase6a/capture-canary-evidence.ts \
@@ -85,13 +85,7 @@ corepack pnpm exec tsx scripts/phase6a/capture-canary-evidence.ts \
   --out evidence-report.md
 ```
 
-### Package script (if available)
-
-```bash
-corepack pnpm phase6a:evidence
-```
-
-If the root `package.json` includes this script, it uses default environment variables.
+**Note**: The package script (`corepack pnpm phase6a:evidence`) is the preferred operator path.
 
 ---
 

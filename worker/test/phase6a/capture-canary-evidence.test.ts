@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { fetchEndpoint, collectEvidence } from "./capture-canary-evidence";
-import type { PerFeedHealth, ApiHealthResponse } from "./evidence-report";
+import { fetchEndpoint, collectEvidence } from "../../../scripts/phase6a/capture-canary-evidence";
+import type { PerFeedHealth, ApiHealthResponse } from "../../../scripts/phase6a/evidence-report";
 
 describe("Phase 6A Evidence Capture CLI", () => {
   beforeEach(() => {
@@ -303,7 +303,7 @@ describe("Phase 6A Evidence Capture CLI", () => {
 
   describe("real API health payload shape", () => {
     it("renders real PerFeedHealth payload correctly", async () => {
-      const { formatEvidenceReport } = await import("./evidence-report");
+      const { formatEvidenceReport } = await import("../../../scripts/phase6a/evidence-report");
 
       const feed: PerFeedHealth = {
         feedName: "eia_wti",
