@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../../src/env";
 import worker from "../../src/index";
-import { createTestEnv } from "../helpers/fake-d1";
+import { createTestEnv, disableFeedInRegistry, addExtraFeedToRegistry } from "../helpers/fake-d1";
 
 function createExecutionContext(): ExecutionContext {
   return {
@@ -77,10 +77,29 @@ describe("admin rollout readiness endpoint", () => {
   it("blocks when required Phase 6A feed is missing from registry", async () => {
     const env = createTestEnv() as unknown as Env;
 
-    // Remove one required feed from the seeded registry
-    // (by not querying from it, the endpoint will detect missing feed)
-    // Actually, the fake DB seeds all three, so we test by checking detection
-    // The endpoint should see all three are registered but one isn't in metrics
+    // Disable one of the three required feeds in the registry
+    disableFeedInRegistry(env, "eia_wti");
+
+    // Seed metrics for the two remaining feeds
+    const now = new Date().toISOString();
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+
+    for (const feedName of ["eia_brent", "eia_diesel_wti_crack"]) {
+      await env.DB.prepare(
+        `INSERT INTO api_health_metrics (feed_name, provider, status, latency_ms, attempted_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(feedName, "EIA", "success", 500, fifteenMinutesAgo)
+        .run();
+    }
+
+    // Seed gates
+    await env.DB.prepare(
+      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
+       VALUES (?, ?, ?, ?)`
+    )
+      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
+      .run();
 
     const response = await worker.fetch(
       new Request("http://local/api/admin/rollout-readiness"),
@@ -94,15 +113,18 @@ describe("admin rollout readiness endpoint", () => {
       blockers: string[];
     };
 
-    // Without any metrics, feeds are unhealthy
+    // Missing required feed (eia_wti) should block readiness
     expect(payload.status).toBe("blocked");
-    expect(payload.blockers.some((b) => b.includes("unhealthy"))).toBe(true);
+    expect(payload.blockers.some((b) => b.includes("missing"))).toBe(true);
   });
 
   it("ignores extra seeded feeds: only Phase 6A required feeds affect readiness", async () => {
     const env = createTestEnv() as unknown as Env;
     const now = new Date().toISOString();
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+    // Add an extra enabled feed to the registry that is not Phase 6A required
+    addExtraFeedToRegistry(env, "inventory_stock", "EIA", "Inventory Stock");
 
     // Seed healthy metrics for all three Phase 6A required feeds
     for (const feedName of ["eia_wti", "eia_brent", "eia_diesel_wti_crack"]) {
@@ -114,8 +136,8 @@ describe("admin rollout readiness endpoint", () => {
         .run();
     }
 
-    // Seed failure metrics for extra seeded feeds (that don't exist in registry)
-    // The endpoint should ignore these because they're not Phase 6A required
+    // Seed failure metrics for the extra seeded feed (not Phase 6A required)
+    // The endpoint should ignore this because it's not Phase 6A required
     await env.DB.prepare(
       `INSERT INTO api_health_metrics (feed_name, provider, status, attempted_at)
        VALUES (?, ?, ?, ?)`
@@ -209,6 +231,50 @@ describe("admin rollout readiness endpoint", () => {
     // Metrics older than 24h freshness window should be treated as stale/unhealthy
     expect(payload.status).toBe("blocked");
     expect(payload.blockers.some((b) => b.includes("unhealthy"))).toBe(true);
+  });
+
+  it("time-window semantics: accepts fresh success within freshnessWindowHours (2h old passes)", async () => {
+    const env = createTestEnv() as unknown as Env;
+    const now = new Date().toISOString();
+
+    // Seed recent success metrics (2 hours ago, within 24h freshness window)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
+    for (const feedName of ["eia_wti", "eia_brent", "eia_diesel_wti_crack"]) {
+      await env.DB.prepare(
+        `INSERT INTO api_health_metrics (feed_name, provider, status, latency_ms, attempted_at)
+         VALUES (?, ?, ?, ?, ?)`
+      )
+        .bind(feedName, "EIA", "success", 500, twoHoursAgo)
+        .run();
+    }
+
+    // Seed gates
+    await env.DB.prepare(
+      `INSERT INTO pre_deploy_gates (flag_name, gate_name, status, signed_off_at)
+       VALUES (?, ?, ?, ?)`
+    )
+      .bind("ENABLE_MACRO_SIGNALS", "test_gate", "SIGNED_OFF", now)
+      .run();
+
+    const response = await worker.fetch(
+      new Request("http://local/api/admin/rollout-readiness"),
+      env,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      status: string;
+      blockers: string[];
+      evidence: { apiHealth: { healthyFeeds: number; totalFeeds: number } };
+    };
+
+    // Metrics within 24h freshness window should be healthy
+    expect(payload.status).toBe("ready");
+    expect(payload.blockers).toHaveLength(0);
+    expect(payload.evidence.apiHealth.healthyFeeds).toBe(3);
+    expect(payload.evidence.apiHealth.totalFeeds).toBe(3);
   });
 
   it("does not modify configuration or rollout percentage", async () => {

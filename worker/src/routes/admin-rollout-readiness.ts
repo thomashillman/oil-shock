@@ -40,7 +40,6 @@ async function getApiHealthSummary(
 }> {
   try {
     const allFeeds = await getFeedRegistry(env);
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
     // Filter to only Phase 6A required feeds
     const requiredFeeds = allFeeds.filter((f) =>
@@ -65,7 +64,11 @@ async function getApiHealthSummary(
     const unhealthyFeeds: string[] = [];
 
     for (const feed of requiredFeeds) {
-      // Get metrics for this feed
+      // Use the feed's configured freshness window, not a fixed one-hour threshold
+      const freshnessThresholdMs = feed.freshnessWindowHours * 60 * 60 * 1000;
+      const freshnessThreshold = new Date(Date.now() - freshnessThresholdMs).toISOString();
+
+      // Get metrics for this feed within its freshness window
       const statsRow = await env.DB.prepare(
         `
         SELECT
@@ -79,7 +82,7 @@ async function getApiHealthSummary(
           AND attempted_at >= ?
         `
       )
-        .bind(feed.feedName, feed.provider, oneHourAgo)
+        .bind(feed.feedName, feed.provider, freshnessThreshold)
         .first<{
           total: number;
           success_count: number;

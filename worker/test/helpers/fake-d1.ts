@@ -480,3 +480,37 @@ export function createTestEnv() {
     GIE_API_KEY: "test-gie-key"
   };
 }
+
+/**
+ * Test helper: disable a feed in the fake registry.
+ * Used to test missing required feed scenarios.
+ */
+export function disableFeedInRegistry(env: any, feedName: string): void {
+  const db = env.DB as any;
+  const feed = db.tables.api_feed_registry.find((f: any) => f.feed_name === feedName);
+  if (feed) {
+    feed.enabled = 0;
+  }
+}
+
+/**
+ * Test helper: add an extra enabled feed to the fake registry.
+ * Used to test that extra seeded feeds don't block Phase 6A readiness.
+ */
+export function addExtraFeedToRegistry(
+  env: any,
+  feedName: string,
+  provider: string,
+  displayName: string
+): void {
+  const db = env.DB as any;
+  db.tables.api_feed_registry.push({
+    feed_name: feedName,
+    provider,
+    display_name: displayName,
+    enabled: 1,
+    freshness_window_hours: 24,
+    timeout_threshold_ms: 30000,
+    error_rate_threshold_pct: 5
+  });
+}
