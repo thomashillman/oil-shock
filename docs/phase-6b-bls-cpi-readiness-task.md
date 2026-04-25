@@ -35,14 +35,18 @@ This is readiness work only. No Phase 6B implementation.
 ## Files Changed So Far
 
 - `docs/phase-6b-bls-cpi-readiness-task.md` (this file)
+- `worker/test/fixtures/bls-cpi-responses.json` (BLS API response fixtures)
+- `worker/test/collectors/macro-releases.test.ts` (parser tests)
+- `worker/src/jobs/collectors/macro-releases.ts` (minimal parser)
 
 ## Validation Run So Far
 
-None yet.
+✅ `corepack pnpm -C worker test -- collectors` — All 7 new tests pass, 83 total tests pass
+✅ `corepack pnpm -C worker typecheck` — No type errors
 
 ## Next Step
 
-Create BLS CPI fixtures and failing tests based on `energy.test.ts` pattern.
+Add optional disabled-by-default collector shell and prove it's not wired into scheduled execution.
 
 ## Out of Scope
 
