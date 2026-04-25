@@ -210,7 +210,28 @@ Non-required seeded feeds (inventory, refinery, futures, ENTSOG, GIE, SEC, etc.)
 
 ## Readiness Assessment
 
-### Run Final Verification
+### Automated Evidence Capture Tool (Recommended)
+
+Use the Phase 6A evidence capture tool to generate a Markdown report:
+
+```bash
+corepack pnpm phase6a:evidence \
+  --base-url https://staging-worker.example.com \
+  --out docs/evidence/phase6a-canary-readiness.md
+```
+
+This tool:
+- Fetches all readiness, rollout, health, and API health endpoints
+- Generates a Markdown evidence report
+- Marks sections as ready/warning/blocked
+- Preserves all manual checks
+- Saves the report for ops records
+
+See `docs/phase-6a-canary-evidence-capture.md` for detailed usage.
+
+### Manual Verification (Alternative)
+
+If running the tool directly with curl:
 
 ```bash
 # 1. Check automatic items
