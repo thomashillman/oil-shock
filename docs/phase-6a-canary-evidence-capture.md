@@ -182,16 +182,68 @@ The report includes these manual checks that require operator sign-off:
 
 ---
 
+## Telemetry Verification Sequence (Step 0)
+
+**Before Day 22**: Verify that Energy collector telemetry is working in staging.
+
+**Code-Complete Items** (no action needed):
+1. ✅ Energy collector uses `instrumentedFetch()` (merged to main)
+2. ✅ D1 schema for metrics exists
+3. ✅ `/api/admin/api-health` endpoint implemented
+4. ✅ Evidence capture tool ready to use
+
+**Live-Operator Verification** (in staging, before canary):
+1. **Run a staging collection**
+   - Trigger manually via admin endpoint, or wait for scheduled collection
+   - Verify no errors in staging logs
+
+2. **Confirm metrics flowing**
+   ```bash
+   curl https://staging-worker.example.com/api/admin/api-health \
+     -H "Authorization: Bearer staging-token" | jq .
+   ```
+   - Should show 3 Energy feeds (eia_wti, eia_brent, eia_diesel_wti_crack)
+   - Each feed should have status "OK" or "ERROR" (not missing)
+   - systemHealthy should be true or degraded (not false)
+
+3. **Run this evidence capture tool**
+   ```bash
+   corepack pnpm phase6a:evidence -- \
+     --base-url https://staging-worker.example.com
+   ```
+   - Review generated report
+   - Look for "Endpoint Collection Status" section (all 4 endpoints should show ✅)
+   - Look for "API Health" section (Energy feeds should be listed)
+   - Check overall status: should be "ready" or "warning" (not "blocked")
+
+4. **Address any issues**
+   - If endpoint statuses show ❌, investigate that endpoint
+   - If feeds are unhealthy, check EIA API availability
+   - If blocked, resolve all blockers before proceeding
+
+5. **Save the report**
+   ```bash
+   corepack pnpm phase6a:evidence -- \
+     --base-url https://staging-worker.example.com \
+     --out docs/evidence/phase6a-telemetry-verification-YYYY-MM-DD.md
+   ```
+   - Save as ops record
+   - Attach to deployment ticket
+
+**Reference**: `docs/TELEMETRY_SETUP_GUIDE.md` and `docs/phase-6a-staging-telemetry-verification-task.md`
+
+---
+
 ## Workflow: Before Day 22 Canary
 
 ```
-1. Run telemetry setup (Tier 1)
+1. Verify telemetry in staging (Step 0: Telemetry Verification Sequence above)
    └─ Ensure collector metrics are flowing
    
 2. Configure Grafana monitoring (Tier 2)
    └─ Dashboard and alerts must be operational
    
-3. Run this evidence capture tool
+3. Run evidence capture tool
    corepack pnpm phase6a:evidence -- \
      --base-url https://staging-worker.example.com \
      --out docs/evidence/phase6a-canary-readiness.md

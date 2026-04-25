@@ -46,12 +46,13 @@ This document captures the current sequencing and decision constraints for work 
 
 Preparation Phase (Before Day 22):
 
-**Step 0: Telemetry Setup** (PREREQUISITE - must complete first)
-- [ ] Wire energy collector to use `instrumentedFetch()` instead of `fetchJson()`
-- [ ] Verify metrics are being recorded to `api_health_metrics` table
-- [ ] Test `/api/admin/api-health` endpoint returns data
-- [ ] Verify telemetry flowing in staging environment
-- [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`
+**Step 0: Telemetry Setup** (CODE-COMPLETE in main, live-operator verification required)
+- [x] **CODE-COMPLETE**: Wire energy collector to use `instrumentedFetch()` (merged to main)
+- [x] **CODE-COMPLETE**: D1 schema and API health endpoints implemented
+- [ ] **LIVE-VERIFY**: Run staging collection and verify metrics recorded to `api_health_metrics`
+- [ ] **LIVE-VERIFY**: Confirm `/api/admin/api-health` returns live data in staging
+- [ ] **LIVE-VERIFY**: Verify telemetry flowing in staging environment
+- [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
 **Step 1: Grafana Monitoring Setup**
 - [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
@@ -62,10 +63,10 @@ Preparation Phase (Before Day 22):
 
 **Step 2: Evidence Capture & Readiness Report**
 - [ ] Run Phase 6A evidence capture tool to verify all prerequisites
-  - `corepack pnpm phase6a:evidence --base-url https://staging-worker.example.com`
+  - `corepack pnpm phase6a:evidence -- --base-url https://staging-worker.example.com`
   - Review generated report: status should be "ready"
   - Save report as ops record
-  - Reference: `docs/phase-6a-canary-evidence-capture.md`
+  - Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
 **Step 3: Team Communication & Procedures**
 - [ ] Update team comms (schedule, phases, success criteria)
