@@ -40,20 +40,26 @@
 ### Commit 1
 - `docs/phase-6a-rollout-readiness-task.md` — This task brief
 
+### Commit 2
+- `worker/test/rollout/readiness.test.ts` — Readiness evaluator tests (failing as expected)
+
 ---
 
 ## Validation Run So Far
 
 **Commit 1**:
-- [ ] `corepack pnpm docs:check` (to verify docs)
+- ✅ `corepack pnpm docs:check` (to verify docs)
+
+**Commit 2**:
+- ✅ `corepack pnpm -C worker test -- readiness` (fails as expected: module not found)
 
 ---
 
 ## Current Status
 
-**Phase**: Setup (Commit 1 in progress)
+**Phase**: Tests written (Commit 2 complete, waiting to commit)
 
-**Next Step**: Write failing tests for readiness evaluator
+**Next Step**: Implement readiness evaluator module
 
 ---
 
