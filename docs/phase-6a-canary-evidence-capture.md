@@ -192,7 +192,7 @@ The report includes these manual checks that require operator sign-off:
    └─ Dashboard and alerts must be operational
    
 3. Run this evidence capture tool
-   node scripts/phase6a/capture-canary-evidence.ts \
+   corepack pnpm phase6a:evidence -- \
      --base-url https://staging-worker.example.com \
      --out docs/evidence/phase6a-canary-readiness.md
    
@@ -229,10 +229,10 @@ Set the worker URL either via `--base-url` or environment variable:
 
 ```bash
 # Option 1
-node scripts/phase6a/capture-canary-evidence.ts --base-url https://worker.example.com
+corepack pnpm phase6a:evidence -- --base-url https://worker.example.com
 
 # Option 2
-PHASE6A_BASE_URL=https://worker.example.com node scripts/phase6a/capture-canary-evidence.ts
+PHASE6A_BASE_URL=https://worker.example.com corepack pnpm phase6a:evidence
 ```
 
 ### "Endpoint unreachable" warnings
