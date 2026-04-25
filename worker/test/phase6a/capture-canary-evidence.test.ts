@@ -214,7 +214,7 @@ describe("Phase 6A Evidence Capture CLI", () => {
       expect(urls.some((url) => url.includes("POST"))).toBe(false);
     });
 
-    it("handles partial endpoint failure", async () => {
+    it("preserves HTTP 503 status with JSON body in endpoint evidence", async () => {
       const mockFetch = vi.fn();
       global.fetch = mockFetch as any;
 
@@ -229,7 +229,7 @@ describe("Phase 6A Evidence Capture CLI", () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 503,
-        json: async () => ({ ok: false })
+        json: async () => ({ status: "unavailable" })
       });
 
       // Status succeeds
@@ -252,18 +252,22 @@ describe("Phase 6A Evidence Capture CLI", () => {
 
       const evidence = await collectEvidence("https://worker.example.com");
 
-      // Health should be present
-      expect(evidence.health).not.toBeNull();
+      // Health should succeed
+      expect(evidence.health.ok).toBe(true);
+      expect(evidence.health.status).toBe(200);
 
-      // Readiness should still have data from 503 response
-      expect(evidence.readiness).not.toBeNull();
+      // Readiness should preserve 503 status AND data
+      expect(evidence.readiness.ok).toBe(false);
+      expect(evidence.readiness.status).toBe(503);
+      expect(evidence.readiness.data).toEqual({ status: "unavailable" });
+      expect(evidence.readiness.error).toBe("HTTP 503");
 
-      // Status and apiHealth should be present
-      expect(evidence.status).not.toBeNull();
-      expect(evidence.apiHealth).not.toBeNull();
+      // Status and apiHealth should succeed
+      expect(evidence.status.ok).toBe(true);
+      expect(evidence.apiHealth.ok).toBe(true);
     });
 
-    it("returns all null when all endpoints fail", async () => {
+    it("returns endpoint evidence with ok=false and error message when endpoints fail", async () => {
       const mockFetch = vi.fn();
       global.fetch = mockFetch as any;
 
@@ -275,10 +279,14 @@ describe("Phase 6A Evidence Capture CLI", () => {
 
       const evidence = await collectEvidence("https://worker.example.com");
 
-      expect(evidence.health).toBeNull();
-      expect(evidence.readiness).toBeNull();
-      expect(evidence.status).toBeNull();
-      expect(evidence.apiHealth).toBeNull();
+      // All endpoints should have ok=false with error messages
+      expect(evidence.health.ok).toBe(false);
+      expect(evidence.health.status).toBe(500);
+      expect(evidence.health.error).toBe("HTTP 500");
+
+      expect(evidence.readiness.ok).toBe(false);
+      expect(evidence.status.ok).toBe(false);
+      expect(evidence.apiHealth.ok).toBe(false);
     });
 
     it("includes bearer token in all requests when supplied", async () => {
@@ -303,7 +311,9 @@ describe("Phase 6A Evidence Capture CLI", () => {
 
   describe("real API health payload shape", () => {
     it("renders real PerFeedHealth payload correctly", async () => {
-      const { formatEvidenceReport } = await import("../../../scripts/phase6a/evidence-report");
+      const { formatEvidenceReport, type: EndpointEvidenceType } = await import(
+        "../../../scripts/phase6a/evidence-report"
+      );
 
       const feed: PerFeedHealth = {
         feedName: "eia_wti",
@@ -333,7 +343,14 @@ describe("Phase 6A Evidence Capture CLI", () => {
         }
       };
 
-      const report = formatEvidenceReport(null, null, null, apiHealth, "2026-04-25T12:00:00Z");
+      const apiHealthEvidence = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: apiHealth
+      };
+
+      const report = formatEvidenceReport(null, null, null, apiHealthEvidence, "2026-04-25T12:00:00Z");
 
       expect(report).toContain("EIA WTI Spot");
       expect(report).toContain("eia_wti");

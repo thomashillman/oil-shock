@@ -5,7 +5,8 @@ import {
   type RolloutReadinessResponse,
   type RolloutStatusResponse,
   type PerFeedHealth,
-  type ApiHealthResponse
+  type ApiHealthResponse,
+  type EndpointEvidence
 } from "../../../scripts/phase6a/evidence-report";
 
 describe("Evidence Report Formatter", () => {
@@ -84,7 +85,35 @@ describe("Evidence Report Formatter", () => {
         summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 }
       };
 
-      const report = formatEvidenceReport(health, readiness, rolloutStatus, apiHealth, mockGeneratedAt);
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: health
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const statusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: rolloutStatus
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: apiHealth
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, statusEvidence, apiHealthEvidence, mockGeneratedAt);
 
       expect(report).toContain("Ready for 10% canary");
       expect(report).toContain("does not change rollout percentage");
@@ -135,7 +164,35 @@ describe("Evidence Report Formatter", () => {
         summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 }
       };
 
-      const report = formatEvidenceReport(health, readiness, rolloutStatus, apiHealth, mockGeneratedAt);
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: health
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const statusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: rolloutStatus
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: apiHealth
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, statusEvidence, apiHealthEvidence, mockGeneratedAt);
 
       expect(report).toContain("2026-04-25");
       expect(report).toContain("Generated at:");
@@ -172,7 +229,14 @@ describe("Evidence Report Formatter", () => {
         }
       };
 
-      const report = formatEvidenceReport(null, null, null, apiHealth, mockGeneratedAt);
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: apiHealth
+      };
+
+      const report = formatEvidenceReport(null, null, null, apiHealthEvidence, mockGeneratedAt);
 
       expect(report).toContain("EIA WTI Spot");
       expect(report).toContain("eia_wti");
@@ -229,7 +293,35 @@ describe("Evidence Report Formatter", () => {
         summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 }
       };
 
-      const report = formatEvidenceReport(health, readiness, rolloutStatus, apiHealth, mockGeneratedAt);
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: health
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const statusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: rolloutStatus
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: apiHealth
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, statusEvidence, apiHealthEvidence, mockGeneratedAt);
 
       expect(report).toContain("BLOCKED");
       expect(report).toContain("DO NOT PROCEED");
@@ -260,11 +352,122 @@ describe("Evidence Report Formatter", () => {
         }
       };
 
-      const report = formatEvidenceReport(null, readiness, null, null, mockGeneratedAt);
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const report = formatEvidenceReport(null, readinessEvidence, null, null, mockGeneratedAt);
 
       expect(report).toContain("WARNING");
       expect(report).toContain("explicit sign-off");
       expect(report).toContain("Some data is stale");
+    });
+  });
+
+  describe("HTTP status code preservation", () => {
+    it("shows HTTP 503 status with JSON body preserved in report", () => {
+      // Endpoint returns 503 but has valid JSON body with data
+      const apiHealth: ApiHealthResponse = {
+        generatedAt: mockGeneratedAt,
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        feeds: [
+          {
+            feedName: "eia_wti",
+            provider: "EIA",
+            displayName: "EIA WTI Spot",
+            status: "OK",
+            latencyP95Ms: 250,
+            errorRatePct: 0,
+            lastSuccessfulAt: "2026-04-25T11:55:00Z",
+            lastAttemptedAt: "2026-04-25T11:56:00Z",
+            attemptCount1h: 60,
+            successCount1h: 60,
+            failureCount1h: 0,
+            timeoutCount1h: 0
+          }
+        ],
+        summary: { totalFeeds: 1, healthyFeeds: 1, degradedFeeds: 0, downFeeds: 0 }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: false,
+        status: 503,
+        data: apiHealth,
+        error: "HTTP 503"
+      };
+
+      const report = formatEvidenceReport(null, null, null, apiHealthEvidence, mockGeneratedAt);
+
+      // Report should show that /api/admin/api-health failed with HTTP 503
+      expect(report).toContain("INCOMPLETE");
+      expect(report).toContain("HTTP 503");
+      expect(report).toContain("/api/admin/api-health");
+
+      // BUT the JSON body should still be rendered since data was preserved
+      expect(report).toContain("EIA WTI Spot");
+      expect(report).toContain("eia_wti");
+      expect(report).toContain("250ms");
+    });
+
+    it("shows network errors marked incomplete", () => {
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: false,
+        status: 0,
+        data: null,
+        error: "Network error: ECONNREFUSED"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, null, null, null, mockGeneratedAt);
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).toContain("Network error");
+      expect(report).toContain("/health");
+    });
+
+    it("shows all four endpoint statuses in incomplete section", () => {
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: false,
+        status: 500,
+        data: null,
+        error: "HTTP 500"
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: false,
+        status: 502,
+        data: null,
+        error: "HTTP 502"
+      };
+
+      const statusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: "2026-04-25T12:00:00Z" }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: false,
+        status: 0,
+        data: null,
+        error: "Network error: timeout"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, statusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).toContain("HTTP 500");
+      expect(report).toContain("HTTP 502");
+      expect(report).toContain("Network error");
     });
   });
 
@@ -287,7 +490,14 @@ describe("Evidence Report Formatter", () => {
         timestamp: "2026-04-25T11:59:00.000Z"
       };
 
-      const report = formatEvidenceReport(health, null, null, null, mockGeneratedAt);
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: health
+      };
+
+      const report = formatEvidenceReport(healthEvidence, null, null, null, mockGeneratedAt);
 
       expect(report).toContain("INCOMPLETE");
       expect(report).toContain("Service Health");
@@ -311,8 +521,15 @@ describe("Evidence Report Formatter", () => {
         }
       };
 
-      const report1 = formatEvidenceReport(null, readiness, null, null, mockGeneratedAt);
-      const report2 = formatEvidenceReport(null, readiness, null, null, mockGeneratedAt);
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const report1 = formatEvidenceReport(null, readinessEvidence, null, null, mockGeneratedAt);
+      const report2 = formatEvidenceReport(null, readinessEvidence, null, null, mockGeneratedAt);
 
       expect(report1).toBe(report2);
     });

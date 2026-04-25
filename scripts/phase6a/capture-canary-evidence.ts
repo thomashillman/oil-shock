@@ -48,6 +48,18 @@ export interface FetchResult<T> {
 }
 
 /**
+ * Endpoint evidence envelope that preserves HTTP status and error metadata
+ * Allows reports to show that an endpoint returned HTTP 503 even with JSON body
+ */
+export interface EndpointEvidence<T> {
+  endpoint: string;
+  ok: boolean;
+  status: number;
+  data: T | null;
+  error?: string;
+}
+
+/**
  * Parse command-line arguments
  */
 export function parseArgs(): CliOptions {
@@ -154,6 +166,7 @@ export async function fetchEndpoint<T>(
 
 /**
  * Collect evidence from all read-only endpoints
+ * Returns full endpoint evidence (status, error, data) not just data
  */
 export async function collectEvidence(baseUrl: string, token?: string) {
   const [healthResult, readinessResult, statusResult, apiHealthResult] = await Promise.all([
@@ -173,10 +186,34 @@ export async function collectEvidence(baseUrl: string, token?: string) {
   ]);
 
   return {
-    health: healthResult.data,
-    readiness: readinessResult.data,
-    status: statusResult.data,
-    apiHealth: apiHealthResult.data
+    health: {
+      endpoint: "/health",
+      ok: healthResult.ok,
+      status: healthResult.status,
+      data: healthResult.data,
+      error: healthResult.error
+    } as EndpointEvidence<HealthPayload>,
+    readiness: {
+      endpoint: "/api/admin/rollout-readiness",
+      ok: readinessResult.ok,
+      status: readinessResult.status,
+      data: readinessResult.data,
+      error: readinessResult.error
+    } as EndpointEvidence<RolloutReadinessResponse>,
+    status: {
+      endpoint: "/api/admin/rollout-status",
+      ok: statusResult.ok,
+      status: statusResult.status,
+      data: statusResult.data,
+      error: statusResult.error
+    } as EndpointEvidence<RolloutStatusResponse>,
+    apiHealth: {
+      endpoint: "/api/admin/api-health",
+      ok: apiHealthResult.ok,
+      status: apiHealthResult.status,
+      data: apiHealthResult.data,
+      error: apiHealthResult.error
+    } as EndpointEvidence<ApiHealthResponse>
   };
 }
 
