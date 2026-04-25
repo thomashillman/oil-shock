@@ -6,47 +6,47 @@ Without this step, the Grafana dashboard will have no data to display.
 
 ---
 
-## Current State
+## Current State (as of 2026-04-25)
 
-**Infrastructure Ready**:
-- ✅ D1 schema exists: `api_health_metrics` and `api_feed_registry` tables
+**Code-Complete in main**:
+- ✅ D1 schema exists: `api_health_metrics` and `api_feed_registry` tables (migration 0015, 0016)
 - ✅ Helper library exists: `worker/src/lib/api-instrumentation.ts` with `instrumentedFetch()`
+- ✅ **Energy collector already wired** to use `instrumentedFetch()` (`worker/src/jobs/collectors/energy.ts`)
+- ✅ All 3 EIA feeds instrumented (WTI, Brent, Diesel/WTI Crack)
 - ✅ 8 feeds pre-seeded in `api_feed_registry`
 
-**Missing**:
-- ❌ Collectors NOT YET wired to use `instrumentedFetch()`
-- ❌ No metrics being recorded to `api_health_metrics` table
-- ❌ Grafana dashboard will be empty without this
+**Live-Operator Verification Required**:
+- [ ] Run staging collection and verify metrics recorded to `api_health_metrics`
+- [ ] Confirm `/api/admin/api-health` returns live data in staging
+- [ ] Verify telemetry flowing in staging environment
 
 ---
 
-## Step 0a: Wire Energy Collector (Canary)
+## Step 0a: Energy Collector Wiring (COMPLETE)
 
-Start with the energy collector as a proof-of-concept. This is the active collector during Phase 1 canary.
+**Status**: ✅ Already merged to main
+
+The energy collector is the active collector during Phase 1 canary and is already instrumented.
 
 ### File: `worker/src/jobs/collectors/energy.ts`
 
-**Current state** (uses `fetchJson`):
-```typescript
-import { fetchJson } from "../../lib/http-client";
-
-const spread = await fetchJson<EiaResponse>(wtiUrl, {
-  timeout: 30000,
-  retries: 2,
-  backoffMs: 125,
-  rateLimitDelayMs: 125
-});
-```
-
-**Change to** (uses `instrumentedFetch`):
+**Current implementation** (merged to main):
 ```typescript
 import { instrumentedFetch } from "../../lib/api-instrumentation";
 
-const spread = await instrumentedFetch<EiaResponse>(
+// All three EIA feeds are instrumented:
+const [wti, brent, diesel] = await Promise.all([
+  fetchLatestSeriesValue(env, "RWTC", "eia_wti"),
+  fetchLatestSeriesValue(env, "RBRTE", "eia_brent"),
+  fetchLatestSeriesValue(env, "EER_EPD2F_PF4_RGC_DPG", "eia_diesel_wti_crack")
+]);
+
+// Within fetchLatestSeriesValue:
+const response = await instrumentedFetch<EiaResponse>(
   env,
-  wtiUrl,
-  'eia_wti',           // feed_name from api_feed_registry
-  'EIA',               // provider from api_feed_registry
+  url.toString(),
+  feedName,          // 'eia_wti', 'eia_brent', or 'eia_diesel_wti_crack'
+  "EIA",             // provider
   {
     timeout: 30000,
     retries: 2,
@@ -56,115 +56,79 @@ const spread = await instrumentedFetch<EiaResponse>(
 );
 ```
 
-### Required Changes in energy.ts
+### What This Means
 
-Find all `fetchJson` calls and replace with `instrumentedFetch`. There should be 3 calls for:
-
-1. **EIA WTI Spread** (wtiUrl):
-   ```typescript
-   const spread = await instrumentedFetch<EiaResponse>(
-     env, wtiUrl, 'eia_wti', 'EIA', { ... }
-   );
-   ```
-
-2. **EIA Brent Spread** (brentUrl):
-   ```typescript
-   const spread = await instrumentedFetch<EiaResponse>(
-     env, brentUrl, 'eia_brent', 'EIA', { ... }
-   );
-   ```
-
-3. **Diesel WTI Crack** (dieselUrl):
-   ```typescript
-   const crack = await instrumentedFetch<EiaResponse>(
-     env, dieselUrl, 'eia_diesel_wti_crack', 'EIA', { ... }
-   );
-   ```
-
-### Updated Imports
-
-```typescript
-import type { Env } from "../env";
-import { instrumentedFetch } from "../lib/api-instrumentation";
-import { writeSeriesPoints } from "../db/client";
-import { log } from "../lib/logging";
-// ... other imports
-```
-
-### No Other Changes Needed
-
-- Function signatures remain the same
-- Error handling remains the same
-- Return values remain the same
-- API health metrics recording is automatic via `instrumentedFetch()`
+- ✅ All three EIA feeds are instrumented with automatic health metric recording
+- ✅ Metrics are recorded to `api_health_metrics` table automatically
+- ✅ No additional code changes needed
+- ✅ Function signatures and error handling remain unchanged
+- ✅ Return values remain unchanged
 
 ---
 
-## Step 0b: Verify Metrics Are Being Recorded
+## Step 0b: Live-Operator Verification (STAGING)
 
-### 1. Run Local Test
+The collector code is ready. Verify it works in staging before canary.
+
+### 1. Run Staging Collection
+
+Trigger a collection run in staging environment:
 
 ```bash
-# Start local worker with D1
-corepack pnpm dev:worker
-
-# In another terminal, trigger a collection run manually
-curl -X POST http://localhost:8787/api/admin/run-poc \
+# Option 1: Via manual admin endpoint
+POST https://staging-worker.example.com/api/admin/run-poc \
   -H "Authorization: Bearer your-admin-token"
+
+# Option 2: Via scheduled collection (next automatic run)
+# Collection normally runs on schedule (see CLAUDE.md for cron settings)
 ```
 
-### 2. Check D1 for Recorded Metrics
+### 2. Verify Metrics in `/api/admin/api-health`
 
 ```bash
-# Connect to local D1
-sqlite3 .wrangler/state/d1/DB.db
-
-# Query recorded metrics
-SELECT 
-  feed_name, 
-  provider, 
-  status, 
-  latency_ms, 
-  attempted_at 
-FROM api_health_metrics 
-WHERE feed_name LIKE 'eia_%'
-ORDER BY attempted_at DESC
-LIMIT 10;
-
-# Expected output:
-# eia_wti|EIA|success|847|2026-04-24T14:30:00.000Z
-# eia_brent|EIA|success|923|2026-04-24T14:30:00.000Z
-# eia_diesel_wti_crack|EIA|success|891|2026-04-24T14:30:00.000Z
-```
-
-### 3. Check for Errors
-
-If metrics aren't appearing, check:
-
-```bash
-# Check if api_health_metrics table exists
-sqlite3 .wrangler/state/d1/DB.db \
-  "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'api_%';"
-
-# Check if api_feed_registry is seeded
-sqlite3 .wrangler/state/d1/DB.db \
-  "SELECT COUNT(*) FROM api_feed_registry WHERE enabled = 1;"
-```
-
----
-
-## Step 0c: Test End-to-End via /api/admin/api-health
-
-Once metrics are being recorded, verify the health endpoint works:
-
-```bash
-# Test the health endpoint
-curl http://localhost:8787/api/admin/api-health \
+# Check the health endpoint returns live data
+curl https://staging-worker.example.com/api/admin/api-health \
   -H "Authorization: Bearer your-admin-token" | jq .
 
-# Expected response structure:
+# Expected: systemHealthy should be true or degraded, feeds should include:
+# - eia_wti (EIA WTI Spot)
+# - eia_brent (EIA Brent Spot)  
+# - eia_diesel_wti_crack (EIA Diesel/WTI Crack Spread)
+```
+
+### 3. Run Evidence Capture Tool
+
+Use the Phase 6A evidence capture tool to verify all endpoints:
+
+```bash
+corepack pnpm phase6a:evidence -- \
+  --base-url https://staging-worker.example.com \
+  --out docs/evidence/phase6a-telemetry-staging-YYYY-MM-DD.md
+
+# Review the report:
+# - Check "Endpoint Collection Status" (all 4 endpoints should show HTTP 200)
+# - Check "API Health" section (all 3 Energy feeds should show status "OK")
+# - Check overall status (should be "ready" or "warning", not "blocked")
+```
+
+### Troubleshooting
+
+If metrics aren't appearing:
+
+1. Verify collection was triggered (check staging logs)
+2. Confirm energy collector is using `instrumentedFetch()` (it should be from main)
+3. Run evidence capture tool to see detailed endpoint responses
+4. Check `/api/admin/api-health` directly for error details
+
+---
+
+## Step 0c: Expected API Health Response (REFERENCE)
+
+Once metrics are being recorded, `/api/admin/api-health` returns:
+
+```json
 {
-  "generatedAt": "2026-04-24T14:35:00.000Z",
+  "generatedAt": "2026-04-25T14:35:00.000Z",
   "systemHealthy": true,
   "unhealthyFeeds": [],
   "feeds": [
@@ -175,10 +139,38 @@ curl http://localhost:8787/api/admin/api-health \
       "status": "OK",
       "latencyP95Ms": 847,
       "errorRatePct": 0,
-      "lastSuccessfulAt": "2026-04-24T14:30:00.000Z",
-      "lastAttemptedAt": "2026-04-24T14:30:00.000Z",
-      "attemptCount1h": 1,
-      "successCount1h": 1,
+      "lastSuccessfulAt": "2026-04-25T14:30:00.000Z",
+      "lastAttemptedAt": "2026-04-25T14:30:00.000Z",
+      "attemptCount1h": 60,
+      "successCount1h": 59,
+      "failureCount1h": 1,
+      "timeoutCount1h": 0
+    },
+    {
+      "feedName": "eia_brent",
+      "provider": "EIA",
+      "displayName": "EIA Brent Spot",
+      "status": "OK",
+      "latencyP95Ms": 923,
+      "errorRatePct": 0,
+      "lastSuccessfulAt": "2026-04-25T14:30:00.000Z",
+      "lastAttemptedAt": "2026-04-25T14:30:00.000Z",
+      "attemptCount1h": 60,
+      "successCount1h": 60,
+      "failureCount1h": 0,
+      "timeoutCount1h": 0
+    },
+    {
+      "feedName": "eia_diesel_wti_crack",
+      "provider": "EIA",
+      "displayName": "EIA Diesel/WTI Crack Spread",
+      "status": "OK",
+      "latencyP95Ms": 891,
+      "errorRatePct": 0,
+      "lastSuccessfulAt": "2026-04-25T14:30:00.000Z",
+      "lastAttemptedAt": "2026-04-25T14:30:00.000Z",
+      "attemptCount1h": 60,
+      "successCount1h": 60,
       "failureCount1h": 0,
       "timeoutCount1h": 0
     }
@@ -192,55 +184,44 @@ curl http://localhost:8787/api/admin/api-health \
 }
 ```
 
----
-
-## Step 0d: Wire Additional Collectors (Optional)
-
-Once energy collector is working, you can wire additional collectors for more complete telemetry:
-
-### Other collectors that could use instrumentedFetch:
-
-- **ENTSOG Pipeline** (if implemented):
-  ```typescript
-  const data = await instrumentedFetch<PipelineResponse>(
-    env, pipelineUrl, 'enia_pipeline', 'ENTSOG', { ... }
-  );
-  ```
-
-- **GIE Storage** (if implemented):
-  ```typescript
-  const data = await instrumentedFetch<StorageResponse>(
-    env, storageUrl, 'gie_storage', 'GIE', { ... }
-  );
-  ```
-
-- **SEC EDGAR** (if implemented):
-  ```typescript
-  const data = await instrumentedFetch<EdgarResponse>(
-    env, edgarUrl, 'sec_impairment', 'SEC', { ... }
-  );
-  ```
-
-But start with energy collector first (it's the active one during Phase 1).
+**Key items to check**:
+- ✅ All 3 Energy feeds present and status "OK"
+- ✅ No feeds in "unhealthyFeeds" array
+- ✅ systemHealthy is true
+- ✅ Each feed has recent `lastSuccessfulAt` timestamp
+- ✅ Error rates are low or zero
+- ✅ Attempt counts show feed is actively being collected
 
 ---
 
-## Step 0e: Verify Metrics in Staging/Production
+## Step 0d: Additional Collectors (FUTURE)
 
-Before Day 22 deployment, verify telemetry works in staging:
+Once Energy telemetry is verified stable, additional collectors could be wired:
 
-```bash
-# SSH into staging environment or use Cloudflare dashboard
-# Run a manual collection via admin endpoint
-POST https://staging-worker.example.com/api/admin/run-poc
+- **ENTSOG Pipeline** (Phase 6B)
+- **GIE Storage** (Phase 6B)
+- **SEC EDGAR** (Phase 6B)
+- **Macro Releases / BLS CPI** (Phase 6B, readiness complete)
 
-# Wait 30 seconds
-# Query D1 in staging
-curl https://staging-worker.example.com/api/admin/api-health \
-  -H "Authorization: Bearer staging-token"
+All future collectors will follow the same `instrumentedFetch()` pattern. Start with Energy first (active during Phase 1 canary).
 
-# Should show metrics with status codes
-```
+---
+
+## Step 0e: Pre-Canary Verification (STAGING, before Day 22)
+
+Before deploying ENERGY_ROLLOUT_PERCENT=10:
+
+1. **Run collection in staging** (via admin endpoint or scheduled run)
+2. **Verify `/api/admin/api-health`** returns live Energy feed metrics
+3. **Run evidence capture tool**:
+   ```bash
+   corepack pnpm phase6a:evidence -- \
+     --base-url https://staging-worker.example.com
+   ```
+4. **Review the generated report** for status (ready/warning/blocked)
+5. **Address any issues** before proceeding to canary
+
+Reference: `docs/phase-6a-staging-telemetry-verification-task.md` for complete verification workflow.
 
 ---
 
@@ -305,14 +286,18 @@ SELECT * FROM api_feed_registry WHERE feed_name = 'eia_wti';
 
 ## Verification Checklist
 
-Before moving to Step 1 (Grafana setup):
+**Code-Complete** (no action needed, already in main):
+- [x] Energy collector wired to use `instrumentedFetch()`
+- [x] D1 schema and endpoints implemented
+- [x] API health tracking library complete
+- [x] Tests passing (140+ tests in `worker/test/phase6a/`)
 
-- [ ] Energy collector wired to use `instrumentedFetch()`
-- [ ] Local test run completes without errors
-- [ ] Metrics appear in local D1: `SELECT * FROM api_health_metrics LIMIT 1;`
-- [ ] `/api/admin/api-health` endpoint returns data
-- [ ] Health endpoint shows at least one feed with status "OK"
-- [ ] Staging environment has metrics flowing
+**Live-Operator Verification** (before Day 22 canary):
+- [ ] Staging collection run triggered successfully
+- [ ] Metrics recorded to D1 `api_health_metrics` table
+- [ ] `/api/admin/api-health` returns live Energy feed data
+- [ ] Evidence capture tool generates a "ready" or "warning" report (not "blocked")
+- [ ] All 3 Energy feeds show status "OK" in health endpoint
 - [ ] Team knows telemetry is live and working
 
 ---
