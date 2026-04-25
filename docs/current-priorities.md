@@ -60,7 +60,14 @@ Preparation Phase (Before Day 22):
 - [ ] Verify alert routing (Slack, PagerDuty)
 - [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
 
-**Step 2: Team Communication & Procedures**
+**Step 2: Evidence Capture & Readiness Report**
+- [ ] Run Phase 6A evidence capture tool to verify all prerequisites
+  - `corepack pnpm phase6a:evidence --base-url https://staging-worker.example.com`
+  - Review generated report: status should be "ready"
+  - Save report as ops record
+  - Reference: `docs/phase-6a-canary-evidence-capture.md`
+
+**Step 3: Team Communication & Procedures**
 - [ ] Update team comms (schedule, phases, success criteria)
 - [ ] Create incident response runbook (rollback procedures, root cause investigation)
 - [ ] Rehearse rollback procedure (ENERGY_ROLLOUT_PERCENT=0)
