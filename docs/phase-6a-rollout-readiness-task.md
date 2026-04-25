@@ -46,6 +46,10 @@
 ### Commit 3
 - `worker/src/core/rollout/readiness.ts` — Readiness evaluator implementation (pure, no network calls)
 
+### Commit 4
+- `worker/src/routes/admin-rollout-readiness.ts` — Admin endpoint for rollout readiness (aggregates data and calls evaluator)
+- Updated `worker/src/index.ts` to wire the new endpoint into the router
+
 ---
 
 ## Validation Run So Far
@@ -60,13 +64,18 @@
 - ✅ `corepack pnpm -C worker test -- readiness` (9 tests pass)
 - ✅ `corepack pnpm -C worker typecheck` (no errors)
 
+**Commit 4**:
+- ✅ `corepack pnpm -C worker test -- readiness` (9 tests pass)
+- ✅ `corepack pnpm -C worker typecheck` (no errors)
+- ✅ Admin endpoint wired and accessible via GET /api/admin/rollout-readiness
+
 ---
 
 ## Current Status
 
-**Phase**: Implementation complete (Commit 3 in progress)
+**Phase**: Admin endpoint added (Commit 4 complete)
 
-**Next Step**: Create optional admin endpoint (Commit 4)
+**Next Step**: Documentation and checklist (Commit 5)
 
 ---
 
