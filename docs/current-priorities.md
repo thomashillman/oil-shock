@@ -11,7 +11,10 @@ This document captures the current sequencing and decision constraints for work 
   - Phase 2 (Days 27-35): Public expansion 50%
   - Phase 3 (Days 36-42): Full rollout 100%
   - Phase 4 (Days 43-52): Stabilization monitoring
-- **Phase 6B (Macro Releases) deferred to Q3 2026** — Requires 8-12 weeks of CPI data + energy stabilization
+- **Phase 6B (Macro Releases) readiness complete, implementation deferred to Q3 2026**
+  - ✅ BLS CPI parser and fixtures ready (disabled-by-default)
+  - ⏳ Implementation waits for: Phase 6A stability (4+ weeks) + CPI history (8-12 weeks)
+  - See: `docs/phase-6b-macro-releases.md`, `docs/phase-6b-bls-cpi-readiness-task.md`
 - The repo currently implements Oil Shock (archived) + Energy engine (active, being rolled out)
 - `main` is the canonical branch and the implementation source of truth
 
