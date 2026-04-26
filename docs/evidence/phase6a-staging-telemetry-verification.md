@@ -1,52 +1,21 @@
 # Phase 6A Canary Evidence Report
 
-Generated at: 2026-04-26T17:28:01.429Z
+Generated at: 2026-04-26T17:32:28.963Z
+
+⚠️ **INCOMPLETE EVIDENCE COLLECTION**
+
+Some endpoints failed to respond. Report is conservative and incomplete.
+
+- ❌ `/health` failed (HTTP 503) - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
+- ❌ `/api/admin/rollout-readiness` failed (HTTP 503) - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
+- ❌ `/api/admin/rollout-status` failed (HTTP 503) - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
 
 ## Endpoint Collection Status
 
-✅ `/health`: HTTP 200
-✅ `/api/admin/rollout-readiness`: HTTP 200
-✅ `/api/admin/rollout-status`: HTTP 200
+❌ `/health`: HTTP 503 - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
+❌ `/api/admin/rollout-readiness`: HTTP 503 - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
+❌ `/api/admin/rollout-status`: HTTP 503 - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
 ✅ `/api/admin/api-health`: HTTP 200
-
-## Readiness Assessment
-
-Status: **❌ BLOCKED**
-
-❌ **DO NOT PROCEED TO 10% CANARY**
-
-Critical blockers must be resolved before rollout can proceed.
-
-### Blockers
-
-- ❌ Validation gates: not all gates have passed (energy_data_freshness:pending, energy_determinism:pending, energy_guardrail_correctness:pending, energy_rule_consistency:pending, health_endpoint_schema:pending, rollout_monitoring_ready:pending). Cannot proceed until all validation gates pass.
-- ❌ Gates signed off: 0/6 signed. Cannot proceed until all pre-deploy gates are signed off.
-
-## Automatic Checks (Code-Verified)
-
-### Pre-Deploy Gates
-
-❌ Gates: 0/6 signed off
-
-### API Health (Phase 6A Required Feeds)
-
-✅ System healthy: 3/3 feeds OK
-
-### Validation Gates
-
-❌ All validations passed: no
-   ⏳ energy_data_freshness: pending
-   ⏳ energy_determinism: pending
-   ⏳ energy_guardrail_correctness: pending
-   ⏳ energy_rule_consistency: pending
-   ⏳ health_endpoint_schema: pending
-   ⏳ rollout_monitoring_ready: pending
-
-### Rollout Status
-
-- Feature: ENERGY_ROLLOUT_PERCENT
-- Current percent: 0%
-- Target for canary: 10%
 
 ## Feed Health Details
 
@@ -74,30 +43,6 @@ Critical blockers must be resolved before rollout can proceed.
    - Error rate: 0%
 ❌ **SEC EDGAR Impairment Filings** (sec_impairment): UNKNOWN
    - Error rate: 0%
-
-## Service Health
-
-- Service: oil-shock-worker
-- Environment: preview
-- Runtime mode: oilshock
-- Status: healthy ✅
-- Database: healthy (15ms)
-- Config: healthy (20 thresholds)
-
-## Manual Verification Checklist
-
-These items require operator sign-off and cannot be automated:
-
-⏳ **Grafana Dashboard Imported**
-   Import docs/grafana-api-health-dashboard.json into Grafana and verify all panels display data correctly.
-⏳ **Alert Routing Configured**
-   Configure Grafana alert routing per docs/grafana-api-health-alerts.md (Slack, PagerDuty, etc.) and verify delivery.
-⏳ **Staging Telemetry Verified**
-   Run manual collection in staging environment, confirm metrics flowing to api_health_metrics table, and verify /api/admin/api-health returns expected data.
-⏳ **Rollback Rehearsal Complete**
-   Test rollback procedure: set ENERGY_ROLLOUT_PERCENT=0 in staging, verify snapshot serving resumes, confirm no data loss.
-⏳ **Team Communication**
-   Notify team of rollout schedule, phases, success criteria, and incident response procedures.
 
 ## Important Reminders
 
