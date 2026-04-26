@@ -52,13 +52,35 @@ Some endpoints failed to respond. Report is conservative and incomplete.
 - ✅ Manual checks remain manual
 - ✅ This is a read-only evidence collection tool
 
-## Next Steps (if ready)
+## Status: Evidence Incomplete — Canary Blocked
 
-1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)
-2. Ensure all manual checks are signed off by respective owners
-3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration
-4. Verify `/api/admin/rollout-status` returns `phase="canary-internal"`
-5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`
+**⚠️ IMPORTANT**: This evidence report is **INCOMPLETE**. Three required endpoints are returning HTTP 503 with non-JSON bodies. **Do not proceed with canary deployment.**
+
+- ❌ `/health`: HTTP 503, `DNS cache overflow`
+- ❌ `/api/admin/rollout-readiness`: HTTP 503, `DNS cache overflow`
+- ❌ `/api/admin/rollout-status`: HTTP 503, `DNS cache overflow`
+- ✅ `/api/admin/api-health`: HTTP 200 (working)
+
+**API health alone is not sufficient.** All four endpoints must return HTTP 200 with valid JSON before readiness can be claimed.
+
+## Next Steps (Once Evidence Is Complete)
+
+Only proceed if **all** conditions are met:
+
+1. ✅ All four readiness endpoints return HTTP 200 with valid JSON
+2. ✅ Evidence capture completes without "INCOMPLETE EVIDENCE COLLECTION" warnings
+3. ✅ Accountable owners review and confirm gate sign-offs (gates currently signed by phase6a-poc)
+4. ✅ Team communication sent about rollout schedule, phases, and success criteria
+5. ✅ Rollback procedure rehearsed and verified in staging
+6. ⏳ Grafana dashboard imported and operational (deferred to later stage, required before 50% expansion)
+
+Only then:
+- Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-26.md`)
+- Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration
+- Verify `/api/admin/rollout-status` returns `phase="canary-internal"`
+- Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`
+
+**Currently**: Blocked on endpoint remediation. See `docs/phase-6a-live-endpoint-readiness-sync-task.md` for diagnosis and remediation plan.
 
 ## References
 
