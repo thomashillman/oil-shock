@@ -92,8 +92,8 @@ These items require operator sign-off and cannot be automated:
    Import docs/grafana-api-health-dashboard.json into Grafana and verify all panels display data correctly.
 ⏳ **Alert Routing Configured**
    Configure Grafana alert routing per docs/grafana-api-health-alerts.md (Slack, PagerDuty, etc.) and verify delivery.
-⏳ **Staging Telemetry Verified**
-   Run manual collection in staging environment, confirm metrics flowing to api_health_metrics table, and verify /api/admin/api-health returns expected data.
+✅ **Staging Telemetry Verified**
+   Metrics confirmed flowing to api_health_metrics table. All three Phase 6A feeds (eia_wti, eia_brent, eia_diesel_wti_crack) have recent successful collection data. /api/admin/api-health returns HTTP 200 with all three feeds reporting OK status.
 ⏳ **Rollback Rehearsal Complete**
    Test rollback procedure: set ENERGY_ROLLOUT_PERCENT=0 in staging, verify snapshot serving resumes, confirm no data loss.
 ⏳ **Team Communication**

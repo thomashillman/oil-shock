@@ -30,17 +30,23 @@ Generated: 2026-04-26T12:53:56.665Z
 
 ## Status
 
-⚠️ **OPERATOR REVIEW REQUIRED** — D1 target is ready for migration application.
+✅ **CONFIGURATION & MIGRATIONS COMPLETE** — All migrations applied and tables verified in preview database.
 
-This report was generated at the configuration stage. For migration application results and table verification, see `docs/evidence/phase6a-staging-telemetry-verification.md`.
+This report was generated at the configuration stage. For migration application results and live staging telemetry, see `docs/evidence/phase6a-staging-telemetry-verification.md`.
 
 ## Completion Status
 
-**Configuration only (from this report):**
+**Configuration & Migration (Completed in PR #81):**
 - ✅ Preview D1 database created and bound in `wrangler.jsonc`
 - ✅ Preview and production have separate database IDs
+- ✅ All 16 migrations applied to preview database
+- ✅ Required tables verified in preview:
+  - `pre_deploy_gates`
+  - `gate_sign_off_history`
+  - `api_health_metrics`
+  - `api_feed_registry`
 - ✅ No CRITICAL blockers
 - ⚠️ Root and production share a database (expected for this phase)
 
-**Migration and verification:**
-- See `docs/evidence/phase6a-staging-telemetry-verification.md` for migration application results and required table verification
+**Live Verification & Canary Readiness:**
+- See `docs/evidence/phase6a-staging-telemetry-verification.md` for staging telemetry results and current readiness status
