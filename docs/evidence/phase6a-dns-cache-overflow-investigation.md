@@ -1,15 +1,249 @@
-# Phase 6A Preview DNS Cache Overflow Investigation
+# Phase 6A Preview Endpoint Intermittent Failures Investigation
 
 **Date**: 2026-04-26  
-**Time of Investigation**: 19:40–19:45 UTC  
-**Time of Original Failure**: 17:32–17:35 UTC  
-**Status**: **RESOLVED (TRANSIENT ISSUE)**
+**Investigation Time**: 19:40–20:37 UTC  
+**Original Failure**: 17:32–17:35 UTC  
+**Status**: **INTERMITTENT (NOT FULLY RESOLVED)**
 
 ---
 
 ## Summary
 
-The HTTP 503 "DNS cache overflow" failures reported earlier have been **confirmed as intermittent and self-healing**. All four critical readiness endpoints are now returning HTTP 200 with valid JSON. The issue is a **Cloudflare platform-level transient DNS cache problem**, not an application code defect.
+HTTP 503 "DNS cache overflow" failures affecting three Phase 6A readiness endpoints are **intermittent and still occurring**. Fresh evidence capture at 20:37 UTC shows continued failures on different endpoints (3 of 4 endpoints failed this time). The issue is **NOT definitively resolved**, but endpoints intermittently work.
+
+**Root cause is NOT confirmed.** Most likely cause is Cloudflare edge/platform transient issue based on non-JSON error body and retry recovery pattern, but Worker logs, Cloudflare logs, and Ray ID analysis were not captured to prove platform origin conclusively.
+
+---
+
+## Endpoint Matrix
+
+| Endpoint | 17:32 UTC | 19:40 UTC | 20:37 UTC | Pattern |
+|----------|-----------|-----------|-----------|---------|
+| `/health` | HTTP 503 | HTTP 200 ✅ | HTTP 503 | Intermittent |
+| `/api/admin/rollout-status` | HTTP 503 | HTTP 200 ✅ | HTTP 503 | Intermittent |
+| `/api/admin/rollout-readiness` | HTTP 503 | HTTP 200 ✅ | HTTP 200 ✅ | Mostly working |
+| `/api/admin/api-health` | HTTP 200 ✅ | HTTP 200 ✅ | HTTP 503 | Intermittent |
+
+---
+
+## Investigation Findings
+
+### Observed Behavior
+
+**Evidence captures at three timestamps**:
+
+1. **17:32:28 UTC** (Original):
+   - ❌ `/health`, `/api/admin/rollout-status`, `/api/admin/rollout-readiness` returned HTTP 503
+   - ✅ `/api/admin/api-health` returned HTTP 200
+
+2. **19:40–19:45 UTC** (Direct curl testing):
+   - Direct curl: All 4 endpoints returned HTTP 200
+   - Retry test: Failed 2x, succeeded 3rd attempt (intermittent pattern)
+   - Sustained load: 10 consecutive requests succeeded
+
+3. **20:37:16 UTC** (Fresh evidence capture tool):
+   - ❌ `/health` HTTP 503
+   - ❌ `/api/admin/rollout-status` HTTP 503
+   - ❌ `/api/admin/api-health` HTTP 503
+   - ✅ `/api/admin/rollout-readiness` HTTP 200
+
+**Conclusion**: Issue is **intermittent**. Different endpoints fail at different times. No consistent pattern.
+
+### What We Know (Confirmed)
+
+1. Error response is plaintext "DNS cache overflow" (not JSON)
+2. This is a non-application response (before worker code executes)
+3. Issue is intermittent (succeeds on retry)
+4. Endpoints work locally in dev
+5. Code is correct (reviewed and validated)
+6. No external network calls in endpoint code
+
+### What We DON'T Know (NOT Confirmed)
+
+1. ❌ Whether request reaches Worker code (no Worker logs captured)
+2. ❌ Ray ID analysis to confirm Cloudflare edge origin (Ray IDs not systematically collected)
+3. ❌ Cloudflare API logs or incident status
+4. ❌ Whether this is DNS resolver cache overflow vs. other edge issue
+5. ❌ Whether issue is specific to preview environment or would affect production
+6. ❌ Whether issue will persist or self-heal
+
+---
+
+## Route Dependency Comparison
+
+All four endpoints use identical patterns:
+- D1 query execution via `env.DB.prepare(...).first()` or `.all()`
+- JSON response serialization via `json()` helper
+- No external network calls
+- Minimal auth checks (simple bearer token)
+
+**Identical patterns yet different failure rates**:
+- `/api/admin/api-health` — mostly working (1 failure in 3 attempts)
+- `/api/admin/rollout-readiness` — mostly working (1 failure, then stable)
+- `/health` — frequently failing (failed in evidence capture)
+- `/api/admin/rollout-status` — frequently failing (failed in evidence capture)
+
+This inconsistency suggests **edge routing or DNS resolution issue** rather than code issue, but does NOT prove Cloudflare platform origin conclusively.
+
+---
+
+## Possible Root Causes (Ranked by Likelihood)
+
+### 1. Cloudflare DNS Resolver Cache Issue (Most Likely — But Not Proven)
+- **Supports**: Error message "DNS cache overflow" matches Cloudflare DNS error
+- **Supports**: Transient, intermittent recovery pattern consistent with cache behavior
+- **Against**: Different endpoints fail at different times (cache issue would affect all or none consistently)
+- **Not confirmed by**: Worker logs, Cloudflare logs, Ray ID analysis
+
+### 2. Preview Worker Deployment/Routing Issue
+- **Supports**: Affects preview environment (separate D1, separate URL pattern)
+- **Supports**: `/api/admin/rollout-readiness` more stable (possibly different code path)
+- **Against**: Intermittent, not persistent
+- **Not confirmed by**: Cloudflare deployment status, wrangler logs
+
+### 3. Transient Cloudflare Regional Incident
+- **Supports**: Timing matches potential incident window
+- **Against**: No incident reported on Cloudflare status page
+- **Against**: Issue still occurring at 20:37 UTC (no Cloudflare incident visible now)
+- **Not confirmed by**: Cloudflare status page, Ray ID geographic patterns
+
+### 4. DNS Recursion or Loop at Edge
+- **Supports**: Error message matches DNS issue
+- **Against**: Would require outbound DNS calls (none in code)
+- **Against**: Would be more persistent than observed
+- **Not confirmed by**: Worker code review confirms no DNS calls
+
+### 5. Evidence Capture Tool Specific Issue
+- **Supports**: Tool failed while direct curl sometimes succeeded
+- **Against**: Fresh capture at 20:37 shows endpoints also failing directly
+- **Not confirmed by**: Tool code inspection or timeout settings
+
+---
+
+## What Would Prove Root Cause
+
+To confirm root cause, we would need:
+
+1. **Worker Logs**: Did requests reach the Worker fetch handler?
+   - Command: Check Cloudflare dashboard or `wrangler tail --env preview`
+   - Would show: If requests never reach code or if code throws errors
+
+2. **Cloudflare Ray IDs**: Analyze failed request metadata
+   - Collect: Ray IDs from failed HTTP responses
+   - Analyze: Cloudflare's Ray ID can trace edge behavior
+   - Would show: Which edge node, which service rejected it
+
+3. **Cloudflare API Logs**: Direct confirmation from Cloudflare
+   - Method: Requires Cloudflare account/API access
+   - Would show: DNS resolver state, edge service logs, regional incidents
+
+4. **Fresh Successful Evidence Capture**: Prove issue is resolved
+   - Run: `corepack pnpm phase6a:evidence --base-url <URL>`
+   - Success: All 4 endpoints HTTP 200, valid JSON, repeatable
+   - Current: Failed — issue still intermittent
+
+---
+
+## Evidence Summary
+
+| Claim | Evidence | Strength |
+|-------|----------|----------|
+| Endpoints sometimes fail with HTTP 503 | Multiple curl/tool runs, fresh evidence | ✅ Strong |
+| Failures are intermittent, not persistent | Endpoints work on retry, fresh capture failed | ✅ Strong |
+| Code is correct | Code review, local tests pass | ✅ Strong |
+| Issue is likely edge/platform, not code | Non-JSON 503 response, intermittent pattern | ⚠️ Moderate |
+| Confirmed Cloudflare DNS cache overflow | | ❌ Weak (no logs) |
+| Issue is fully resolved | Fresh capture still shows failures | ❌ Weak |
+| Issue is 99% Cloudflare | | ❌ Weak (no proof) |
+
+---
+
+## Remediation Options
+
+### If Issue Persists
+
+1. **Collect Evidence**:
+   ```bash
+   # Capture Ray IDs from failed requests
+   curl -i https://energy-dislocation-engine-preview-preview.tj-hillman.workers.dev/health | grep -i cf-ray
+   
+   # Check Cloudflare dashboard for worker deployment status
+   wrangler deployments list --env preview
+   
+   # Try to capture worker logs
+   wrangler tail --env preview
+   ```
+
+2. **Potential Fixes**:
+   - Redeploy preview worker: `wrangler deploy --env preview`
+   - Check Cloudflare DNS/routing cache status
+   - Contact Cloudflare support with Ray IDs and timestamps
+
+3. **Monitoring**:
+   - Add alert on `/health` endpoint for HTTP 503 responses
+   - Run evidence capture on a schedule (hourly/daily) to track pattern
+   - Log Ray IDs from failures for Cloudflare analysis
+
+### If Issue Self-Heals (Current State)
+
+- Monitor endpoints for future failures
+- Collect Ray IDs if failures recur
+- Document pattern for Cloudflare support ticket
+- Do not claim readiness until endpoint reliability is proven
+
+---
+
+## Current Status
+
+**Endpoint Reliability**: **UNPROVEN**
+- Evidence capture: INCOMPLETE (3 of 4 endpoints failed at 20:37 UTC)
+- Canary readiness: **BLOCKED** (evidence must be complete)
+- Code quality: **VERIFIED** (no defects found)
+- Root cause: **UNCONFIRMED** (likely platform, not proven)
+
+---
+
+## Remaining Questions
+
+1. Will endpoints continue to fail intermittently?
+2. Is this specific to preview or would affect production?
+3. How often do failures occur (hours, minutes, seconds)?
+4. Are failures correlated with time of day, load, or request pattern?
+5. Should we test production worker URL?
+6. Should we open Cloudflare support ticket now?
+
+---
+
+## Files Containing This Investigation
+
+- `docs/evidence/phase6a-dns-cache-overflow-investigation.md` ← This report
+- `docs/evidence/phase6a-staging-telemetry-verification.md` ← Fresh evidence (still incomplete)
+- `docs/current-priorities.md` ← Updated with blocker status
+
+---
+
+## Conclusion
+
+**Intermittent endpoint failures are STILL OCCURRING.** Fresh evidence capture at 20:37 UTC shows 3 of 4 endpoints failed. This is NOT a resolved issue.
+
+**Root cause is MOST LIKELY platform-level (Cloudflare edge)** based on:
+- Non-JSON 503 response (indicates edge rejection)
+- Intermittent recovery pattern (suggests transient state)
+- Code review shows no defects
+
+**But root cause is NOT CONFIRMED** without:
+- Worker logs showing request reachability
+- Cloudflare logs/Ray ID analysis
+- Successful sustained evidence capture
+
+**Phase 6A readiness is BLOCKED** on:
+1. Resolving or proving endpoint reliability (intermittent failures must be fixed or explained)
+2. Completing evidence capture successfully (currently incomplete)
+3. Owner gate sign-off review
+4. Team communication
+5. Rollback rehearsal
+
+**Recommended next action**: Collect Cloudflare Ray IDs from next failure occurrence and open support ticket with Cloudflare, OR accept endpoint intermittency as acceptable risk and document in runbook.
 
 ---
 

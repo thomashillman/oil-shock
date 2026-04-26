@@ -68,21 +68,22 @@ Preparation Phase (Before Day 22):
 - [x] **LIVE-VERIFIED**: Provider API keys configured as Cloudflare secrets (PR #83)
 - [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 1: Live Endpoint Remediation** (✅ RESOLVED)
-- [x] Resolve HTTP 503 `DNS cache overflow` responses from three endpoints (TRANSIENT ISSUE, NOW RESOLVED)
-- [x] Restore valid JSON responses on all four required readiness endpoints (ALL RETURNING HTTP 200)
-- [x] Verify Cloudflare preview worker DNS/deployment configuration (CONFIRMED: TRANSIENT CLOUDFLARE DNS CACHE ISSUE)
-- [ ] Reference: `docs/phase-6a-live-endpoint-readiness-sync-task.md`, `docs/evidence/phase6a-dns-cache-overflow-investigation.md`
+**Step 1: Live Endpoint Remediation** (⏳ IN PROGRESS — INTERMITTENT FAILURES PERSIST)
+- [x] Code review: All endpoints correct, no defects found
+- [x] Investigation: Failures are intermittent, likely platform-level (most probable: Cloudflare edge DNS issue)
+- [ ] Resolution: Fresh evidence capture at 20:37 UTC shows 3/4 endpoints still failing intermittently
+- [ ] Action required: Either (a) resolve endpoint reliability issue, or (b) collect Cloudflare Ray IDs and open support ticket, or (c) accept intermittency as risk and document
+- [ ] Reference: `docs/evidence/phase6a-dns-cache-overflow-investigation.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Status**: The HTTP 503 "DNS cache overflow" errors were **intermittent and self-healing**. Investigation confirmed this was a Cloudflare platform-level DNS cache issue, not an application code defect. All four endpoints now consistently return HTTP 200 with valid JSON. **No code changes needed.** See investigation report for details.
+**Status**: HTTP 503 "DNS cache overflow" failures are **still occurring intermittently** (different endpoints fail at different times). Fresh evidence capture (20:37 UTC) shows 3 of 4 endpoints failed. Root cause is most likely Cloudflare platform-level but NOT confirmed (no Worker logs, Cloudflare logs, or Ray ID analysis). **This remains a blocker** until evidence capture succeeds consistently or issue is diagnosed and fixed.
 
-**Step 2: Evidence Capture & Readiness Report** (Blocked on Step 1)
-- [ ] Run Phase 6A evidence capture tool after endpoint remediation
-  - `corepack pnpm phase6a:evidence -- --base-url https://energy-dislocation-engine-preview-preview.tj-hillman.workers.dev`
-  - Review generated report: status should be "ready"
-  - Save report as ops record
-  - All four endpoints must return HTTP 200 with valid JSON
-- [ ] Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
+**Step 2: Evidence Capture & Readiness Report** (⏳ BLOCKED ON STEP 1 — ENDPOINT FAILURES)
+- [x] Evidence capture tool run at 20:37 UTC: **INCOMPLETE** (3 of 4 endpoints failed)
+- [ ] Cannot complete evidence until endpoints reliably return HTTP 200
+- [ ] Next attempt: Run after Step 1 is resolved (endpoint reliability confirmed)
+- [ ] Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
+
+**Status**: Evidence capture is blocked. Fresh run at 20:37 UTC shows incomplete collection (3 endpoints failed with HTTP 503). Cannot claim readiness until all four endpoints consistently return HTTP 200 with valid JSON.
 
 **Step 3: Team Communication & Procedures** (After evidence validation)
 - [ ] Update team comms (schedule, phases, success criteria)
@@ -98,18 +99,19 @@ Preparation Phase (Before Day 22):
 - [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
 
 **Blockers Before Execution Phase:**
-- ❌ Endpoint remediation: `/health`, `/api/admin/rollout-status`, `/api/admin/rollout-readiness` still returning HTTP 503
-- ❌ Evidence capture: Cannot complete readiness report until all four endpoints return valid JSON
-- ❌ Team sign-offs: Gates signed by PoC (phase6a-poc), but require review by accountable owners before canary
-- ⏳ Provider key rotation: If not confirmed complete, remains a blocker
-- ⏳ Rollback rehearsal: Not yet executed in staging
-- ⏳ Team comms: Not yet sent to wider team
+- ❌ **Endpoint reliability** (PRIMARY BLOCKER): Fresh evidence capture at 20:37 UTC shows 3/4 endpoints still failing intermittently with HTTP 503. Must resolve endpoint failures or confirm investigation before proceeding.
+- ❌ **Evidence capture** (BLOCKED BY ABOVE): Cannot complete until all four endpoints reliably return HTTP 200 with valid JSON
+- ❌ **Team sign-offs**: Gates signed by PoC (phase6a-poc), but require review by accountable owners before canary
+- ⏳ **Provider key rotation**: Status NOT VERIFIED. If keys not rotated, remains a blocker
+- ⏳ **Rollback rehearsal**: Not yet executed in staging
+- ⏳ **Team comms**: Not yet sent to wider team
 
 **10% Canary Remains BLOCKED.** Cannot proceed until:
-1. Endpoints return valid JSON (Step 1)
-2. Evidence capture completes successfully (Step 2)
+1. Endpoint intermittent failures are resolved or diagnosed (Step 1 — PRIMARY BLOCKER)
+2. Evidence capture completes successfully (Step 2 — depends on Step 1)
 3. Accountable owners review and confirm gate sign-offs
-4. Team communication and rollback procedures complete
+4. Provider key rotation status is confirmed complete
+5. Team communication sent and rollback procedures rehearsed
 
 Execution Phase (Blocked — awaiting Step 1-3):
 - [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring) — BLOCKED pending endpoint remediation
