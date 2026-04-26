@@ -108,7 +108,7 @@ describe('D1 Target Preflight CLI', () => {
       expect(report.includes('db:migrate:local')).toBe(false);
     });
 
-    it('generates report with wrangler d1 commands when ready', () => {
+    it('generates report with preview-only migration command when ready', () => {
       const result = analyzeD1Target(
         {
           d1_databases: [
@@ -155,7 +155,9 @@ describe('D1 Target Preflight CLI', () => {
 
       const report = generateReport(result);
       expect(report.includes('OPERATOR REVIEW REQUIRED')).toBe(true);
-      expect(report.includes('wrangler d1')).toBe(true);
+      expect(report.includes('--env preview')).toBe(true);
+      expect(report.includes('--env production')).toBe(false);
+      expect(report.includes('out of scope')).toBe(true);
       expect(report.includes('db:migrate:local')).toBe(false);
     });
 

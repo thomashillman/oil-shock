@@ -144,12 +144,14 @@ export function analyzeD1Target(
 
   // Generate gated migration commands for Cloudflare D1
   // Only show commands if no critical blockers (preview-production sharing, missing bindings, missing migrations)
+  // Phase 6A Step 0B focuses on preview/staging telemetry verification, not production migration
   if (blockers.length === 0) {
     migrationCommands.push(
       '# CRITICAL: Do not run until D1 target is confirmed',
-      '# Apply migrations to Cloudflare D1:',
+      '# Apply migrations to Cloudflare D1 preview environment:',
       '# wrangler d1 migrations apply energy_dislocation --env preview',
-      '# wrangler d1 migrations apply energy_dislocation --env production'
+      '',
+      '# Production migrations are intentionally out of scope for this pre-canary verification step.'
     );
   } else {
     migrationCommands.push(

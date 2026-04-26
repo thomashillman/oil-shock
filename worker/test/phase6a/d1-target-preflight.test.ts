@@ -535,7 +535,7 @@ describe('D1 Target Preflight Analyser', () => {
   });
 
   describe('Migration commands', () => {
-    it('shows Cloudflare D1 commands when no blockers', () => {
+    it('shows preview-only migration command when no blockers', () => {
       const wranglerConfig = {
         d1_databases: [
           {
@@ -579,7 +579,9 @@ describe('D1 Target Preflight Analyser', () => {
       );
 
       expect(result.migrationCommands.length).toBeGreaterThan(0);
-      expect(result.migrationCommands.some((c) => c.includes('wrangler d1'))).toBe(true);
+      expect(result.migrationCommands.some((c) => c.includes('--env preview'))).toBe(true);
+      expect(result.migrationCommands.some((c) => c.includes('--env production'))).toBe(false);
+      expect(result.migrationCommands.some((c) => c.includes('out of scope'))).toBe(true);
       expect(result.migrationCommands.some((c) => c.includes('db:migrate:local'))).toBe(false);
       expect(result.migrationCommands.some((c) => c.includes('CRITICAL'))).toBe(true);
     });
