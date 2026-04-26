@@ -28,24 +28,19 @@ Generated: 2026-04-26T12:53:56.665Z
 ✅ 0015_api_health_tracking.sql
 ✅ 0016_add_diesel_crack_feed.sql
 
-## Next Steps
+## Status
 
-Once all operator confirmations are complete:
+⚠️ **OPERATOR REVIEW REQUIRED** — D1 target is ready for migration application.
 
-```bash
-# CRITICAL: Do not run until D1 target is confirmed
-# Apply migrations to Cloudflare D1 preview environment:
-# wrangler d1 migrations apply energy_dislocation --env preview
+This report was generated at the configuration stage. For migration application results and table verification, see `docs/evidence/phase6a-staging-telemetry-verification.md`.
 
-# Production migrations are intentionally out of scope for this pre-canary verification step.
-```
+## Completion Status
 
-## Summary
+**Configuration only (from this report):**
+- ✅ Preview D1 database created and bound in `wrangler.jsonc`
+- ✅ Preview and production have separate database IDs
+- ✅ No CRITICAL blockers
+- ⚠️ Root and production share a database (expected for this phase)
 
-⚠️  This environment is ready for operator review.
-
-Before applying migrations:
-1. Review blockers and warnings above
-2. Confirm all required migration files are present
-3. Verify D1 target configuration is correct
-4. Apply Cloudflare D1 migrations only after explicit operator confirmation
+**Migration and verification:**
+- See `docs/evidence/phase6a-staging-telemetry-verification.md` for migration application results and required table verification

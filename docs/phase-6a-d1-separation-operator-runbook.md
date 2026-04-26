@@ -1,26 +1,27 @@
 # Phase 6A Step 0B D1 Separation Operator Runbook
 
-**Status**: Preview D1 separation config complete. Live verification and migrations pending.  
+**Status**: Preview D1 separation and migrations complete. Live verification pending.  
 **Date**: 2026-04-26  
-**Latest**: `wrangler.jsonc` updated with separate preview D1 database ID
+**Latest**: Migrations (0014, 0015, 0016) applied to preview; tables verified
 
 ---
 
 ## Context
 
-Phase 6A Step 0B (staging telemetry verification) required separating the preview D1 database from the shared production database. This has now been completed in configuration.
+Phase 6A Step 0B (staging telemetry verification) required separating the preview D1 database from the shared production database and applying required migrations. This has been completed.
 
 **What was done:**
 - Created new preview D1 database: `f9e3848e-20e6-43f0-8b0f-4fb652572d16`
 - Updated `wrangler.jsonc` env.preview to use the new database
+- Applied all 16 migrations to preview database
+- Verified required tables exist: pre_deploy_gates, gate_sign_off_history, api_health_metrics, api_feed_registry
 - Preflight check now passes with "OPERATOR REVIEW REQUIRED" status
 - No CRITICAL blockers remain
 
 **What remains:**
-1. Apply migrations (0014, 0015, 0016) to preview database
-2. Verify live endpoint responses (health, rollout-readiness, api-health)
-3. Run staging collection and verify `api_health_metrics` populated
-4. Proceed to canary sign-off
+1. Deploy preview worker and verify live endpoint responses
+2. Run staging collection and verify `api_health_metrics` populated
+3. Proceed to Grafana, alerts, comms, rollback rehearsal, and canary sign-off
 
 ---
 
@@ -174,34 +175,44 @@ Create a final PR with:
 
 ## Next Steps After This Runbook
 
-1. Operator creates separate preview D1 database
-2. Operator updates `wrangler.jsonc` with preview database ID
-3. Operator creates PR with configuration change
-4. CI/tests pass
-5. Merge PR
-6. Re-run preflight (should pass)
-7. Apply migrations to preview only
-8. Re-run evidence capture
-9. Create final PR with evidence
+**Configuration & Migrations Complete:**
+1. ✅ Separate preview D1 database created
+2. ✅ `wrangler.jsonc` updated with preview database ID
+3. ✅ Migrations applied to preview
+4. ✅ PR #81 contains configuration and evidence
+
+**Remaining work (in priority order):**
+1. Deploy preview worker with updated `wrangler.jsonc`
+2. Verify worker is reachable at preview URL
+3. Confirm `/api/admin/api-health` and `/api/admin/rollout-readiness` respond
+4. Run staging collection in preview database
+5. Rerun evidence capture against live preview URL
+6. Verify `api_health_metrics` has recent rows for all three Energy feeds
+7. Configure Grafana dashboard
+8. Configure alert routing
+9. Send team communications
+10. Rehearse rollback procedure
+11. Obtain canary approval and deploy 10% rollout
 
 ---
 
 ## Blockers Still Outstanding Before 10% Canary
 
-**Configuration Complete (in PR #81):**
+**Configuration & Migrations Complete (in PR #81):**
 - [x] Separate preview D1 database created
 - [x] `wrangler.jsonc` updated with preview database ID
 - [x] Preflight check passes (no CRITICAL blockers)
+- [x] Migrations 0014/0015/0016 applied to preview database
+- [x] Tables verified: pre_deploy_gates, gate_sign_off_history, api_health_metrics, api_feed_registry
 
-**Migrations & Verification (Operator action required):**
-- [ ] Migrations 0014/0015/0016 applied to preview database
-- [ ] Tables verified: pre_deploy_gates, gate_sign_off_history, api_health_metrics, api_feed_registry
-- [ ] Live `/api/admin/api-health` endpoint responds with current metrics
+**Live Verification & Telemetry (Operator action required):**
+- [ ] Preview worker deployed and reachable at live URL
+- [ ] Live `/api/admin/api-health` endpoint responds successfully
 - [ ] Live `/api/admin/rollout-readiness` endpoint responds successfully
-- [ ] Staging collection run and verified in preview database
-- [ ] Evidence capture shows recent rows in `api_health_metrics` for all three Energy feeds
+- [ ] Staging collection run in preview database
+- [ ] Evidence capture shows recent rows in `api_health_metrics` for all three Energy feeds (EIA, FRED, WTI)
 
-**Pre-Canary (Requires migrations complete):**
+**Pre-Canary (Requires live verification complete):**
 - [ ] Grafana dashboard imported
 - [ ] Alert routing configured
 - [ ] Team communications sent
