@@ -68,14 +68,13 @@ Preparation Phase (Before Day 22):
 - [x] **LIVE-VERIFIED**: Provider API keys configured as Cloudflare secrets (PR #83)
 - [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 1: Live Endpoint Remediation** (⏳ IN PROGRESS)
-- [ ] Resolve HTTP 503 `DNS cache overflow` responses from three endpoints:
-  - `/health`
-  - `/api/admin/rollout-status`
-  - `/api/admin/rollout-readiness`
-- [ ] Restore valid JSON responses on all four required readiness endpoints
-- [ ] Verify Cloudflare preview worker DNS/deployment configuration
-- [ ] Reference: `docs/phase-6a-live-endpoint-readiness-sync-task.md`
+**Step 1: Live Endpoint Remediation** (✅ RESOLVED)
+- [x] Resolve HTTP 503 `DNS cache overflow` responses from three endpoints (TRANSIENT ISSUE, NOW RESOLVED)
+- [x] Restore valid JSON responses on all four required readiness endpoints (ALL RETURNING HTTP 200)
+- [x] Verify Cloudflare preview worker DNS/deployment configuration (CONFIRMED: TRANSIENT CLOUDFLARE DNS CACHE ISSUE)
+- [ ] Reference: `docs/phase-6a-live-endpoint-readiness-sync-task.md`, `docs/evidence/phase6a-dns-cache-overflow-investigation.md`
+
+**Status**: The HTTP 503 "DNS cache overflow" errors were **intermittent and self-healing**. Investigation confirmed this was a Cloudflare platform-level DNS cache issue, not an application code defect. All four endpoints now consistently return HTTP 200 with valid JSON. **No code changes needed.** See investigation report for details.
 
 **Step 2: Evidence Capture & Readiness Report** (Blocked on Step 1)
 - [ ] Run Phase 6A evidence capture tool after endpoint remediation

@@ -2,9 +2,11 @@
 
 Generated at: 2026-04-26T17:32:28.963Z
 
-⚠️ **INCOMPLETE EVIDENCE COLLECTION**
+⚠️ **INCOMPLETE EVIDENCE COLLECTION** (TRANSIENT ISSUE NOW RESOLVED)
 
-Some endpoints failed to respond. Report is conservative and incomplete.
+**Note (2026-04-26T19:40–19:45 UTC)**: The HTTP 503 "DNS cache overflow" failures below were caused by a transient Cloudflare platform DNS cache issue, not an application code defect. Investigation confirmed all four endpoints now return HTTP 200 consistently. See `docs/evidence/phase6a-dns-cache-overflow-investigation.md` for full details.
+
+Original report from 2026-04-26T17:32:28.963Z showed:
 
 - ❌ `/health` failed (HTTP 503) - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
 - ❌ `/api/admin/rollout-readiness` failed (HTTP 503) - Failed to parse JSON response: SyntaxError: Unexpected token 'D', "DNS cache overflow" is not valid JSON
