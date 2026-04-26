@@ -111,12 +111,39 @@ None yet (task brief only).
 1. ✅ Branch created: `claude/phase-6a-d1-preflight-Oy7ZU`
 2. ✅ Context reviewed: wrangler.jsonc confirms shared D1 ID blocker
 3. ✅ Migrations exist: 0014, 0015, 0016 all present
-4. ⏳ Commit 1: Task brief (current)
-5. ⏳ Commit 2: Tests
-6. ⏳ Commit 3: Pure analyser
-7. ⏳ Commit 4: CLI wrapper
-8. ⏳ Commit 5: Docs update
+4. ✅ Commit 1: Task brief
+5. ✅ Commit 2: Tests (8 passing)
+6. ✅ Commit 3: Pure analyser (complete, typecheck passes)
+7. ✅ Commit 4: CLI wrapper (all options working, correctly exits non-zero on blockers)
+8. ✅ Commit 5: Documentation updates
+9. ✅ All validation passed
 
-## Next Step
+## Validation Results
 
-Commit 1 (this document) to establish task boundaries, then move to Commit 2 (failing tests).
+- ✅ `corepack pnpm docs:check` — Passed
+- ✅ `corepack pnpm -C worker test` — 8 tests passing, 146 total tests passing
+- ✅ `corepack pnpm -C worker typecheck` — No errors
+- ✅ `corepack pnpm phase6a:d1:preflight` — Correctly exits 1 (blocked) due to shared D1 ID
+- ✅ `corepack pnpm phase6a:d1:preflight -- --help` — Help output correct
+- ✅ `corepack pnpm phase6a:d1:preflight -- --out <path>` — Creates parent directories, writes report
+- ✅ No real network calls or migrations applied
+
+## Final Summary
+
+The Phase 6A D1 target preflight guardrail is complete and tested. The tool:
+- **Correctly detects** root, preview, and production share database ID `9db64b68-6ffc-4be2-a2c6-667691a5801f`
+- **Blocks appropriately** with status "blocked" until operator confirms target
+- **Validates** that all required migration files exist
+- **Warns** about APP_ENV mismatches
+- **Generates** gated migration commands (commented, not executed)
+- **Exits non-zero** when blockers present (expected, desired behavior)
+- **Produces deterministic output** for identical input
+
+## Next Operator Steps
+
+1. Run `corepack pnpm phase6a:d1:preflight` to generate preflight report
+2. Review report and confirm intended D1 target
+3. If root, preview, production use same database ID, confirm which should receive migrations
+4. Apply migrations only after explicit target confirmation
+5. Re-run evidence capture to verify telemetry setup
+6. Continue to Grafana setup and rollout only after telemetry verified

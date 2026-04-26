@@ -46,9 +46,20 @@ This document captures the current sequencing and decision constraints for work 
 
 Preparation Phase (Before Day 22):
 
+**Step -1: D1 Target Preflight** (TOOL-COMPLETE, operator action required)
+- [x] **TOOL-COMPLETE**: D1 target preflight guardrail implemented
+- [x] **TOOL-COMPLETE**: Detects shared D1 ID across root/preview/production
+- [x] **TOOL-COMPLETE**: Validates required migration files exist
+- [x] **TOOL-COMPLETE**: Generates Markdown preflight report
+- [ ] **OPERATOR-ACTION**: Run `corepack pnpm phase6a:d1:preflight` and resolve blockers
+- [ ] **OPERATOR-ACTION**: Confirm intended D1 target before applying migrations
+- [ ] **OPERATOR-ACTION**: Apply migrations 0014, 0015, 0016 only after confirmation
+- [ ] Reference: `docs/phase-6a-d1-target-preflight-task.md`
+
 **Step 0: Telemetry Setup** (CODE-COMPLETE in main, live-operator verification required)
 - [x] **CODE-COMPLETE**: Wire energy collector to use `instrumentedFetch()` (merged to main)
 - [x] **CODE-COMPLETE**: D1 schema and API health endpoints implemented
+- [ ] **LIVE-VERIFY**: Confirm D1 migrations 0014/0015/0016 are applied (Step -1 prerequisite)
 - [ ] **LIVE-VERIFY**: Run staging collection and verify metrics recorded to `api_health_metrics`
 - [ ] **LIVE-VERIFY**: Confirm `/api/admin/api-health` returns live data in staging
 - [ ] **LIVE-VERIFY**: Verify telemetry flowing in staging environment
