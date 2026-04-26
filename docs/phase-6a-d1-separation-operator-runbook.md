@@ -1,22 +1,30 @@
 # Phase 6A Step 0B D1 Separation Operator Runbook
 
-**Status**: Blocked pending manual D1 configuration  
+**Status**: Preview D1 separation config complete. Live verification and migrations pending.  
 **Date**: 2026-04-26  
-**Reason**: Shared D1 database detected between preview and production
+**Latest**: `wrangler.jsonc` updated with separate preview D1 database ID
 
 ---
 
 ## Context
 
-Phase 6A Step 0B (staging telemetry verification) is blocked because the current `wrangler.jsonc` configuration has root, preview, and production environments all pointing to the same D1 database:
+Phase 6A Step 0B (staging telemetry verification) required separating the preview D1 database from the shared production database. This has now been completed in configuration.
 
-```
-Database ID: 9db64b68-6ffc-4be2-a2c6-667691a5801f (shared across all envs)
-```
+**What was done:**
+- Created new preview D1 database: `f9e3848e-20e6-43f0-8b0f-4fb652572d16`
+- Updated `wrangler.jsonc` env.preview to use the new database
+- Preflight check now passes with "OPERATOR REVIEW REQUIRED" status
+- No CRITICAL blockers remain
 
-This is unsafe for migration operations. The preflight guardrail (PR #80) correctly blocks migration application until this is resolved.
+**What remains:**
+1. Apply migrations (0014, 0015, 0016) to preview database
+2. Verify live endpoint responses (health, rollout-readiness, api-health)
+3. Run staging collection and verify `api_health_metrics` populated
+4. Proceed to canary sign-off
 
-**Decision**: Create a separate preview/staging D1 database. Do not apply migrations to the shared database.
+---
+
+## Current State (PR #81)
 
 ---
 
@@ -180,12 +188,20 @@ Create a final PR with:
 
 ## Blockers Still Outstanding Before 10% Canary
 
-- [ ] Separate preview D1 database created
-- [ ] `wrangler.jsonc` updated with preview database ID
-- [ ] PR merged
-- [ ] Migrations applied to preview
-- [ ] Staging collection run and verified
-- [ ] Evidence capture shows API health metrics
+**Configuration Complete (in PR #81):**
+- [x] Separate preview D1 database created
+- [x] `wrangler.jsonc` updated with preview database ID
+- [x] Preflight check passes (no CRITICAL blockers)
+
+**Migrations & Verification (Operator action required):**
+- [ ] Migrations 0014/0015/0016 applied to preview database
+- [ ] Tables verified: pre_deploy_gates, gate_sign_off_history, api_health_metrics, api_feed_registry
+- [ ] Live `/api/admin/api-health` endpoint responds with current metrics
+- [ ] Live `/api/admin/rollout-readiness` endpoint responds successfully
+- [ ] Staging collection run and verified in preview database
+- [ ] Evidence capture shows recent rows in `api_health_metrics` for all three Energy feeds
+
+**Pre-Canary (Requires migrations complete):**
 - [ ] Grafana dashboard imported
 - [ ] Alert routing configured
 - [ ] Team communications sent

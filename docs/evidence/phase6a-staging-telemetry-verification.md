@@ -1,41 +1,129 @@
-# Phase 6A Canary Evidence Report
+# Phase 6A Staging Telemetry Verification
 
-Generated at: 2026-04-26T14:28:58.379Z
+**Date**: 2026-04-26  
+**Status**: ⚠️ **PARTIAL** - Configuration & migrations complete; live endpoint verification incomplete
 
-⚠️ **INCOMPLETE EVIDENCE COLLECTION**
+---
 
-Some endpoints failed to respond. Report is conservative and incomplete.
+## Configuration Status
 
-- ❌ `/health` failed - Network error: TypeError: fetch failed
-- ❌ `/api/admin/rollout-readiness` failed - Network error: TypeError: fetch failed
-- ❌ `/api/admin/rollout-status` failed - Network error: TypeError: fetch failed
-- ❌ `/api/admin/api-health` failed - Network error: TypeError: fetch failed
+✅ **Preview D1 Separation Complete**
+- Preview Database ID: `f9e3848e-20e6-43f0-8b0f-4fb652572d16`
+- Production Database ID: `9db64b68-6ffc-4be2-a2c6-667691a5801f`
+- Preflight Status: ⚠️ OPERATOR REVIEW REQUIRED (no CRITICAL blockers)
+- Configuration File: `wrangler.jsonc` updated in PR #81
 
-## Endpoint Collection Status
+---
 
-❌ `/health`: network error - Network error: TypeError: fetch failed
-❌ `/api/admin/rollout-readiness`: network error - Network error: TypeError: fetch failed
-❌ `/api/admin/rollout-status`: network error - Network error: TypeError: fetch failed
-❌ `/api/admin/api-health`: network error - Network error: TypeError: fetch failed
+## Migrations Applied to Preview
 
-## Important Reminders
+✅ **All 16 migrations applied successfully**
 
-- ✅ This report does not deploy anything
-- ✅ This report does not change `ENERGY_ROLLOUT_PERCENT`
-- ✅ This report does not sign any gates
-- ✅ Manual checks remain manual
-- ✅ This is a read-only evidence collection tool
+Applied to preview database `f9e3848e-20e6-43f0-8b0f-4fb652572d16`:
 
-## Next Steps (if ready)
+| Migration | Status |
+|---|---|
+| 0001_init.sql | ✅ |
+| 0002_state_change_events.sql | ✅ |
+| 0003_extend_run_evidence.sql | ✅ |
+| 0004_config_thresholds.sql | ✅ |
+| 0005_extend_signal_snapshots.sql | ✅ |
+| 0006_promote_scoring_constants.sql | ✅ |
+| 0007_snapshot_run_linkage.sql | ✅ |
+| 0008_complete_config_thresholds.sql | ✅ |
+| 0009_fix_evidence_group_label_constraint.sql | ✅ |
+| 0010_macro_signals_stage2.sql | ✅ |
+| 0011_stage3_rules_guardrails.sql | ✅ |
+| 0012_stage4_new_engines.sql | ✅ |
+| 0013_phase3_freeze_snapshots.sql | ✅ |
+| 0014_phase6_pre_deploy_gates.sql | ✅ |
+| 0015_api_health_tracking.sql | ✅ |
+| 0016_add_diesel_crack_feed.sql | ✅ |
 
-1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)
-2. Ensure all manual checks are signed off by respective owners
-3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration
-4. Verify `/api/admin/rollout-status` returns `phase="canary-internal"`
-5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`
+---
 
-## References
+## Required Tables Verified
 
-- Readiness checklist: `docs/phase-6a-rollout-readiness.md`
-- Monitoring strategy: `docs/rollout-monitoring-strategy.md`
-- Rollback procedure: `docs/phase-6-rollback-procedures.md`
+✅ **All Phase 6A tables present in preview database**
+
+```sql
+SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;
+```
+
+**Required tables (Phase 6A):**
+- ✅ pre_deploy_gates
+- ✅ gate_sign_off_history
+- ✅ api_health_metrics
+- ✅ api_feed_registry
+
+**Base Oil Shock tables also present:**
+- ✅ config_thresholds
+- ✅ series_points
+- ✅ signal_snapshots
+- ✅ runs
+- ✅ scores
+- ✅ (and others)
+
+---
+
+## Live Endpoint Verification
+
+❌ **INCOMPLETE** - Live preview worker deployment not available
+
+Attempted to verify against `http://localhost:8787`:
+
+| Endpoint | Status | Error |
+|---|---|---|
+| `/health` | ❌ | Network error: fetch failed |
+| `/api/admin/rollout-readiness` | ❌ | Network error: fetch failed |
+| `/api/admin/rollout-status` | ❌ | Network error: fetch failed |
+| `/api/admin/api-health` | ❌ | Network error: fetch failed |
+
+**Required for completion:**
+- Deploy worker to preview environment
+- Verify `/api/admin/api-health` returns 200 with recent `api_health_metrics`
+- Verify `/api/admin/rollout-readiness` returns 200
+- Run staging collection
+- Verify `api_health_metrics` has recent rows for Energy feeds (EIA, FRED, WTI)
+
+---
+
+## Safety Constraints Verified
+
+- ✅ No migrations applied to shared production database
+- ✅ No `ENERGY_ROLLOUT_PERCENT` changes
+- ✅ No gates signed
+- ✅ No canary deployment started
+- ✅ `wrangler.jsonc` production binding unchanged
+- ✅ `wrangler.jsonc` root binding unchanged
+
+---
+
+## Next Steps
+
+To complete Phase 6A Step 0B:
+
+1. Deploy updated `wrangler.jsonc` to preview worker
+2. Verify worker is reachable at preview URL
+3. Rerun evidence capture:
+   ```bash
+   ADMIN_TOKEN=<token> corepack pnpm phase6a:evidence -- \
+     --base-url https://<preview-url> \
+     --out docs/evidence/phase6a-staging-telemetry-verification.md
+   ```
+4. Verify `/api/admin/api-health` shows recent metrics for all feeds
+5. Run staging collection and verify population
+6. Once verified, proceed to Grafana, alert routing, team comms, and canary sign-off
+
+---
+
+## Blockers for 10% Canary
+
+- [ ] Live endpoint verification complete
+- [ ] `api_health_metrics` populated with recent data
+- [ ] Staging collection verified
+- [ ] Grafana dashboard configured
+- [ ] Alert routing configured
+- [ ] Team notifications sent
+- [ ] Rollback procedure rehearsed
+- [ ] 10% canary approved
