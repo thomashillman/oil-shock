@@ -68,25 +68,28 @@ Preparation Phase (Before Day 22):
 - [x] **LIVE-VERIFIED**: Provider API keys configured as Cloudflare secrets (PR #83)
 - [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 1: Live Endpoint Remediation** (✅ RESOLVED)
+**Step 1: Live Endpoint Remediation** (🔄 IN PROGRESS — ENDPOINTS STILL FAILING)
 - [x] Code review: All endpoints correct, no defects found
-- [x] Investigation: Failures were transient Cloudflare edge DNS cache issue
-- [x] Endpoint probing: 40 consecutive requests succeeded (100% success rate)
+- [x] Investigation: Failures classified as transient Cloudflare edge DNS cache issue (85% confidence)
+- [x] Endpoint probing: 40 consecutive requests succeeded at 21:01-21:01:52 UTC (100% success rate in that window)
 - [x] Ray ID analysis: All requests routed through ORD colo, all returned HTTP 200
 - [x] Root cause classified: Cloudflare DNS resolver cache overflow (85% confidence)
-- [x] Fresh evidence capture (21:02:12 UTC): All 4 endpoints HTTP 200, complete
+- [ ] **CRITICAL**: Evidence capture at 21:29:10 UTC shows issue has **NOT self-resolved**:
+  - `/health`: HTTP 503 (failed)
+  - `/api/admin/rollout-readiness`: HTTP 503 (failed)
+  - `/api/admin/rollout-status`: HTTP 200 (working)
+  - `/api/admin/api-health`: HTTP 200 (working)
 - [ ] Reference: `docs/evidence/phase6a-dns-cache-overflow-investigation.md`, `docs/evidence/phase6a-cloudflare-mcp-investigation.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Status**: HTTP 503 "DNS cache overflow" failures were **transient and have self-resolved**. Evidence capture is now complete (all endpoints HTTP 200). Root cause identified as Cloudflare edge DNS cache issue. **No code changes needed.** Step 1 is COMPLETE. Evidence unblocks Step 2.
+**Status**: The HTTP 503 "DNS cache overflow" issue is **NOT resolved**. Fresh evidence capture at 21:29:10 UTC shows `/health` and `/api/admin/rollout-readiness` still returning HTTP 503. The earlier endpoint probing at 21:01 UTC appeared successful, but current evidence shows the issue persists. **Remediation still needed.** Step 1 remains BLOCKED. Evidence is INCOMPLETE.
 
-**Step 2: Evidence Capture & Readiness Report** (✅ COMPLETE)
-- [x] Evidence capture tool run at 21:02:12 UTC: **COMPLETE** (all 4 endpoints returned HTTP 200)
-- [x] Evidence report shows: Status = READY
-- [x] All automatic checks: PASSED (6/6 gates signed, 3/3 feeds healthy, validation gates passed)
-- [x] Service health: healthy (database 19ms, config 20 thresholds)
-- [x] Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
+**Step 2: Evidence Capture & Readiness Report** (⏹️ BLOCKED)
+- [ ] Fresh evidence capture run at 21:29:10 UTC: **INCOMPLETE** (2 of 4 endpoints returning HTTP 503)
+- [ ] Evidence report shows: Status = **BLOCKED** (not READY)
+- [ ] Service unavailable: `/health` and `/api/admin/rollout-readiness` endpoints down
+- [ ] Reference: `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Status**: Evidence capture is complete and shows readiness. All four endpoints consistently return HTTP 200 with valid JSON. Ready to proceed to Step 3 (team communications and manual checks).
+**Status**: Evidence capture is **BLOCKED due to incomplete endpoint data**. `/health` and `/api/admin/rollout-readiness` endpoints are returning HTTP 503 "DNS cache overflow". Fresh evidence shows Status: BLOCKED with "DO NOT PROCEED TO 10% CANARY". Cannot proceed to Step 3 until all 4 required endpoints return HTTP 200.
 
 **Step 3: Team Communication & Procedures** (After evidence validation)
 - [ ] Update team comms (schedule, phases, success criteria)
@@ -102,19 +105,17 @@ Preparation Phase (Before Day 22):
 - [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
 
 **Blockers Before Execution Phase:**
-- ✅ **Endpoint reliability**: HTTP 503 failures were transient and have resolved. Fresh evidence shows all endpoints HTTP 200. UNBLOCKED.
-- ✅ **Evidence capture**: Complete and shows readiness. UNBLOCKED.
+- ❌ **CRITICAL: Endpoint reliability**: `/health` and `/api/admin/rollout-readiness` returning HTTP 503. Fresh evidence at 21:29:10 UTC shows issue is ONGOING (not resolved). BLOCKED.
+- ❌ **CRITICAL: Evidence capture**: INCOMPLETE due to endpoint failures. Evidence shows Status: BLOCKED. BLOCKED.
 - ❌ **Accountable owner gate sign-off review**: Gates signed by PoC (phase6a-poc), require review by owners
 - ⏳ **Provider key rotation**: Status NOT VERIFIED (assume configured as Cloudflare secrets in PR #83, but not explicitly confirmed)
 - ⏳ **Rollback rehearsal**: Not yet executed in staging
 - ⏳ **Team comms**: Not yet sent to wider team
 
-**10% Canary Unblocked on Endpoints/Evidence.** Remaining blockers:
-1. ✅ Endpoint reliability resolved (Step 1)
-2. ✅ Evidence capture complete (Step 2)
+**10% Canary BLOCKED pending endpoint/evidence remediation.** Critical blockers:
+1. ❌ Endpoint reliability NOT resolved — `/health` and `/api/admin/rollout-readiness` still HTTP 503 (Step 1)
+2. ❌ Evidence capture INCOMPLETE — Status: BLOCKED (Step 2)
 3. ❌ Accountable owners review and confirm gate sign-offs (Step 3)
-4. ⏳ Provider key rotation status confirmation (operational blocker if not completed)
-5. ⏳ Team communication and rollback rehearsal (Step 3)
 
 Execution Phase (Blocked — awaiting Step 1-3):
 - [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring) — BLOCKED pending endpoint remediation
