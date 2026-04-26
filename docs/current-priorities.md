@@ -48,12 +48,12 @@ Preparation Phase (Before Day 22):
 
 **Step -1: D1 Target Preflight** (TOOL-COMPLETE, operator action required)
 - [x] **TOOL-COMPLETE**: D1 target preflight guardrail implemented
-- [x] **TOOL-COMPLETE**: Detects shared D1 ID across root/preview/production
+- [x] **TOOL-COMPLETE**: Detects unsafe D1 ID sharing patterns (preview-production critical, root sharing warnings)
 - [x] **TOOL-COMPLETE**: Validates required migration files exist
-- [x] **TOOL-COMPLETE**: Generates Markdown preflight report
-- [ ] **OPERATOR-ACTION**: Run `corepack pnpm phase6a:d1:preflight` and resolve blockers
-- [ ] **OPERATOR-ACTION**: Confirm intended D1 target before applying migrations
-- [ ] **OPERATOR-ACTION**: Apply migrations 0014, 0015, 0016 only after confirmation
+- [x] **TOOL-COMPLETE**: Generates Markdown preflight report with Cloudflare D1 commands
+- [ ] **OPERATOR-ACTION**: Run `corepack pnpm phase6a:d1:preflight` and review report
+- [ ] **OPERATOR-ACTION**: Resolve D1 configuration issues (especially preview-production sharing)
+- [ ] **OPERATOR-ACTION**: Apply migrations 0014, 0015, 0016 only after explicit confirmation
 - [ ] Reference: `docs/phase-6a-d1-target-preflight-task.md`
 
 **Step 0: Telemetry Setup** (CODE-COMPLETE in main, live-operator verification required)

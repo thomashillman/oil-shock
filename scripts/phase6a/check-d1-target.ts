@@ -6,19 +6,33 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { analyzeD1Target } from '../../worker/src/phase6a/d1-target-preflight';
+import { analyzeD1Target, D1TargetPreflightResult } from '../../worker/src/phase6a/d1-target-preflight';
 
-async function main() {
-  const args = process.argv.slice(2);
+// Export for testing
+export async function parseArgs(args: string[]): Promise<{ outputPath: string | null; showHelp: boolean }> {
   let outputPath: string | null = null;
+  let showHelp = false;
 
-  // Parse --out argument
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--out' && i + 1 < args.length) {
-      outputPath = args[i + 1];
-      i++;
+    if (args[i] === '--out') {
+      if (i + 1 < args.length) {
+        outputPath = args[i + 1];
+        i++;
+      } else {
+        throw new Error('--out requires an argument');
+      }
     } else if (args[i] === '--help') {
-      console.log(`
+      showHelp = true;
+    } else if (args[i].startsWith('-')) {
+      throw new Error(`unknown argument: ${args[i]}`);
+    }
+  }
+
+  return { outputPath, showHelp };
+}
+
+export function showHelp(): string {
+  return `
 Usage: tsx scripts/phase6a/check-d1-target.ts [options]
 
 Options:
@@ -35,82 +49,86 @@ The script:
 Example:
   corepack pnpm phase6a:d1:preflight
   corepack pnpm phase6a:d1:preflight --out /tmp/preflight-report.md
-      `);
-      process.exit(0);
-    }
-  }
+  `;
+}
+
+function parseJsonc(content: string): any {
+  // Remove full-line comments (lines starting with //)
+  let normalized = content
+    .split('\n')
+    .filter(line => !line.trim().startsWith('//'))
+    .join('\n');
+
+  // Remove inline comments (// after content, but avoid inside strings)
+  normalized = normalized
+    .split('\n')
+    .map(line => {
+      // Simple inline comment removal: find // that is not in quotes
+      const inString = (str: string, pos: number): boolean => {
+        let inQuote = false;
+        let escape = false;
+        for (let i = 0; i < pos; i++) {
+          if (escape) {
+            escape = false;
+            continue;
+          }
+          if (str[i] === '\\') {
+            escape = true;
+            continue;
+          }
+          if (str[i] === '"') {
+            inQuote = !inQuote;
+          }
+        }
+        return inQuote;
+      };
+
+      let idx = line.indexOf('//');
+      while (idx >= 0) {
+        if (!inString(line, idx)) {
+          return line.substring(0, idx).trimEnd();
+        }
+        idx = line.indexOf('//', idx + 1);
+      }
+      return line;
+    })
+    .join('\n');
+
+  // Remove trailing commas before ] or }
+  normalized = normalized.replace(/,(\s*[}\]])/g, '$1');
 
   try {
-    // Read wrangler.jsonc from repo root
-    const wranglerPath = path.resolve(process.cwd(), 'wrangler.jsonc');
-    const wranglerContent = await fs.readFile(wranglerPath, 'utf-8');
-
-    // Parse JSONC (simple approach: remove comments)
-    const jsonContent = wranglerContent
-      .split('\n')
-      .filter(line => !line.trim().startsWith('//'))
-      .join('\n');
-
-    let wranglerConfig: any;
-    try {
-      wranglerConfig = JSON.parse(jsonContent);
-    } catch (e) {
-      console.error('Failed to parse wrangler.jsonc:');
-      console.error(e instanceof Error ? e.message : String(e));
-      process.exit(1);
-    }
-
-    // Determine which migration files exist
-    const requiredMigrations = [
-      '0014_phase6_pre_deploy_gates.sql',
-      '0015_api_health_tracking.sql',
-      '0016_add_diesel_crack_feed.sql',
-    ];
-
-    const existingFiles: string[] = [];
-    const dbMigrationsPath = path.resolve(process.cwd(), 'db/migrations');
-
-    for (const filename of requiredMigrations) {
-      const filePath = path.join(dbMigrationsPath, filename);
-      try {
-        await fs.stat(filePath);
-        existingFiles.push(filename);
-      } catch {
-        // File doesn't exist
-      }
-    }
-
-    // Analyze D1 target
-    const result = analyzeD1Target(wranglerConfig, requiredMigrations, {
-      existingFiles,
-    });
-
-    // Generate Markdown report
-    const report = generateReport(result);
-
-    // Write report
-    if (outputPath) {
-      const dir = path.dirname(outputPath);
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(outputPath, report, 'utf-8');
-      console.log(`Preflight report written to: ${outputPath}`);
-    } else {
-      console.log(report);
-    }
-
-    // Exit with appropriate code
-    if (result.status === 'blocked') {
-      process.exit(1);
-    }
-    process.exit(0);
-  } catch (error) {
-    console.error('Preflight check failed:');
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    return JSON.parse(normalized);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    throw new Error(`Invalid JSON in wrangler.jsonc: ${error}`);
   }
 }
 
-function generateReport(result: any): string {
+export async function loadWranglerConfig(cwd: string): Promise<any> {
+  const wranglerPath = path.resolve(cwd, 'wrangler.jsonc');
+  const content = await fs.readFile(wranglerPath, 'utf-8');
+  return parseJsonc(content);
+}
+
+export async function loadMigrationFiles(cwd: string, requiredMigrations: string[]): Promise<string[]> {
+  const existingFiles: string[] = [];
+  const dbMigrationsPath = path.resolve(cwd, 'db/migrations');
+
+  for (const filename of requiredMigrations) {
+    const filePath = path.join(dbMigrationsPath, filename);
+    try {
+      await fs.stat(filePath);
+      existingFiles.push(filename);
+    } catch {
+      // File doesn't exist
+    }
+  }
+
+  return existingFiles;
+}
+
+export function generateReport(result: D1TargetPreflightResult): string {
   const lines: string[] = [];
 
   lines.push('# Phase 6A D1 Target Preflight Report');
@@ -127,19 +145,6 @@ function generateReport(result: any): string {
     lines.push(`### ${binding.scope}`);
     lines.push(`- Database: ${binding.databaseName}`);
     lines.push(`- ID: \`${binding.databaseId}\``);
-    lines.push('');
-  }
-
-  // Shared Database Warning
-  if (result.blockers.some((b: string) => b.includes('shared'))) {
-    lines.push('## ⚠️  WARNING: Shared D1 Database');
-    lines.push('');
-    lines.push(
-      'Root, preview, and production environments are configured to use the same D1 database ID. ' +
-      'Applying migrations without explicit confirmation could corrupt the wrong environment.'
-    );
-    lines.push('');
-    lines.push('**Action Required**: Confirm intended migration target before proceeding.');
     lines.push('');
   }
 
@@ -180,10 +185,11 @@ function generateReport(result: any): string {
     if (result.status === 'blocked') {
       lines.push('**Status: BLOCKED** — Do not apply migrations until all blockers are resolved.');
       lines.push('');
+    } else {
+      lines.push('Once all operator confirmations are complete:');
+      lines.push('');
     }
 
-    lines.push('Once D1 target is confirmed and all blockers are resolved:');
-    lines.push('');
     lines.push('```bash');
     for (const cmd of result.migrationCommands) {
       lines.push(cmd);
@@ -206,17 +212,68 @@ function generateReport(result: any): string {
     lines.push('⚠️  This environment is ready for operator review.');
     lines.push('');
     lines.push('Before applying migrations:');
-    lines.push('1. Verify intended D1 target (confirm no shared ID misconfiguration)');
+    lines.push('1. Review blockers and warnings above');
     lines.push('2. Confirm all required migration files are present');
-    lines.push('3. Review warnings above');
-    lines.push('4. Run migration commands only after explicit confirmation');
+    lines.push('3. Verify D1 target configuration is correct');
+    lines.push('4. Apply Cloudflare D1 migrations only after explicit operator confirmation');
   }
   lines.push('');
 
   return lines.join('\n');
 }
 
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+export async function runPreflight(
+  cwd: string,
+  outputPath: string | null
+): Promise<{ status: string; exitCode: number }> {
+  const wranglerConfig = await loadWranglerConfig(cwd);
+
+  const requiredMigrations = [
+    '0014_phase6_pre_deploy_gates.sql',
+    '0015_api_health_tracking.sql',
+    '0016_add_diesel_crack_feed.sql',
+  ];
+
+  const existingFiles = await loadMigrationFiles(cwd, requiredMigrations);
+
+  const result = analyzeD1Target(wranglerConfig, requiredMigrations, {
+    existingFiles,
+  });
+
+  const report = generateReport(result);
+
+  if (outputPath) {
+    const dir = path.dirname(outputPath);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(outputPath, report, 'utf-8');
+    console.log(`Preflight report written to: ${outputPath}`);
+  } else {
+    console.log(report);
+  }
+
+  const exitCode = result.status === 'blocked' ? 1 : 0;
+  return { status: result.status, exitCode };
+}
+
+// Only run CLI if this is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const args = process.argv.slice(2);
+
+  (async () => {
+    try {
+      const { outputPath, showHelp } = await parseArgs(args);
+
+      if (showHelp) {
+        console.log(showHelp());
+        process.exit(0);
+      }
+
+      const result = await runPreflight(process.cwd(), outputPath);
+      process.exit(result.exitCode);
+    } catch (error) {
+      console.error('Preflight check failed:');
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  })();
+}

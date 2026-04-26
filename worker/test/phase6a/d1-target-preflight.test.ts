@@ -6,8 +6,56 @@ import {
 } from '../../src/phase6a/d1-target-preflight';
 
 describe('D1 Target Preflight Analyser', () => {
-  describe('Shared D1 target detection', () => {
-    it('detects when root, preview, and production share the same D1 ID', () => {
+  describe('Critical: preview-production sharing', () => {
+    it('blocks when preview and production share the same D1 ID', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'root-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: '9db64b68-6ffc-4be2-a2c6-667691a5801f',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: '9db64b68-6ffc-4be2-a2c6-667691a5801f',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
+
+      expect(result.status).toBe('blocked');
+      expect(result.blockers.some((b) => b.includes('preview and production') && b.includes('shared'))).toBe(true);
+      expect(result.blockers.some((b) => b.includes('CRITICAL'))).toBe(true);
+    });
+
+    it('blocks when all three (root, preview, production) share the same D1 ID', () => {
       const wranglerConfig = {
         d1_databases: [
           {
@@ -42,21 +90,27 @@ describe('D1 Target Preflight Analyser', () => {
         '0014_phase6_pre_deploy_gates.sql',
         '0015_api_health_tracking.sql',
         '0016_add_diesel_crack_feed.sql',
-      ]);
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
 
       expect(result.status).toBe('blocked');
       expect(result.blockers.some((b) => b.includes('shared'))).toBe(true);
     });
   });
 
-  describe('Separate D1 targets', () => {
-    it('does not block solely because D1 targets are different', () => {
+  describe('Warnings for root sharing', () => {
+    it('warns when root and preview share the same D1 ID', () => {
       const wranglerConfig = {
         d1_databases: [
           {
             binding: 'DB',
             database_name: 'energy_dislocation',
-            database_id: 'local-db-id',
+            database_id: 'shared-id',
           },
         ],
         env: {
@@ -65,7 +119,7 @@ describe('D1 Target Preflight Analyser', () => {
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'preview-db-id',
+                database_id: 'shared-id',
               },
             ],
           },
@@ -74,7 +128,7 @@ describe('D1 Target Preflight Analyser', () => {
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'production-db-id',
+                database_id: 'different-id',
               },
             ],
           },
@@ -85,9 +139,193 @@ describe('D1 Target Preflight Analyser', () => {
         '0014_phase6_pre_deploy_gates.sql',
         '0015_api_health_tracking.sql',
         '0016_add_diesel_crack_feed.sql',
-      ]);
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
 
-      // Should still be blocked because migrations are required, but not because of sharing
+      expect(result.warnings.some((w) => w.includes('root and preview'))).toBe(true);
+    });
+
+    it('warns when root and production share the same D1 ID', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'shared-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'different-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'shared-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
+
+      expect(result.warnings.some((w) => w.includes('root and production'))).toBe(true);
+    });
+  });
+
+  describe('Missing D1 bindings', () => {
+    it('blocks when preview is missing DB binding', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'root-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [], // missing DB binding
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
+
+      expect(result.status).toBe('blocked');
+      expect(result.blockers.some((b) => b.includes('preview') && b.includes('missing'))).toBe(true);
+    });
+
+    it('blocks when production is missing DB binding', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'root-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [], // missing DB binding
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
+
+      expect(result.status).toBe('blocked');
+      expect(result.blockers.some((b) => b.includes('production') && b.includes('missing'))).toBe(true);
+    });
+  });
+
+  describe('Separate D1 targets', () => {
+    it('does not block when all D1 targets are different and bindings present', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'root-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'production-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ],
+      });
+
+      expect(result.status).toBe('ready_for_operator_review');
       expect(result.blockers.some((b) => b.includes('shared'))).toBe(false);
     });
   });
@@ -99,7 +337,7 @@ describe('D1 Target Preflight Analyser', () => {
           {
             binding: 'DB',
             database_name: 'energy_dislocation',
-            database_id: 'different-id',
+            database_id: 'root-id',
           },
         ],
         env: {
@@ -108,7 +346,16 @@ describe('D1 Target Preflight Analyser', () => {
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'preview-db-id',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
               },
             ],
           },
@@ -140,16 +387,25 @@ describe('D1 Target Preflight Analyser', () => {
           {
             binding: 'DB',
             database_name: 'energy_dislocation',
-            database_id: 'preview-db-id',
+            database_id: 'root-id',
           },
         ],
         env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'preview-id',
+              },
+            ],
+          },
           production: {
             d1_databases: [
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'production-db-id',
+                database_id: 'production-id',
               },
             ],
           },
@@ -172,14 +428,14 @@ describe('D1 Target Preflight Analyser', () => {
     });
   });
 
-  describe('APP_ENV mismatch', () => {
-    it('warns when health evidence shows APP_ENV=local for preview URL', () => {
+  describe('APP_ENV mismatch with expectedAppEnv', () => {
+    it('warns when APP_ENV does not match expectedAppEnv', () => {
       const wranglerConfig = {
         d1_databases: [
           {
             binding: 'DB',
             database_name: 'energy_dislocation',
-            database_id: 'preview-db-id',
+            database_id: 'root-id',
           },
         ],
         env: {
@@ -188,7 +444,16 @@ describe('D1 Target Preflight Analyser', () => {
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'preview-db-id',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
               },
             ],
           },
@@ -206,24 +471,24 @@ describe('D1 Target Preflight Analyser', () => {
           ],
           healthEvidence: {
             APP_ENV: 'local',
-            runtimeMode: 'preview',
+            expectedAppEnv: 'preview',
+            runtimeMode: 'oilshock',
           },
         }
       );
 
       expect(result.warnings.some((w) => w.includes('APP_ENV'))).toBe(true);
       expect(result.warnings.some((w) => w.includes('local'))).toBe(true);
+      expect(result.warnings.some((w) => w.includes('preview'))).toBe(true);
     });
-  });
 
-  describe('Conservative migration command generation', () => {
-    it('generates migration commands as commented, gated section only', () => {
+    it('does not warn when APP_ENV matches expectedAppEnv', () => {
       const wranglerConfig = {
         d1_databases: [
           {
             binding: 'DB',
             database_name: 'energy_dislocation',
-            database_id: 'preview-db-id',
+            database_id: 'root-id',
           },
         ],
         env: {
@@ -232,7 +497,69 @@ describe('D1 Target Preflight Analyser', () => {
               {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
-                database_id: 'preview-db-id',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(
+        wranglerConfig,
+        ['0014_phase6_pre_deploy_gates.sql', '0015_api_health_tracking.sql', '0016_add_diesel_crack_feed.sql'],
+        {
+          existingFiles: [
+            '0014_phase6_pre_deploy_gates.sql',
+            '0015_api_health_tracking.sql',
+            '0016_add_diesel_crack_feed.sql',
+          ],
+          healthEvidence: {
+            APP_ENV: 'preview',
+            expectedAppEnv: 'preview',
+            runtimeMode: 'oilshock',
+          },
+        }
+      );
+
+      expect(result.warnings.some((w) => w.includes('APP_ENV'))).toBe(false);
+    });
+  });
+
+  describe('Migration commands', () => {
+    it('shows Cloudflare D1 commands when no blockers', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'root-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
               },
             ],
           },
@@ -251,9 +578,57 @@ describe('D1 Target Preflight Analyser', () => {
         }
       );
 
-      // Commands should exist but be marked as commented/gated
       expect(result.migrationCommands.length).toBeGreaterThan(0);
-      expect(result.migrationCommands.every(c => c.includes('#') || c.includes('Do not run'))).toBe(true);
+      expect(result.migrationCommands.some((c) => c.includes('wrangler d1'))).toBe(true);
+      expect(result.migrationCommands.some((c) => c.includes('db:migrate:local'))).toBe(false);
+      expect(result.migrationCommands.some((c) => c.includes('CRITICAL'))).toBe(true);
+    });
+
+    it('withholds migration commands when blockers present', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'shared-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'shared-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'shared-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(
+        wranglerConfig,
+        ['0014_phase6_pre_deploy_gates.sql', '0015_api_health_tracking.sql', '0016_add_diesel_crack_feed.sql'],
+        {
+          existingFiles: [
+            '0014_phase6_pre_deploy_gates.sql',
+            '0015_api_health_tracking.sql',
+            '0016_add_diesel_crack_feed.sql',
+          ],
+        }
+      );
+
+      expect(result.migrationCommands.some((c) => c.includes('withheld'))).toBe(true);
+      expect(result.migrationCommands.some((c) => c.includes('blockers'))).toBe(true);
     });
   });
 
@@ -295,10 +670,69 @@ describe('D1 Target Preflight Analyser', () => {
         '0016_add_diesel_crack_feed.sql',
       ];
 
-      const result1 = analyzeD1Target(wranglerConfig, requiredMigrations);
-      const result2 = analyzeD1Target(wranglerConfig, requiredMigrations);
+      const result1 = analyzeD1Target(wranglerConfig, requiredMigrations, {
+        existingFiles: requiredMigrations,
+      });
+      const result2 = analyzeD1Target(wranglerConfig, requiredMigrations, {
+        existingFiles: requiredMigrations,
+      });
 
       expect(JSON.stringify(result1)).toBe(JSON.stringify(result2));
+    });
+  });
+
+  describe('DB binding selection', () => {
+    it('correctly finds DB binding when it is not the first in array', () => {
+      const wranglerConfig = {
+        d1_databases: [
+          {
+            binding: 'OTHER',
+            database_name: 'other_db',
+            database_id: 'other-id',
+          },
+          {
+            binding: 'DB',
+            database_name: 'energy_dislocation',
+            database_id: 'correct-id',
+          },
+        ],
+        env: {
+          preview: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
+              },
+            ],
+          },
+        },
+      };
+
+      const result = analyzeD1Target(wranglerConfig, [
+        '0014_phase6_pre_deploy_gates.sql',
+        '0015_api_health_tracking.sql',
+        '0016_add_diesel_crack_feed.sql',
+      ], {
+        existingFiles: [
+          '0014_phase6_pre_deploy_gates.sql',
+          '0015_api_health_tracking.sql',
+          '0016_add_diesel_crack_feed.sql',
+        ]
+      });
+
+      // Should use the DB binding, not the OTHER binding
+      expect(result.d1Bindings.find((b) => b.scope === 'root')?.databaseId).toBe('correct-id');
+      expect(result.d1Bindings.find((b) => b.scope === 'root')?.databaseName).toBe('energy_dislocation');
     });
   });
 
@@ -319,6 +753,15 @@ describe('D1 Target Preflight Analyser', () => {
                 binding: 'DB',
                 database_name: 'energy_dislocation',
                 database_id: 'preview-id',
+              },
+            ],
+          },
+          production: {
+            d1_databases: [
+              {
+                binding: 'DB',
+                database_name: 'energy_dislocation',
+                database_id: 'prod-id',
               },
             ],
           },

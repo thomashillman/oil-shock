@@ -106,24 +106,25 @@ None yet (task brief only).
 - Remediation of shared D1 IDs (operator decision only)
 - Changes to gate signing or canary procedures
 
-## Current Status
+## Current Status (Correction Pass)
 
-1. ✅ Branch created: `claude/phase-6a-d1-preflight-Oy7ZU`
-2. ✅ Context reviewed: wrangler.jsonc confirms shared D1 ID blocker
-3. ✅ Migrations exist: 0014, 0015, 0016 all present
-4. ✅ Commit 1: Task brief
-5. ✅ Commit 2: Tests (8 passing)
-6. ✅ Commit 3: Pure analyser (complete, typecheck passes)
-7. ✅ Commit 4: CLI wrapper (all options working, correctly exits non-zero on blockers)
-8. ✅ Commit 5: Documentation updates
-9. ✅ All validation passed
+1. ✅ Branch: `claude/phase-6a-d1-preflight-Oy7ZU`
+2. ✅ Pure analyser updated: Now detects preview-production sharing as CRITICAL blocker
+3. ✅ APP_ENV mismatch fixed: Uses expectedAppEnv field, matches PR #79 observation
+4. ✅ Migration commands fixed: Now shows Cloudflare D1 commands, withheld when blockers present
+5. ✅ JSONC parser improved: Handles inline comments and trailing commas
+6. ✅ CLI refactored: Exports testable functions, can run in tests without executing
+7. ✅ CLI tests added: 16 tests covering parseArgs, JSONC parsing, file loading, report generation, and preflight execution
+8. ✅ Pure analyser tests: 16 tests covering all scenarios
+9. ✅ All 59 tests passing
 
-## Validation Results
+## Validation Results (Correction Pass)
 
-- ✅ `corepack pnpm docs:check` — Passed
-- ✅ `corepack pnpm -C worker test` — 8 tests passing, 146 total tests passing
+- ✅ `corepack pnpm -C worker test test/phase6a/d1-target-preflight.test.ts` — 16 tests passing
+- ✅ `corepack pnpm -C worker test test/phase6a/check-d1-target.test.ts` — 16 tests passing
+- ✅ `corepack pnpm phase6a:evidence:test` — 59 tests passing (35 phase6a + others)
 - ✅ `corepack pnpm -C worker typecheck` — No errors
-- ✅ `corepack pnpm phase6a:d1:preflight` — Correctly exits 1 (blocked) due to shared D1 ID
+- ✅ `corepack pnpm phase6a:d1:preflight` — Correctly exits 1 (blocked) with detailed blockers
 - ✅ `corepack pnpm phase6a:d1:preflight -- --help` — Help output correct
 - ✅ `corepack pnpm phase6a:d1:preflight -- --out <path>` — Creates parent directories, writes report
 - ✅ No real network calls or migrations applied
