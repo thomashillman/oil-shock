@@ -1,129 +1,118 @@
-# Phase 6A Staging Telemetry Verification
+# Phase 6A Canary Evidence Report
 
-**Date**: 2026-04-26  
-**Status**: ⚠️ **PARTIAL** - Configuration & migrations complete; live endpoint verification incomplete
+Generated at: 2026-04-26T16:41:13.800Z
 
----
+## Endpoint Collection Status
 
-## Configuration Status
+✅ `/health`: HTTP 200
+✅ `/api/admin/rollout-readiness`: HTTP 200
+✅ `/api/admin/rollout-status`: HTTP 200
+✅ `/api/admin/api-health`: HTTP 200
 
-✅ **Preview D1 Separation Complete**
-- Preview Database ID: `f9e3848e-20e6-43f0-8b0f-4fb652572d16`
-- Production Database ID: `9db64b68-6ffc-4be2-a2c6-667691a5801f`
-- Preflight Status: ⚠️ OPERATOR REVIEW REQUIRED (no CRITICAL blockers)
-- Configuration File: `wrangler.jsonc` updated in PR #81
+## Readiness Assessment
 
----
+Status: **❌ BLOCKED**
 
-## Migrations Applied to Preview
+❌ **DO NOT PROCEED TO 10% CANARY**
 
-✅ **All 16 migrations applied successfully**
+Critical blockers must be resolved before rollout can proceed.
 
-Applied to preview database `f9e3848e-20e6-43f0-8b0f-4fb652572d16`:
+### Blockers
 
-| Migration | Status |
-|---|---|
-| 0001_init.sql | ✅ |
-| 0002_state_change_events.sql | ✅ |
-| 0003_extend_run_evidence.sql | ✅ |
-| 0004_config_thresholds.sql | ✅ |
-| 0005_extend_signal_snapshots.sql | ✅ |
-| 0006_promote_scoring_constants.sql | ✅ |
-| 0007_snapshot_run_linkage.sql | ✅ |
-| 0008_complete_config_thresholds.sql | ✅ |
-| 0009_fix_evidence_group_label_constraint.sql | ✅ |
-| 0010_macro_signals_stage2.sql | ✅ |
-| 0011_stage3_rules_guardrails.sql | ✅ |
-| 0012_stage4_new_engines.sql | ✅ |
-| 0013_phase3_freeze_snapshots.sql | ✅ |
-| 0014_phase6_pre_deploy_gates.sql | ✅ |
-| 0015_api_health_tracking.sql | ✅ |
-| 0016_add_diesel_crack_feed.sql | ✅ |
+- ❌ API health: unhealthy feeds detected (eia_brent, eia_diesel_wti_crack, eia_wti). Cannot proceed with rollout until required feeds healthy.
+- ❌ Validation gates: not all gates have passed (energy_data_freshness:pending, energy_determinism:pending, energy_guardrail_correctness:pending, energy_rule_consistency:pending, health_endpoint_schema:pending, rollout_monitoring_ready:pending). Cannot proceed until all validation gates pass.
+- ❌ Gates signed off: 0/6 signed. Cannot proceed until all pre-deploy gates are signed off.
 
----
+## Automatic Checks (Code-Verified)
 
-## Required Tables Verified
+### Pre-Deploy Gates
 
-✅ **All Phase 6A tables present in preview database**
+❌ Gates: 0/6 signed off
 
-```sql
-SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;
-```
+### API Health (Phase 6A Required Feeds)
 
-**Required tables (Phase 6A):**
-- ✅ pre_deploy_gates
-- ✅ gate_sign_off_history
-- ✅ api_health_metrics
-- ✅ api_feed_registry
+❌ System healthy: 0/3 feeds OK
+   Unhealthy feeds: eia_brent, eia_diesel_wti_crack, eia_wti
 
-**Base Oil Shock tables also present:**
-- ✅ config_thresholds
-- ✅ series_points
-- ✅ signal_snapshots
-- ✅ runs
-- ✅ scores
-- ✅ (and others)
+### Validation Gates
 
----
+❌ All validations passed: no
+   ⏳ energy_data_freshness: pending
+   ⏳ energy_determinism: pending
+   ⏳ energy_guardrail_correctness: pending
+   ⏳ energy_rule_consistency: pending
+   ⏳ health_endpoint_schema: pending
+   ⏳ rollout_monitoring_ready: pending
 
-## Live Endpoint Verification
+### Rollout Status
 
-❌ **INCOMPLETE** - Live preview worker deployment not available
+- Feature: ENERGY_ROLLOUT_PERCENT
+- Current percent: 0%
+- Target for canary: 10%
 
-Attempted to verify against `http://localhost:8787`:
+## Feed Health Details
 
-| Endpoint | Status | Error |
-|---|---|---|
-| `/health` | ❌ | Network error: fetch failed |
-| `/api/admin/rollout-readiness` | ❌ | Network error: fetch failed |
-| `/api/admin/rollout-status` | ❌ | Network error: fetch failed |
-| `/api/admin/api-health` | ❌ | Network error: fetch failed |
+❌ **EIA Brent Spot** (eia_brent): UNKNOWN
+   - Error rate: 0%
+❌ **EIA Diesel WTI Crack Spread** (eia_diesel_wti_crack): UNKNOWN
+   - Error rate: 0%
+❌ **EIA Futures Curve** (eia_futures_curve): UNKNOWN
+   - Error rate: 0%
+❌ **EIA US Crude Inventory** (eia_inventory): UNKNOWN
+   - Error rate: 0%
+❌ **EIA Refinery Utilization** (eia_refinery): UNKNOWN
+   - Error rate: 0%
+❌ **EIA WTI Spot** (eia_wti): UNKNOWN
+   - Error rate: 0%
+❌ **ENTSOG EU Pipeline Flow** (enia_pipeline): UNKNOWN
+   - Error rate: 0%
+❌ **GIE AGSI+ EU Gas Storage** (gie_storage): UNKNOWN
+   - Error rate: 0%
+❌ **SEC EDGAR Impairment Filings** (sec_impairment): UNKNOWN
+   - Error rate: 0%
 
-**Required for completion:**
-- Deploy worker to preview environment
-- Verify `/api/admin/api-health` returns 200 with recent `api_health_metrics`
-- Verify `/api/admin/rollout-readiness` returns 200
-- Run staging collection
-- Verify `api_health_metrics` has recent rows for Energy feeds (EIA, FRED, WTI)
+## Service Health
 
----
+- Service: oil-shock-worker
+- Environment: preview
+- Runtime mode: oilshock
+- Status: healthy ✅
+- Database: healthy (21ms)
+- Config: healthy (20 thresholds)
 
-## Safety Constraints Verified
+## Manual Verification Checklist
 
-- ✅ No migrations applied to shared production database
-- ✅ No `ENERGY_ROLLOUT_PERCENT` changes
-- ✅ No gates signed
-- ✅ No canary deployment started
-- ✅ `wrangler.jsonc` production binding unchanged
-- ✅ `wrangler.jsonc` root binding unchanged
+These items require operator sign-off and cannot be automated:
 
----
+⏳ **Grafana Dashboard Imported**
+   Import docs/grafana-api-health-dashboard.json into Grafana and verify all panels display data correctly.
+⏳ **Alert Routing Configured**
+   Configure Grafana alert routing per docs/grafana-api-health-alerts.md (Slack, PagerDuty, etc.) and verify delivery.
+⏳ **Staging Telemetry Verified**
+   Run manual collection in staging environment, confirm metrics flowing to api_health_metrics table, and verify /api/admin/api-health returns expected data.
+⏳ **Rollback Rehearsal Complete**
+   Test rollback procedure: set ENERGY_ROLLOUT_PERCENT=0 in staging, verify snapshot serving resumes, confirm no data loss.
+⏳ **Team Communication**
+   Notify team of rollout schedule, phases, success criteria, and incident response procedures.
 
-## Next Steps
+## Important Reminders
 
-To complete Phase 6A Step 0B:
+- ✅ This report does not deploy anything
+- ✅ This report does not change `ENERGY_ROLLOUT_PERCENT`
+- ✅ This report does not sign any gates
+- ✅ Manual checks remain manual
+- ✅ This is a read-only evidence collection tool
 
-1. Deploy updated `wrangler.jsonc` to preview worker
-2. Verify worker is reachable at preview URL
-3. Rerun evidence capture:
-   ```bash
-   ADMIN_TOKEN=<token> corepack pnpm phase6a:evidence -- \
-     --base-url https://<preview-url> \
-     --out docs/evidence/phase6a-staging-telemetry-verification.md
-   ```
-4. Verify `/api/admin/api-health` shows recent metrics for all feeds
-5. Run staging collection and verify population
-6. Once verified, proceed to Grafana, alert routing, team comms, and canary sign-off
+## Next Steps (if ready)
 
----
+1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)
+2. Ensure all manual checks are signed off by respective owners
+3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration
+4. Verify `/api/admin/rollout-status` returns `phase="canary-internal"`
+5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`
 
-## Blockers for 10% Canary
+## References
 
-- [ ] Live endpoint verification complete
-- [ ] `api_health_metrics` populated with recent data
-- [ ] Staging collection verified
-- [ ] Grafana dashboard configured
-- [ ] Alert routing configured
-- [ ] Team notifications sent
-- [ ] Rollback procedure rehearsed
-- [ ] 10% canary approved
+- Readiness checklist: `docs/phase-6a-rollout-readiness.md`
+- Monitoring strategy: `docs/rollout-monitoring-strategy.md`
+- Rollback procedure: `docs/phase-6-rollback-procedures.md`
