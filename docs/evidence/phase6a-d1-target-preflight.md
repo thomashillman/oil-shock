@@ -1,8 +1,8 @@
 # Phase 6A D1 Target Preflight Report
 
-**Status**: ❌ BLOCKED
+**Status**: ⚠️  OPERATOR REVIEW REQUIRED
 
-Generated: 2026-04-26T11:09:04.320Z
+Generated: 2026-04-26T12:53:56.665Z
 
 ## D1 Bindings
 
@@ -12,19 +12,14 @@ Generated: 2026-04-26T11:09:04.320Z
 
 ### preview
 - Database: energy_dislocation
-- ID: `9db64b68-6ffc-4be2-a2c6-667691a5801f`
+- ID: `f9e3848e-20e6-43f0-8b0f-4fb652572d16`
 
 ### production
 - Database: energy_dislocation
 - ID: `9db64b68-6ffc-4be2-a2c6-667691a5801f`
 
-## Blockers
-
-- shared D1 target (CRITICAL): preview and production both use database_id 9db64b68-6ffc-4be2-a2c6-667691a5801f. Migrations would affect both environments. Operator must confirm intended target and reconfigure D1 bindings before proceeding.
-
 ## Warnings
 
-- shared D1 target: root and preview both use database_id 9db64b68-6ffc-4be2-a2c6-667691a5801f. Local and preview environments share the same database.
 - shared D1 target: root and production both use database_id 9db64b68-6ffc-4be2-a2c6-667691a5801f. Local and production environments share the same database.
 
 ## Required Migrations
@@ -35,15 +30,22 @@ Generated: 2026-04-26T11:09:04.320Z
 
 ## Next Steps
 
-**Status: BLOCKED** — Do not apply migrations until all blockers are resolved.
+Once all operator confirmations are complete:
 
 ```bash
-# Migration commands withheld: resolve blockers above before attempting to apply migrations.
+# CRITICAL: Do not run until D1 target is confirmed
+# Apply migrations to Cloudflare D1 preview environment:
+# wrangler d1 migrations apply energy_dislocation --env preview
+
+# Production migrations are intentionally out of scope for this pre-canary verification step.
 ```
 
 ## Summary
 
-❌ This environment is **not ready** for migrations.
+⚠️  This environment is ready for operator review.
 
-Blockers must be resolved before proceeding:
-- shared D1 target (CRITICAL): preview and production both use database_id 9db64b68-6ffc-4be2-a2c6-667691a5801f. Migrations would affect both environments. Operator must confirm intended target and reconfigure D1 bindings before proceeding.
+Before applying migrations:
+1. Review blockers and warnings above
+2. Confirm all required migration files are present
+3. Verify D1 target configuration is correct
+4. Apply Cloudflare D1 migrations only after explicit operator confirmation
