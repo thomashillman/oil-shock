@@ -6,8 +6,10 @@ This document captures the current sequencing and decision constraints for work 
 
 - **Phase 6A (Energy Engine) execution phase (Days 22-52)** — May 2026, weeks 4-8
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
-  - **NEXT**: Gradual rollout execution (0% → 10% → 50% → 100% → stabilization)
-  - Phase 1 (Days 22-26): Internal canary at 10%
+  - Staging verification in progress: D1 separation complete, migrations applied, staging telemetry working
+  - **CURRENT BLOCKER**: Three readiness endpoints return HTTP 503 (Cloudflare DNS platform issue)
+  - **NEXT**: Restore readiness evidence and defer Grafana to later stage
+  - Phase 1 (Days 22-26): Internal canary at 10% (blocked pending readiness resolution)
   - Phase 2 (Days 27-35): Public expansion 50%
   - Phase 3 (Days 36-42): Full rollout 100%
   - Phase 4 (Days 43-52): Stabilization monitoring
@@ -56,36 +58,62 @@ Preparation Phase (Before Day 22):
 - [ ] **OPERATOR-ACTION**: Apply migrations 0014, 0015, 0016 only after explicit confirmation
 - [ ] Reference: `docs/phase-6a-d1-target-preflight-task.md`
 
-**Step 0: Telemetry Setup** (CODE-COMPLETE in main, live-operator verification required)
+**Step 0: Telemetry Setup** (✅ LIVE-VERIFIED)
 - [x] **CODE-COMPLETE**: Wire energy collector to use `instrumentedFetch()` (merged to main)
 - [x] **CODE-COMPLETE**: D1 schema and API health endpoints implemented
-- [ ] **LIVE-VERIFY**: Confirm D1 migrations 0014/0015/0016 are applied (Step -1 prerequisite)
-- [ ] **LIVE-VERIFY**: Run staging collection and verify metrics recorded to `api_health_metrics`
-- [ ] **LIVE-VERIFY**: Confirm `/api/admin/api-health` returns live data in staging
-- [ ] **LIVE-VERIFY**: Verify telemetry flowing in staging environment
+- [x] **LIVE-VERIFIED**: D1 migrations 0014/0015/0016 applied to preview (PR #81)
+- [x] **LIVE-VERIFIED**: Staging collection running, metrics recorded to `api_health_metrics`
+- [x] **LIVE-VERIFIED**: `/api/admin/api-health` returning HTTP 200 with live feed data
+- [x] **LIVE-VERIFIED**: Telemetry flowing in staging environment (three Phase 6A feeds healthy)
+- [x] **LIVE-VERIFIED**: Provider API keys configured as Cloudflare secrets (PR #83)
 - [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 1: Grafana Monitoring Setup**
-- [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
-- [ ] Configure 5 Grafana alert rules (`docs/grafana-api-health-alerts.md`)
-- [ ] Test dashboard queries against live D1 data
-- [ ] Verify alert routing (Slack, PagerDuty)
-- [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
+**Step 1: Live Endpoint Remediation** (⏳ IN PROGRESS)
+- [ ] Resolve HTTP 503 `DNS cache overflow` responses from three endpoints:
+  - `/health`
+  - `/api/admin/rollout-status`
+  - `/api/admin/rollout-readiness`
+- [ ] Restore valid JSON responses on all four required readiness endpoints
+- [ ] Verify Cloudflare preview worker DNS/deployment configuration
+- [ ] Reference: `docs/phase-6a-live-endpoint-readiness-sync-task.md`
 
-**Step 2: Evidence Capture & Readiness Report**
-- [ ] Run Phase 6A evidence capture tool to verify all prerequisites
-  - `corepack pnpm phase6a:evidence -- --base-url https://staging-worker.example.com`
+**Step 2: Evidence Capture & Readiness Report** (Blocked on Step 1)
+- [ ] Run Phase 6A evidence capture tool after endpoint remediation
+  - `corepack pnpm phase6a:evidence -- --base-url https://energy-dislocation-engine-preview-preview.tj-hillman.workers.dev`
   - Review generated report: status should be "ready"
   - Save report as ops record
-  - Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
+  - All four endpoints must return HTTP 200 with valid JSON
+- [ ] Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 3: Team Communication & Procedures**
+**Step 3: Team Communication & Procedures** (After evidence validation)
 - [ ] Update team comms (schedule, phases, success criteria)
 - [ ] Create incident response runbook (rollback procedures, root cause investigation)
 - [ ] Rehearse rollback procedure (ENERGY_ROLLOUT_PERCENT=0)
 
-Execution Phase:
-- [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring)
+**Step 4: Grafana Monitoring Setup** (🔄 DEFERRED — NOT immediate blocker)
+- [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
+- [ ] Configure 5 Grafana alert rules (`docs/grafana-api-health-alerts.md`)
+- [ ] Test dashboard queries against live D1 data
+- [ ] Verify alert routing (Slack, PagerDuty)
+- **Note**: Grafana is required before wider rollout stages (50% → 100%), but not the immediate blocker for 10% canary readiness. Required before Day 27 (Phase 2 expansion). 
+- [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
+
+**Blockers Before Execution Phase:**
+- ❌ Endpoint remediation: `/health`, `/api/admin/rollout-status`, `/api/admin/rollout-readiness` still returning HTTP 503
+- ❌ Evidence capture: Cannot complete readiness report until all four endpoints return valid JSON
+- ❌ Team sign-offs: Gates signed by PoC (phase6a-poc), but require review by accountable owners before canary
+- ⏳ Provider key rotation: If not confirmed complete, remains a blocker
+- ⏳ Rollback rehearsal: Not yet executed in staging
+- ⏳ Team comms: Not yet sent to wider team
+
+**10% Canary Remains BLOCKED.** Cannot proceed until:
+1. Endpoints return valid JSON (Step 1)
+2. Evidence capture completes successfully (Step 2)
+3. Accountable owners review and confirm gate sign-offs
+4. Team communication and rollback procedures complete
+
+Execution Phase (Blocked — awaiting Step 1-3):
+- [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring) — BLOCKED pending endpoint remediation
   - Day 22: Deploy ENERGY_ROLLOUT_PERCENT=10, verify canary setup
   - Days 23-26: Execute daily monitoring checklist
 - [ ] Week 2 (Days 27-35): Public expansion 50%
