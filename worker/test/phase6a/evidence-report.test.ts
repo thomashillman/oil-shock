@@ -359,7 +359,28 @@ describe("Evidence Report Formatter", () => {
         data: readiness
       };
 
-      const report = formatEvidenceReport(null, readinessEvidence, null, null, mockGeneratedAt);
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: { ok: true, service: "oil-shock-worker", env: "staging", featureFlags: { macroSignals: false } }
+      };
+
+      const rolloutStatusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } }
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, rolloutStatusEvidence, apiHealthEvidence, mockGeneratedAt);
 
       expect(report).toContain("WARNING");
       expect(report).toContain("explicit sign-off");
@@ -587,6 +608,242 @@ describe("Evidence Report Formatter", () => {
       const report2 = formatEvidenceReport(null, readinessEvidence, null, null, mockGeneratedAt);
 
       expect(report1).toBe(report2);
+    });
+  });
+
+  describe("CRITICAL SAFETY: endpoint completeness as top-level gate", () => {
+    it("marks BLOCKED when /health fails but readiness says ready", () => {
+      // This is the critical safety test: prevent contradiction between
+      // INCOMPLETE evidence and READY readiness status
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const rolloutStatusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } }
+      };
+
+      // /health endpoint FAILS
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: false,
+        status: 503,
+        data: null,
+        error: "HTTP 503"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, rolloutStatusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      // CRITICAL: Report must be BLOCKED, not READY
+      expect(report).toContain("BLOCKED");
+      expect(report).toContain("DO NOT PROCEED");
+      expect(report).toContain("INCOMPLETE");
+      // Safety check: must NOT say "Ready for 10% canary"
+      expect(report).not.toContain("Ready for 10% canary");
+      // Safety check: must NOT show deployment steps
+      expect(report).not.toContain("Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10`");
+    });
+
+    it("marks BLOCKED when /api/admin/api-health fails but readiness says ready", () => {
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: { ok: true, service: "oil-shock-worker", env: "staging", featureFlags: { macroSignals: false } }
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const rolloutStatusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt }
+      };
+
+      // /api/admin/api-health endpoint FAILS
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: false,
+        status: 503,
+        data: null,
+        error: "HTTP 503"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, rolloutStatusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      expect(report).toContain("BLOCKED");
+      expect(report).toContain("DO NOT PROCEED");
+      expect(report).toContain("INCOMPLETE");
+      expect(report).not.toContain("Ready for 10% canary");
+      expect(report).not.toContain("Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10`");
+    });
+
+    it("marks BLOCKED when /api/admin/rollout-status fails but readiness says ready", () => {
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: { ok: true, service: "oil-shock-worker", env: "staging", featureFlags: { macroSignals: false } }
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      // /api/admin/rollout-status endpoint FAILS
+      const rolloutStatusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: false,
+        status: 503,
+        data: null,
+        error: "HTTP 503"
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } }
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, rolloutStatusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      expect(report).toContain("BLOCKED");
+      expect(report).toContain("DO NOT PROCEED");
+      expect(report).toContain("INCOMPLETE");
+      expect(report).not.toContain("Ready for 10% canary");
+      expect(report).not.toContain("Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10`");
+    });
+
+    it("does not show 'Next Steps (if ready)' when evidence is incomplete", () => {
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: false,
+        status: 503,
+        data: null,
+        error: "HTTP 503"
+      };
+
+      const report = formatEvidenceReport(healthEvidence, null, null, null, mockGeneratedAt);
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).not.toContain("Next Steps (if ready)");
+      expect(report).toContain("Next Steps (Once Evidence Is Complete)");
+    });
+
+    it("shows 'Next Steps (if ready)' only when evidence is complete and status is ready", () => {
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const healthEvidence: EndpointEvidence<HealthPayload> = {
+        endpoint: "/health",
+        ok: true,
+        status: 200,
+        data: { ok: true, service: "oil-shock-worker", env: "staging", featureFlags: { macroSignals: false } }
+      };
+
+      const readinessEvidence: EndpointEvidence<RolloutReadinessResponse> = {
+        endpoint: "/api/admin/rollout-readiness",
+        ok: true,
+        status: 200,
+        data: readiness
+      };
+
+      const rolloutStatusEvidence: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: true,
+        status: 200,
+        data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt }
+      };
+
+      const apiHealthEvidence: EndpointEvidence<ApiHealthResponse> = {
+        endpoint: "/api/admin/api-health",
+        ok: true,
+        status: 200,
+        data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } }
+      };
+
+      const report = formatEvidenceReport(healthEvidence, readinessEvidence, rolloutStatusEvidence, apiHealthEvidence, mockGeneratedAt);
+
+      expect(report).not.toContain("INCOMPLETE");
+      expect(report).toContain("Next Steps (if ready)");
+      expect(report).not.toContain("Next Steps (Once Evidence Is Complete)");
+      expect(report).toContain("Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10`");
     });
   });
 });

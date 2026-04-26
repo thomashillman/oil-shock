@@ -214,20 +214,24 @@ export function formatEvidenceReport(
   }
 
   // Main status section
-  if (readiness?.data) {
+  // CRITICAL: Endpoint completeness is a top-level gate. If evidence is incomplete,
+  // override readiness status to "blocked" regardless of what /api/admin/rollout-readiness says.
+  const reportStatus = !isComplete ? "blocked" : readiness?.data?.status ?? "blocked";
+
+  if (readiness?.data || !isComplete) {
     lines.push("## Readiness Assessment");
     lines.push("");
 
     const statusEmoji =
-      readiness.data.status === "ready"
+      reportStatus === "ready"
         ? "✅"
-        : readiness.data.status === "warning"
+        : reportStatus === "warning"
           ? "⚠️"
           : "❌";
-    lines.push(`Status: **${statusEmoji} ${readiness.data.status.toUpperCase()}**`);
+    lines.push(`Status: **${statusEmoji} ${reportStatus.toUpperCase()}**`);
     lines.push("");
 
-    if (readiness.data.status === "ready") {
+    if (reportStatus === "ready") {
       lines.push(
         "✅ **Ready for 10% canary, subject to manual sign-off**"
       );
@@ -245,7 +249,7 @@ export function formatEvidenceReport(
       lines.push("⚠️ This report does not change rollout percentage.");
       lines.push("⚠️ This report does not sign any gates.");
       lines.push("");
-    } else if (readiness.data.status === "warning") {
+    } else if (reportStatus === "warning") {
       lines.push(
         "⚠️ **Proceed only with explicit sign-off**"
       );
@@ -254,19 +258,25 @@ export function formatEvidenceReport(
         "Some concerns exist but may be acceptable. Team lead must explicitly approve in writing before proceeding."
       );
       lines.push("");
-    } else if (readiness.data.status === "blocked") {
+    } else if (reportStatus === "blocked" || !isComplete) {
       lines.push(
         "❌ **DO NOT PROCEED TO 10% CANARY**"
       );
       lines.push("");
-      lines.push(
-        "Critical blockers must be resolved before rollout can proceed."
-      );
+      if (!isComplete) {
+        lines.push(
+          "Evidence collection is incomplete. Some required endpoints failed to respond."
+        );
+      } else {
+        lines.push(
+          "Critical blockers must be resolved before rollout can proceed."
+        );
+      }
       lines.push("");
     }
 
     // Blockers
-    if (readiness.data.blockers.length > 0) {
+    if (readiness?.data?.blockers.length > 0) {
       lines.push("### Blockers");
       lines.push("");
       for (const blocker of readiness.data.blockers) {
@@ -276,7 +286,7 @@ export function formatEvidenceReport(
     }
 
     // Warnings
-    if (readiness.data.warnings.length > 0) {
+    if (readiness?.data?.warnings.length > 0) {
       lines.push("### Warnings");
       lines.push("");
       for (const warning of readiness.data.warnings) {
@@ -412,20 +422,37 @@ export function formatEvidenceReport(
   lines.push("- ✅ Manual checks remain manual");
   lines.push("- ✅ This is a read-only evidence collection tool");
   lines.push("");
-  lines.push("## Next Steps (if ready)");
-  lines.push("");
-  lines.push(
-    "1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)"
-  );
-  lines.push("2. Ensure all manual checks are signed off by respective owners");
-  lines.push(
-    "3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration"
-  );
-  lines.push("4. Verify `/api/admin/rollout-status` returns `phase=\"canary-internal\"`");
-  lines.push(
-    "5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`"
-  );
-  lines.push("");
+
+  // CRITICAL SAFETY GATE: Only show deployment next steps if evidence is complete and status is ready
+  if (isComplete && reportStatus === "ready") {
+    lines.push("## Next Steps (if ready)");
+    lines.push("");
+    lines.push(
+      "1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)"
+    );
+    lines.push("2. Ensure all manual checks are signed off by respective owners");
+    lines.push(
+      "3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration"
+    );
+    lines.push("4. Verify `/api/admin/rollout-status` returns `phase=\"canary-internal\"`");
+    lines.push(
+      "5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`"
+    );
+    lines.push("");
+  } else if (!isComplete) {
+    lines.push("## Next Steps (Once Evidence Is Complete)");
+    lines.push("");
+    lines.push("Do not proceed until:");
+    lines.push("1. All four required endpoints return HTTP 200 with valid JSON:");
+    lines.push("   - `/health`");
+    lines.push("   - `/api/admin/rollout-readiness`");
+    lines.push("   - `/api/admin/rollout-status`");
+    lines.push("   - `/api/admin/api-health`");
+    lines.push("2. Fresh evidence capture shows Status: READY");
+    lines.push("3. All manual checks are signed off");
+    lines.push("");
+  }
+
   lines.push("## References");
   lines.push("");
   lines.push(
