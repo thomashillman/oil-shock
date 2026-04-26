@@ -1,6 +1,18 @@
 # Telemetry Setup Guide: API Health Metrics Emission
 
-**Step 0** before Grafana setup: Ensure API health telemetry is being emitted and recorded to D1.
+**BEFORE ANY OF THIS: Run D1 Target Preflight Check**
+
+Before applying migrations 0014, 0015, 0016, operator must run and resolve the D1 target preflight:
+
+```bash
+corepack pnpm phase6a:d1:preflight
+```
+
+If blockers are present (especially shared D1 ID warning), confirm intended target before proceeding. See `docs/phase-6a-d1-target-preflight-task.md`.
+
+---
+
+**Step 0** after D1 preflight: Ensure API health telemetry is being emitted and recorded to D1.
 
 Without this step, the Grafana dashboard will have no data to display.
 

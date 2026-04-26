@@ -2,9 +2,11 @@
 
 **Purpose**: Collect read-only evidence before moving Energy rollout from 0% to 10% canary.
 
+**PREREQUISITE**: Run D1 target preflight check (`corepack pnpm phase6a:d1:preflight`) and resolve all blockers before running evidence capture. This tool requires that D1 migrations 0014, 0015, 0016 are already applied.
+
 **Tool location**: `scripts/phase6a/capture-canary-evidence.ts`  
 **Report formatter**: `scripts/phase6a/evidence-report.ts`  
-**Timeline**: Run before Day 22 Phase 1 canary execution
+**Timeline**: Run after D1 target preflight is resolved and migrations are applied
 
 ---
 
