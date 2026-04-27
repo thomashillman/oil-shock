@@ -68,28 +68,29 @@ Preparation Phase (Before Day 22):
 - [x] **LIVE-VERIFIED**: Provider API keys configured as Cloudflare secrets (PR #83)
 - [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
 
-**Step 1: Live Endpoint Remediation** (🔄 IN PROGRESS — ENDPOINTS STILL FAILING)
+**Step 1: Live Endpoint Remediation** (🔄 IN PROGRESS — INTERMITTENT FLAPPING ONGOING)
 - [x] Code review: All endpoints correct, no defects found
-- [x] Investigation: Failures classified as transient Cloudflare edge DNS cache issue (85% confidence)
-- [x] Endpoint probing: 40 consecutive requests succeeded at 21:01-21:01:52 UTC (100% success rate in that window)
-- [x] Ray ID analysis: All requests routed through ORD colo, all returned HTTP 200
-- [x] Root cause classified: Cloudflare DNS resolver cache overflow (85% confidence)
-- [ ] **CRITICAL**: Evidence capture at 21:29:10 UTC shows issue has **NOT self-resolved**:
-  - `/health`: HTTP 503 (failed)
-  - `/api/admin/rollout-readiness`: HTTP 503 (failed)
-  - `/api/admin/rollout-status`: HTTP 200 (working)
-  - `/api/admin/api-health`: HTTP 200 (working)
+- [x] Investigation: Failures classified as Cloudflare edge "DNS cache overflow" (plaintext, pre-Worker)
+- [x] Endpoint probing (2026-04-26 21:01 UTC): 40 sequential single requests succeeded (100% success in that window)
+- [x] Ray ID analysis: All requests routed through ORD colo, Worker reachable when requests succeed
+- [x] Worker code verified healthy when requests succeed: valid JSON, DB latency 22ms, 6/6 gates signed
+- [x] **CHARACTERIZED**: Failures are intermittent and flap between endpoints (any of the 4 may fail; failures rotate)
+- [x] **CHARACTERIZED**: Sequential single-curl rarely fails; concurrent `Promise.all` requests in evidence script trigger failures more often
+- [x] **CHARACTERIZED**: Failures cluster in time — there are minutes with ~40% failure and minutes with 0% failure
+- [x] Latest fresh evidence (2026-04-27 08:32:18 UTC): All 4 endpoints HTTP 200, Status READY (single snapshot)
+- [ ] **OUTSTANDING**: A single READY snapshot is not proof of stability. Sustained probing or Cloudflare-side root cause analysis required before canary
 - [ ] Reference: `docs/evidence/phase6a-dns-cache-overflow-investigation.md`, `docs/evidence/phase6a-cloudflare-mcp-investigation.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Status**: The HTTP 503 "DNS cache overflow" issue is **NOT resolved**. Fresh evidence capture at 21:29:10 UTC shows `/health` and `/api/admin/rollout-readiness` still returning HTTP 503. The earlier endpoint probing at 21:01 UTC appeared successful, but current evidence shows the issue persists. **Remediation still needed.** Step 1 remains BLOCKED. Evidence is INCOMPLETE.
+**Status**: The HTTP 503 "DNS cache overflow" issue is **intermittent and ongoing**. The latest snapshot (2026-04-27 08:32:18 UTC) shows all endpoints healthy, but flapping was directly observed minutes earlier (2026-04-27 08:30:05 and 08:30:34 UTC, with different endpoints failing each time). Cloudflare API/observability tools were not available in this session, so server-side root cause cannot be confirmed. **Endpoint reliability is not yet proven stable enough for canary monitoring.**
 
-**Step 2: Evidence Capture & Readiness Report** (⏹️ BLOCKED)
-- [ ] Fresh evidence capture run at 21:29:10 UTC: **INCOMPLETE** (2 of 4 endpoints returning HTTP 503)
-- [ ] Evidence report shows: Status = **BLOCKED** (not READY)
-- [ ] Service unavailable: `/health` and `/api/admin/rollout-readiness` endpoints down
-- [ ] Reference: `docs/evidence/phase6a-staging-telemetry-verification.md`
+**Step 2: Evidence Capture & Readiness Report** (⚠️ COMPLETE BUT NOT STABLE)
+- [x] Fresh evidence capture run at 2026-04-27 08:32:18 UTC: **COMPLETE** (all 4 endpoints HTTP 200)
+- [x] Evidence report shows: Status = **READY** (current snapshot)
+- [x] Formatter safety fix verified: incomplete captures consistently show BLOCKED, complete+ready captures show READY
+- [ ] **CAVEAT**: Single snapshot does not prove sustained reliability. Multiple recent captures showed BLOCKED.
+- [x] Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Status**: Evidence capture is **BLOCKED due to incomplete endpoint data**. `/health` and `/api/admin/rollout-readiness` endpoints are returning HTTP 503 "DNS cache overflow". Fresh evidence shows Status: BLOCKED with "DO NOT PROCEED TO 10% CANARY". Cannot proceed to Step 3 until all 4 required endpoints return HTTP 200.
+**Status**: The latest evidence capture is complete and shows READY, but earlier captures within the same hour showed BLOCKED. The intermittent failure pattern means a single READY capture is not sufficient evidence to proceed. Recommend running sustained capture (every 5 minutes for 1 hour) and confirming 0% failure rate before treating Step 2 as fully unblocked.
 
 **Step 3: Team Communication & Procedures** (After evidence validation)
 - [ ] Update team comms (schedule, phases, success criteria)
@@ -105,16 +106,16 @@ Preparation Phase (Before Day 22):
 - [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
 
 **Blockers Before Execution Phase:**
-- ❌ **CRITICAL: Endpoint reliability**: `/health` and `/api/admin/rollout-readiness` returning HTTP 503. Fresh evidence at 21:29:10 UTC shows issue is ONGOING (not resolved). BLOCKED.
-- ❌ **CRITICAL: Evidence capture**: INCOMPLETE due to endpoint failures. Evidence shows Status: BLOCKED. BLOCKED.
+- ⚠️ **CRITICAL: Endpoint reliability**: Intermittent flapping between HTTP 200 and HTTP 503 "DNS cache overflow" observed across multiple endpoints on 2026-04-27 (08:30 to 08:32 UTC). Latest snapshot at 08:32:18 UTC shows all endpoints OK, but stability not yet proven across sustained probing.
+- ⚠️ **CRITICAL: Evidence capture**: Latest capture at 2026-04-27 08:32:18 UTC shows COMPLETE and READY, but earlier captures within the same hour showed BLOCKED. Single snapshot insufficient — recommend sustained probing.
 - ❌ **Accountable owner gate sign-off review**: Gates signed by PoC (phase6a-poc), require review by owners
 - ⏳ **Provider key rotation**: Status NOT VERIFIED (assume configured as Cloudflare secrets in PR #83, but not explicitly confirmed)
 - ⏳ **Rollback rehearsal**: Not yet executed in staging
 - ⏳ **Team comms**: Not yet sent to wider team
 
-**10% Canary BLOCKED pending endpoint/evidence remediation.** Critical blockers:
-1. ❌ Endpoint reliability NOT resolved — `/health` and `/api/admin/rollout-readiness` still HTTP 503 (Step 1)
-2. ❌ Evidence capture INCOMPLETE — Status: BLOCKED (Step 2)
+**10% Canary status:** Latest evidence snapshot is READY, but underlying endpoint reliability is not yet proven stable. Critical work remaining:
+1. ⚠️ Endpoint reliability — confirm sustained 0% failure rate or fix Cloudflare-side root cause (Step 1)
+2. ⚠️ Evidence capture — latest snapshot READY, but verify with sustained probing (Step 2)
 3. ❌ Accountable owners review and confirm gate sign-offs (Step 3)
 
 Execution Phase (Blocked — awaiting Step 1-3):
