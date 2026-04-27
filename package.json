@@ -22,6 +22,7 @@
     "ci:preflight": "corepack pnpm lint && corepack pnpm -r --if-present typecheck && corepack pnpm test && corepack pnpm phase6a:evidence:test && corepack pnpm build",
     "phase6a:evidence": "tsx scripts/phase6a/capture-canary-evidence.ts",
     "phase6a:evidence:test": "corepack pnpm -C worker exec vitest run test/phase6a",
-    "phase6a:d1:preflight": "tsx scripts/phase6a/check-d1-target.ts"
+    "phase6a:d1:preflight": "tsx scripts/phase6a/check-d1-target.ts",
+    "phase6a:probe-preview-endpoints": "node scripts/phase6a/probe-preview-endpoints.mjs"
   }
 }

@@ -1,0 +1,201 @@
+{
+  "probe_version": "1.0.0",
+  "generated_at": "2026-04-27T11:12:14.005Z",
+  "base_url": "https://energy-dislocation-engine-preview-preview.tj-hillman.workers.dev",
+  "attempts_requested": 3,
+  "delay_ms": 500,
+  "required_endpoints": [
+    "/health",
+    "/api/admin/rollout-readiness",
+    "/api/admin/rollout-status",
+    "/api/admin/api-health"
+  ],
+  "diagnostic_only": true,
+  "results": [
+    {
+      "timestamp": "2026-04-27T11:12:11.431Z",
+      "endpoint": "/health",
+      "attempt": 1,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 748,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:11.497Z",
+      "endpoint": "/api/admin/rollout-readiness",
+      "attempt": 1,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "json_parse_succeeded": true,
+      "body_excerpt": null,
+      "cf_ray": "9f2d640d4d97f32d-ORD",
+      "colo": "ORD",
+      "duration_ms": 1248,
+      "is_success": true,
+      "is_dns_cache_overflow": false
+    },
+    {
+      "timestamp": "2026-04-27T11:12:11.499Z",
+      "endpoint": "/api/admin/rollout-status",
+      "attempt": 1,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 683,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:11.500Z",
+      "endpoint": "/api/admin/api-health",
+      "attempt": 1,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 681,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.245Z",
+      "endpoint": "/health",
+      "attempt": 2,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 13,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.246Z",
+      "endpoint": "/api/admin/rollout-readiness",
+      "attempt": 2,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "json_parse_succeeded": true,
+      "body_excerpt": null,
+      "cf_ray": "9f2d64131fb1f32d-ORD",
+      "colo": "ORD",
+      "duration_ms": 130,
+      "is_success": true,
+      "is_dns_cache_overflow": false
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.247Z",
+      "endpoint": "/api/admin/rollout-status",
+      "attempt": 2,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 14,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.247Z",
+      "endpoint": "/api/admin/api-health",
+      "attempt": 2,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 13,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.876Z",
+      "endpoint": "/health",
+      "attempt": 3,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 13,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.878Z",
+      "endpoint": "/api/admin/rollout-readiness",
+      "attempt": 3,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "json_parse_succeeded": true,
+      "body_excerpt": null,
+      "cf_ray": "9f2d64171eedf32d-ORD",
+      "colo": "ORD",
+      "duration_ms": 127,
+      "is_success": true,
+      "is_dns_cache_overflow": false
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.878Z",
+      "endpoint": "/api/admin/rollout-status",
+      "attempt": 3,
+      "http_status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "json_parse_succeeded": true,
+      "body_excerpt": null,
+      "cf_ray": "9f2d64175b3861d9-ORD",
+      "colo": "ORD",
+      "duration_ms": 75,
+      "is_success": true,
+      "is_dns_cache_overflow": false
+    },
+    {
+      "timestamp": "2026-04-27T11:12:13.879Z",
+      "endpoint": "/api/admin/api-health",
+      "attempt": 3,
+      "http_status": 503,
+      "content_type": "text/plain",
+      "json_parse_succeeded": false,
+      "body_excerpt": "DNS cache overflow",
+      "cf_ray": null,
+      "colo": null,
+      "duration_ms": 12,
+      "is_success": false,
+      "is_dns_cache_overflow": true
+    }
+  ],
+  "summary": {
+    "total_attempts_per_endpoint": 3,
+    "failures_by_endpoint": {
+      "/health": 3,
+      "/api/admin/rollout-readiness": 0,
+      "/api/admin/rollout-status": 2,
+      "/api/admin/api-health": 3
+    },
+    "failures_by_status": {
+      "503": 8
+    },
+    "failures_by_colo": {
+      "unknown": 8
+    },
+    "dns_cache_overflow_count": 8,
+    "all_required_endpoints_passed": false
+  }
+}
