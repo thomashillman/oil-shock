@@ -152,6 +152,16 @@ export function formatEvidenceReport(
   // Check if evidence collection is complete
   const isComplete = health?.ok && readiness?.ok && rolloutStatus?.ok && apiHealth?.ok;
 
+  // Compute overall report status:
+  // - If any required endpoint explicitly FAILED (ok=false), report is incomplete
+  // - If all endpoints either succeeded (ok=true) or are not provided (null/undefined), use readiness status
+  // This distinguishes between "failed" (explicit failure) and "not provided" (missing data)
+  const anyEndpointFailed = health?.ok === false || readiness?.ok === false ||
+                            rolloutStatus?.ok === false || apiHealth?.ok === false;
+  const overallStatus: "ready" | "warning" | "blocked" | "incomplete" = anyEndpointFailed
+    ? "incomplete"
+    : (readiness?.data?.status ?? "warning");
+
   if (!isComplete) {
     lines.push("⚠️ **INCOMPLETE EVIDENCE COLLECTION**");
     lines.push("");
@@ -214,59 +224,65 @@ export function formatEvidenceReport(
   }
 
   // Main status section
-  if (readiness?.data) {
-    lines.push("## Readiness Assessment");
-    lines.push("");
+  lines.push("## Readiness Assessment");
+  lines.push("");
 
-    const statusEmoji =
-      readiness.data.status === "ready"
-        ? "✅"
-        : readiness.data.status === "warning"
-          ? "⚠️"
-          : "❌";
-    lines.push(`Status: **${statusEmoji} ${readiness.data.status.toUpperCase()}**`);
-    lines.push("");
+  const statusEmoji =
+    overallStatus === "ready"
+      ? "✅"
+      : overallStatus === "warning"
+        ? "⚠️"
+        : "❌";
+  lines.push(`Status: **${statusEmoji} ${overallStatus.toUpperCase()}**`);
+  lines.push("");
 
-    if (readiness.data.status === "ready") {
+  // Only show "Ready for 10% canary" if ALL endpoints passed AND readiness says ready
+  if (overallStatus === "ready") {
+    lines.push(
+      "✅ **Ready for 10% canary, subject to manual sign-off**"
+    );
+    lines.push("");
+    lines.push(
+      "All automatic checks pass. Proceed only if:"
+    );
+    lines.push("1. All manual checks (below) are signed off");
+    lines.push("2. Team is notified and synchronized");
+    lines.push("3. You have verified rollback procedures work");
+    lines.push("");
+    lines.push(
+      "⚠️ This report does not deploy anything. Setting `ENERGY_ROLLOUT_PERCENT=10` is a separate manual step."
+    );
+    lines.push("⚠️ This report does not change rollout percentage.");
+    lines.push("⚠️ This report does not sign any gates.");
+    lines.push("");
+  } else if (overallStatus === "warning") {
+    lines.push(
+      "⚠️ **Proceed only with explicit sign-off**"
+    );
+    lines.push("");
+    lines.push(
+      "Some concerns exist but may be acceptable. Team lead must explicitly approve in writing before proceeding."
+    );
+    lines.push("");
+  } else if (overallStatus === "blocked" || overallStatus === "incomplete") {
+    lines.push(
+      "❌ **DO NOT PROCEED TO 10% CANARY**"
+    );
+    lines.push("");
+    if (overallStatus === "incomplete") {
       lines.push(
-        "✅ **Ready for 10% canary, subject to manual sign-off**"
+        "Evidence collection is incomplete. Required endpoints failed to respond. Resolve all endpoint failures before proceeding."
       );
-      lines.push("");
-      lines.push(
-        "All automatic checks pass. Proceed only if:"
-      );
-      lines.push("1. All manual checks (below) are signed off");
-      lines.push("2. Team is notified and synchronized");
-      lines.push("3. You have verified rollback procedures work");
-      lines.push("");
-      lines.push(
-        "⚠️ This report does not deploy anything. Setting `ENERGY_ROLLOUT_PERCENT=10` is a separate manual step."
-      );
-      lines.push("⚠️ This report does not change rollout percentage.");
-      lines.push("⚠️ This report does not sign any gates.");
-      lines.push("");
-    } else if (readiness.data.status === "warning") {
-      lines.push(
-        "⚠️ **Proceed only with explicit sign-off**"
-      );
-      lines.push("");
-      lines.push(
-        "Some concerns exist but may be acceptable. Team lead must explicitly approve in writing before proceeding."
-      );
-      lines.push("");
-    } else if (readiness.data.status === "blocked") {
-      lines.push(
-        "❌ **DO NOT PROCEED TO 10% CANARY**"
-      );
-      lines.push("");
+    } else {
       lines.push(
         "Critical blockers must be resolved before rollout can proceed."
       );
-      lines.push("");
     }
+    lines.push("");
+  }
 
-    // Blockers
-    if (readiness.data.blockers.length > 0) {
+  // Blockers (only from readiness endpoint if it succeeded)
+  if (readiness?.data?.blockers && readiness.data.blockers.length > 0) {
       lines.push("### Blockers");
       lines.push("");
       for (const blocker of readiness.data.blockers) {
@@ -275,18 +291,17 @@ export function formatEvidenceReport(
       lines.push("");
     }
 
-    // Warnings
-    if (readiness.data.warnings.length > 0) {
-      lines.push("### Warnings");
-      lines.push("");
-      for (const warning of readiness.data.warnings) {
-        lines.push(`- ⚠️ ${warning}`);
-      }
-      lines.push("");
+  // Warnings (only from readiness endpoint if it succeeded)
+  if (readiness?.data?.warnings && readiness.data.warnings.length > 0) {
+    lines.push("### Warnings");
+    lines.push("");
+    for (const warning of readiness.data.warnings) {
+      lines.push(`- ⚠️ ${warning}`);
     }
+    lines.push("");
   }
 
-  // Evidence section
+  // Evidence section (only if readiness endpoint provided data)
   if (readiness?.data?.evidence) {
     const evidence = readiness.data.evidence;
 
@@ -412,20 +427,23 @@ export function formatEvidenceReport(
   lines.push("- ✅ Manual checks remain manual");
   lines.push("- ✅ This is a read-only evidence collection tool");
   lines.push("");
-  lines.push("## Next Steps (if ready)");
-  lines.push("");
-  lines.push(
-    "1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)"
-  );
-  lines.push("2. Ensure all manual checks are signed off by respective owners");
-  lines.push(
-    "3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration"
-  );
-  lines.push("4. Verify `/api/admin/rollout-status` returns `phase=\"canary-internal\"`");
-  lines.push(
-    "5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`"
-  );
-  lines.push("");
+  // Only include deployment next steps if report is READY
+  if (overallStatus === "ready") {
+    lines.push("## Next Steps (if ready)");
+    lines.push("");
+    lines.push(
+      "1. Save this report as an ops record (e.g., `docs/evidence/phase6a-canary-readiness-2026-04-25.md`)"
+    );
+    lines.push("2. Ensure all manual checks are signed off by respective owners");
+    lines.push(
+      "3. Deploy code change: set `ENERGY_ROLLOUT_PERCENT=10` in worker configuration"
+    );
+    lines.push("4. Verify `/api/admin/rollout-status` returns `phase=\"canary-internal\"`");
+    lines.push(
+      "5. Follow daily monitoring checklist from `docs/rollout-monitoring-strategy.md`"
+    );
+    lines.push("");
+  }
   lines.push("## References");
   lines.push("");
   lines.push(
