@@ -9,6 +9,10 @@ export interface ObservationInput {
   observedAt: string;
   value: number;
   revisedValue?: number | null;
+  latencyTag?: string | null;
+  sourceHash?: string | null;
+  r2ArtifactKey?: string | null;
+  runKey?: string | null;
   unit?: string | null;
   metadata?: Record<string, unknown> | null;
 }
@@ -18,6 +22,9 @@ export interface FeedCheckInput {
   feedKey: string;
   checkedAt: string;
   status: string;
+  runKey?: string | null;
+  step?: string | null;
+  result?: string | null;
   httpStatus?: number | null;
   latencyMs?: number | null;
   errorMessage?: string | null;
@@ -40,13 +47,18 @@ export interface TriggerEventInput {
   transitionKey: string;
   previousState?: string | null;
   newState: string;
+  status?: string;
+  reason?: string | null;
+  runKey?: string | null;
   triggeredAt: string;
+  computed?: Record<string, unknown> | null;
   details?: Record<string, unknown> | null;
 }
 
 export interface ActionLogInput {
   engineKey: string;
   decisionKey: string;
+  decision: "allowed" | "blocked" | "ignored" | "error";
   actionType: string;
   decidedAt: string;
   ruleKey?: string | null;
@@ -60,6 +72,7 @@ export interface RenderedOutputInput {
   outputKey: string;
   renderedAt: string;
   releaseKey?: string | null;
+  outputIdempotencyKey?: string;
   markdownBody?: string | null;
   content?: Record<string, unknown> | null;
   metadata?: Record<string, unknown> | null;
@@ -77,14 +90,22 @@ export async function upsertObservation(env: Env, input: ObservationInput): Prom
       observed_at,
       value,
       revised_value,
+      latency_tag,
+      source_hash,
+      r2_artifact_key,
+      run_key,
       unit,
       metadata_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT (engine_key, feed_key, series_key, release_key, as_of_date)
     DO UPDATE SET
       observed_at = excluded.observed_at,
       value = excluded.value,
       revised_value = excluded.revised_value,
+      latency_tag = excluded.latency_tag,
+      source_hash = excluded.source_hash,
+      r2_artifact_key = excluded.r2_artifact_key,
+      run_key = excluded.run_key,
       unit = excluded.unit,
       metadata_json = excluded.metadata_json,
       updated_at = CURRENT_TIMESTAMP
@@ -99,6 +120,10 @@ export async function upsertObservation(env: Env, input: ObservationInput): Prom
       input.observedAt,
       input.value,
       input.revisedValue ?? null,
+      input.latencyTag ?? null,
+      input.sourceHash ?? null,
+      input.r2ArtifactKey ?? null,
+      input.runKey ?? null,
       input.unit ?? null,
       input.metadata ? JSON.stringify(input.metadata) : null
     )
@@ -122,6 +147,10 @@ export async function getLatestObservation(
       observed_at,
       value,
       revised_value,
+      latency_tag,
+      source_hash,
+      r2_artifact_key,
+      run_key,
       unit,
       metadata_json
     FROM observations
@@ -142,6 +171,10 @@ export async function getLatestObservation(
       observed_at: string;
       value: number;
       revised_value: number | null;
+      latency_tag: string | null;
+      source_hash: string | null;
+      r2_artifact_key: string | null;
+      run_key: string | null;
       unit: string | null;
       metadata_json: string | null;
     }>();
@@ -159,6 +192,10 @@ export async function getLatestObservation(
     observedAt: row.observed_at,
     value: row.value,
     revisedValue: row.revised_value,
+    latencyTag: row.latency_tag,
+    sourceHash: row.source_hash,
+    r2ArtifactKey: row.r2_artifact_key,
+    runKey: row.run_key,
     unit: row.unit,
     metadata: row.metadata_json ? (JSON.parse(row.metadata_json) as Record<string, unknown>) : null
   };
@@ -170,18 +207,24 @@ export async function recordFeedCheck(env: Env, input: FeedCheckInput): Promise<
     INSERT INTO feed_checks (
       engine_key,
       feed_key,
+      run_key,
+      step,
+      result,
       checked_at,
       status,
       http_status,
       latency_ms,
       error_message,
       details_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
       input.engineKey,
       input.feedKey,
+      input.runKey ?? null,
+      input.step ?? null,
+      input.result ?? null,
       input.checkedAt,
       input.status,
       input.httpStatus ?? null,
@@ -232,9 +275,13 @@ export async function insertTriggerEvent(env: Env, input: TriggerEventInput): Pr
       transition_key,
       previous_state,
       new_state,
+      status,
+      reason,
+      run_key,
       triggered_at,
+      computed_json,
       details_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -244,7 +291,11 @@ export async function insertTriggerEvent(env: Env, input: TriggerEventInput): Pr
       input.transitionKey,
       input.previousState ?? null,
       input.newState,
+      input.status ?? "confirmed",
+      input.reason ?? null,
+      input.runKey ?? null,
       input.triggeredAt,
+      input.computed ? JSON.stringify(input.computed) : null,
       input.details ? JSON.stringify(input.details) : null
     )
     .run();
@@ -258,11 +309,12 @@ export async function insertActionLog(env: Env, input: ActionLogInput): Promise<
       rule_key,
       release_key,
       decision_key,
+      decision,
       action_type,
       rationale,
       decided_at,
       details_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -270,6 +322,7 @@ export async function insertActionLog(env: Env, input: ActionLogInput): Promise<
       input.ruleKey ?? null,
       input.releaseKey ?? null,
       input.decisionKey,
+      input.decision,
       input.actionType,
       input.rationale ?? null,
       input.decidedAt,
@@ -279,22 +332,26 @@ export async function insertActionLog(env: Env, input: ActionLogInput): Promise<
 }
 
 export async function insertRenderedOutput(env: Env, input: RenderedOutputInput): Promise<void> {
+  const idempotencyKey = input.outputIdempotencyKey ?? `${input.outputKey}:${input.releaseKey ?? ""}:${input.renderedAt}`;
+
   await env.DB.prepare(
     `
     INSERT OR IGNORE INTO rendered_outputs (
       engine_key,
       output_key,
+      output_idempotency_key,
       release_key,
       markdown_body,
       content_json,
       rendered_at,
       metadata_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
       input.engineKey,
       input.outputKey,
+      idempotencyKey,
       input.releaseKey ?? null,
       input.markdownBody ?? null,
       input.content ? JSON.stringify(input.content) : null,

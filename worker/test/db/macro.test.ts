@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
   getLatestObservation,
+  insertActionLog,
+  insertRenderedOutput,
   insertTriggerEvent,
   recordFeedCheck,
   upsertObservation,
@@ -41,6 +43,8 @@ class MockD1Database {
   private feedChecks: Row[] = [];
   private ruleStates: Row[] = [];
   private triggerEvents: Row[] = [];
+  private actionLogs: Row[] = [];
+  private renderedOutputs: Row[] = [];
 
   prepare(query: string): MockPreparedStatement {
     return new MockPreparedStatement(this, query);
@@ -70,16 +74,24 @@ class MockD1Database {
         existing.observed_at = params[5];
         existing.value = params[6];
         existing.revised_value = params[7];
-        existing.unit = params[8];
-        existing.metadata_json = params[9];
+        existing.latency_tag = params[8];
+        existing.source_hash = params[9];
+        existing.r2_artifact_key = params[10];
+        existing.run_key = params[11];
+        existing.unit = params[12];
+        existing.metadata_json = params[13];
       } else {
         this.observations.push({
           ...key,
           observed_at: params[5],
           value: params[6],
           revised_value: params[7],
-          unit: params[8],
-          metadata_json: params[9]
+          latency_tag: params[8],
+          source_hash: params[9],
+          r2_artifact_key: params[10],
+          run_key: params[11],
+          unit: params[12],
+          metadata_json: params[13]
         });
       }
 
@@ -90,12 +102,15 @@ class MockD1Database {
       this.feedChecks.push({
         engine_key: params[0],
         feed_key: params[1],
-        checked_at: params[2],
-        status: params[3],
-        http_status: params[4],
-        latency_ms: params[5],
-        error_message: params[6],
-        details_json: params[7]
+        run_key: params[2],
+        step: params[3],
+        result: params[4],
+        checked_at: params[5],
+        status: params[6],
+        http_status: params[7],
+        latency_ms: params[8],
+        error_message: params[9],
+        details_json: params[10]
       });
       return { success: true, meta: { last_row_id: this.feedChecks.length } };
     }
@@ -137,11 +152,52 @@ class MockD1Database {
           transition_key: params[3],
           previous_state: params[4],
           new_state: params[5],
-          triggered_at: params[6],
-          details_json: params[7]
+          status: params[6],
+          reason: params[7],
+          run_key: params[8],
+          triggered_at: params[9],
+          computed_json: params[10],
+          details_json: params[11]
         });
       }
       return { success: true, meta: { last_row_id: this.triggerEvents.length } };
+    }
+
+    if (normalized.includes("insert or ignore into action_log")) {
+      const exists = this.actionLogs.some((row) => row.engine_key === params[0] && row.decision_key === params[3]);
+      if (!exists) {
+        this.actionLogs.push({
+          engine_key: params[0],
+          rule_key: params[1],
+          release_key: params[2],
+          decision_key: params[3],
+          decision: params[4],
+          action_type: params[5],
+          rationale: params[6],
+          decided_at: params[7],
+          details_json: params[8]
+        });
+      }
+      return { success: true, meta: { last_row_id: this.actionLogs.length } };
+    }
+
+    if (normalized.includes("insert or ignore into rendered_outputs")) {
+      const exists = this.renderedOutputs.some(
+        (row) => row.engine_key === params[0] && row.output_idempotency_key === params[2]
+      );
+      if (!exists) {
+        this.renderedOutputs.push({
+          engine_key: params[0],
+          output_key: params[1],
+          output_idempotency_key: params[2],
+          release_key: params[3],
+          markdown_body: params[4],
+          content_json: params[5],
+          rendered_at: params[6],
+          metadata_json: params[7]
+        });
+      }
+      return { success: true, meta: { last_row_id: this.renderedOutputs.length } };
     }
 
     throw new Error(`Unhandled query: ${query}`);
@@ -166,11 +222,15 @@ class MockD1Database {
     throw new Error(`Unhandled first query: ${query}`);
   }
 
-  table(name: "observations" | "feed_checks" | "rule_state" | "trigger_events"): Row[] {
+  table(
+    name: "observations" | "feed_checks" | "rule_state" | "trigger_events" | "action_log" | "rendered_outputs"
+  ): Row[] {
     if (name === "observations") return this.observations;
     if (name === "feed_checks") return this.feedChecks;
     if (name === "rule_state") return this.ruleStates;
-    return this.triggerEvents;
+    if (name === "trigger_events") return this.triggerEvents;
+    if (name === "action_log") return this.actionLogs;
+    return this.renderedOutputs;
   }
 }
 
@@ -302,6 +362,31 @@ describe("macro db helpers", () => {
     expect(latest?.metadata).toEqual({ source: "revised" });
   });
 
+  it("upsertObservation persists latencyTag, sourceHash, r2ArtifactKey, and runKey", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+
+    await upsertObservation(env, {
+      engineKey: "energy",
+      feedKey: "macro_release.us_cpi",
+      seriesKey: "headline",
+      releaseKey: "2026-03",
+      asOfDate: "2026-03-01",
+      observedAt: "2026-03-12T12:30:00.000Z",
+      value: 3.4,
+      latencyTag: "slow",
+      sourceHash: "hash-1",
+      r2ArtifactKey: "r2://macro/1",
+      runKey: "run-123"
+    });
+
+    const latest = await getLatestObservation(env, "energy", "macro_release.us_cpi", "headline");
+    expect(latest?.latencyTag).toBe("slow");
+    expect(latest?.sourceHash).toBe("hash-1");
+    expect(latest?.r2ArtifactKey).toBe("r2://macro/1");
+    expect(latest?.runKey).toBe("run-123");
+  });
+
   it("recordFeedCheck appends history", async () => {
     const db = new MockD1Database();
     const env = testEnv(db);
@@ -320,6 +405,26 @@ describe("macro db helpers", () => {
     });
 
     expect(db.table("feed_checks")).toHaveLength(2);
+  });
+
+  it("recordFeedCheck persists runKey, step, and result", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+
+    await recordFeedCheck(env, {
+      engineKey: "energy",
+      feedKey: "macro_release.us_cpi",
+      runKey: "run-123",
+      step: "parse",
+      result: "failed",
+      checkedAt: "2026-03-12T12:30:00.000Z",
+      status: "error"
+    });
+
+    const rows = db.table("feed_checks");
+    expect(rows[0]?.run_key).toBe("run-123");
+    expect(rows[0]?.step).toBe("parse");
+    expect(rows[0]?.result).toBe("failed");
   });
 
   it("upsertRuleState overwrites same engine/rule/state key", async () => {
@@ -367,5 +472,59 @@ describe("macro db helpers", () => {
     await insertTriggerEvent(env, event);
 
     expect(db.table("trigger_events")).toHaveLength(1);
+  });
+
+  it("insertActionLog writes allowed/blocked decisions and is idempotent by engine_key + decision_key", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+
+    await insertActionLog(env, {
+      engineKey: "energy",
+      decisionKey: "decision-1",
+      decision: "allowed",
+      actionType: "notify",
+      decidedAt: "2026-03-12T12:30:00.000Z"
+    });
+
+    await insertActionLog(env, {
+      engineKey: "energy",
+      decisionKey: "decision-2",
+      decision: "blocked",
+      actionType: "notify",
+      decidedAt: "2026-03-13T12:30:00.000Z"
+    });
+
+    await insertActionLog(env, {
+      engineKey: "energy",
+      decisionKey: "decision-2",
+      decision: "blocked",
+      actionType: "notify",
+      decidedAt: "2026-03-13T12:30:00.000Z"
+    });
+
+    const rows = db.table("action_log");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.decision)).toEqual(["allowed", "blocked"]);
+  });
+
+  it("insertRenderedOutput is idempotent when releaseKey is omitted", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+
+    await insertRenderedOutput(env, {
+      engineKey: "energy",
+      outputKey: "daily-summary",
+      renderedAt: "2026-03-12T12:30:00.000Z",
+      markdownBody: "# Daily"
+    });
+
+    await insertRenderedOutput(env, {
+      engineKey: "energy",
+      outputKey: "daily-summary",
+      renderedAt: "2026-03-12T12:30:00.000Z",
+      markdownBody: "# Daily"
+    });
+
+    expect(db.table("rendered_outputs")).toHaveLength(1);
   });
 });
