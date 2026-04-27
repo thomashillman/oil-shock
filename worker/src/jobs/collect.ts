@@ -59,16 +59,18 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
     const results = await Promise.allSettled([
       collectEnergy(env, nowIso)
     ]);
+    const energyPoints: NormalizedPoint[] = [];
     const points: NormalizedPoint[] = [];
     for (const result of results) {
       if (result.status === "fulfilled") {
+        energyPoints.push(...result.value);
         points.push(...result.value);
       } else {
         log("error", "Collector failed", { error: String(result.reason) });
       }
     }
     await writeSeriesPoints(env, points);
-    await writeEnergyObservations(env, points, runKey, nowIso);
+    await writeEnergyObservations(env, energyPoints, runKey, nowIso);
     await finishRun(env, runKey, "success", {
       pointCount: points.length,
       generatedAt: nowIso
