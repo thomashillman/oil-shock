@@ -560,6 +560,206 @@ describe("Evidence Report Formatter", () => {
     });
   });
 
+  describe("incomplete evidence safety - critical regression tests", () => {
+    it("report is INCOMPLETE (not READY) when rollout-status fails but readiness says ready", () => {
+      // This is the bug that was discovered: readiness says ready, but rollout-status failed
+      const health: HealthPayload = {
+        ok: true,
+        status: "healthy",
+        service: "oil-shock-worker",
+        env: "preview",
+        runtimeMode: "oilshock",
+        featureFlags: { macroSignals: false },
+        timestamp: mockGeneratedAt
+      };
+
+      const readiness: RolloutReadinessResponse = {
+        status: "ready", // readiness says ready
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [{ gate: "test", status: "passed" }] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const rolloutStatus: EndpointEvidence<RolloutStatusResponse> = {
+        endpoint: "/api/admin/rollout-status",
+        ok: false, // BUT rollout-status FAILED with 503
+        status: 503,
+        data: null,
+        error: "DNS cache overflow"
+      };
+
+      const apiHealth: ApiHealthResponse = {
+        generatedAt: mockGeneratedAt,
+        systemHealthy: true,
+        unhealthyFeeds: [],
+        feeds: [],
+        summary: { totalFeeds: 3, healthyFeeds: 3, degradedFeeds: 0, downFeeds: 0 }
+      };
+
+      const report = formatEvidenceReport(
+        { endpoint: "/health", ok: true, status: 200, data: health },
+        { endpoint: "/api/admin/rollout-readiness", ok: true, status: 200, data: readiness },
+        rolloutStatus,
+        { endpoint: "/api/admin/api-health", ok: true, status: 200, data: apiHealth },
+        mockGeneratedAt
+      );
+
+      // Safety: report must show it's incomplete/blocked, NOT ready
+      expect(report).toContain("INCOMPLETE");
+      expect(report).toContain("HTTP 503");
+      expect(report).not.toContain("Ready for 10% canary");
+      expect(report).not.toContain("ENERGY_ROLLOUT_PERCENT=10");
+    });
+
+    it("report is INCOMPLETE when health endpoint fails but readiness says ready", () => {
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const report = formatEvidenceReport(
+        { endpoint: "/health", ok: false, status: 500, data: null, error: "HTTP 500" },
+        { endpoint: "/api/admin/rollout-readiness", ok: true, status: 200, data: readiness },
+        { endpoint: "/api/admin/rollout-status", ok: true, status: 200, data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt } },
+        { endpoint: "/api/admin/api-health", ok: true, status: 200, data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } } },
+        mockGeneratedAt
+      );
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).not.toContain("Ready for 10% canary");
+      expect(report).not.toContain("ENERGY_ROLLOUT_PERCENT=10");
+    });
+
+    it("report is INCOMPLETE when api-health endpoint fails but readiness says ready", () => {
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const health: HealthPayload = {
+        ok: true,
+        status: "healthy",
+        service: "oil-shock-worker",
+        env: "preview",
+        runtimeMode: "oilshock",
+        featureFlags: { macroSignals: false },
+        timestamp: mockGeneratedAt
+      };
+
+      const report = formatEvidenceReport(
+        { endpoint: "/health", ok: true, status: 200, data: health },
+        { endpoint: "/api/admin/rollout-readiness", ok: true, status: 200, data: readiness },
+        { endpoint: "/api/admin/rollout-status", ok: true, status: 200, data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt } },
+        { endpoint: "/api/admin/api-health", ok: false, status: 0, data: null, error: "Network timeout" },
+        mockGeneratedAt
+      );
+
+      expect(report).toContain("INCOMPLETE");
+      expect(report).not.toContain("Ready for 10% canary");
+      expect(report).not.toContain("ENERGY_ROLLOUT_PERCENT=10");
+    });
+
+    it("report IS READY when all endpoints pass and readiness says ready", () => {
+      const health: HealthPayload = {
+        ok: true,
+        status: "healthy",
+        service: "oil-shock-worker",
+        env: "preview",
+        runtimeMode: "oilshock",
+        featureFlags: { macroSignals: false },
+        timestamp: mockGeneratedAt
+      };
+
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const report = formatEvidenceReport(
+        { endpoint: "/health", ok: true, status: 200, data: health },
+        { endpoint: "/api/admin/rollout-readiness", ok: true, status: 200, data: readiness },
+        { endpoint: "/api/admin/rollout-status", ok: true, status: 200, data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt } },
+        { endpoint: "/api/admin/api-health", ok: true, status: 200, data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 3, healthyFeeds: 3, degradedFeeds: 0, downFeeds: 0 } } },
+        mockGeneratedAt
+      );
+
+      expect(report).toContain("Ready for 10% canary");
+      expect(report).toContain("ENERGY_ROLLOUT_PERCENT=10");
+      expect(report).not.toContain("INCOMPLETE");
+    });
+
+    it("never outputs contradictory wording: INCOMPLETE + Ready for 10%", () => {
+      // This test verifies the exact bug that was found cannot reoccur
+      const readiness: RolloutReadinessResponse = {
+        status: "ready",
+        blockers: [],
+        warnings: [],
+        manualChecks: [],
+        evidence: {
+          generatedAt: mockGeneratedAt,
+          rolloutPercent: 0,
+          apiHealth: { systemHealthy: true, unhealthyFeeds: [], totalFeeds: 3, healthyFeeds: 3 },
+          validation: { allValidationsPassed: true, readyForRollout: true, gates: [] },
+          gates: { passedCount: 6, totalCount: 6, allSigned: true }
+        }
+      };
+
+      const report = formatEvidenceReport(
+        { endpoint: "/health", ok: false, status: 503, data: null, error: "HTTP 503" },
+        { endpoint: "/api/admin/rollout-readiness", ok: true, status: 200, data: readiness },
+        { endpoint: "/api/admin/rollout-status", ok: true, status: 200, data: { feature: "ENERGY_ROLLOUT_PERCENT", rolloutPercent: 0, phase: "pre-rollout", description: "test", timestamp: mockGeneratedAt } },
+        { endpoint: "/api/admin/api-health", ok: true, status: 200, data: { generatedAt: mockGeneratedAt, systemHealthy: true, unhealthyFeeds: [], feeds: [], summary: { totalFeeds: 0, healthyFeeds: 0, degradedFeeds: 0, downFeeds: 0 } } },
+        mockGeneratedAt
+      );
+
+      // The exact bug: both INCOMPLETE and Ready for 10% in same report
+      const hasIncomplete = report.includes("INCOMPLETE");
+      const hasReadyFor10 = report.includes("Ready for 10% canary");
+
+      // They should be mutually exclusive
+      if (hasIncomplete) {
+        expect(hasReadyFor10).toBe(false);
+      }
+      if (hasReadyFor10) {
+        expect(hasIncomplete).toBe(false);
+      }
+    });
+  });
+
   describe("determinism", () => {
     it("produces identical output for identical input", () => {
       const readiness: RolloutReadinessResponse = {
