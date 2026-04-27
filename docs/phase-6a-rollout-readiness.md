@@ -4,6 +4,12 @@
 
 **Timeline**: Completion required before Day 22 (May 2026)
 
+**CURRENT STATUS** (as of 2026-04-27): 🔴 BLOCKED at evidence collection due to preview endpoint instability.
+- Latest evidence report: INCOMPLETE (HTTP 503 `DNS cache overflow` on required endpoints)
+- Blocker: `/health`, `/api/admin/rollout-readiness`, `/api/admin/rollout-status` intermittently fail
+- Status: Waiting for endpoint stabilization before evidence capture can be retried
+- See: `docs/current-priorities.md` "Immediate Blocker: Preview Endpoint Reliability"
+
 This checklist separates code-checkable items (automatic) from manual verification steps (operator sign-off).
 
 ---
@@ -127,10 +133,11 @@ Non-required seeded feeds (inventory, refinery, futures, ENTSOG, GIE, SEC, etc.)
 
 ---
 
-### Tier 2: Grafana Monitoring Setup
-**Timeline**: After Tier 1, before Tier 3  
+### Tier 2: Grafana Monitoring Setup — DEFERRED TO POST-CANARY
+**Timeline**: After canary stabilization (post-Day 26), before 50% expansion  
 **Owner**: Observability + SRE  
-**Reference**: `docs/GRAFANA_SETUP_GUIDE.md`
+**Status**: Not required for 10% canary. Required for 50%+ expansion and operational monitoring maturity.
+**Reference**: `docs/GRAFANA_SETUP_GUIDE.md`, `docs/current-priorities.md` "Deferred Items"
 
 - [ ] **Dashboard Imported**: Grafana dashboard from `docs/grafana-api-health-dashboard.json` is imported
   - Verify: All panels display data (no "No data" messages)
@@ -156,6 +163,8 @@ Non-required seeded feeds (inventory, refinery, futures, ENTSOG, GIE, SEC, etc.)
 
 **Sign-off**: _____________________ (SRE lead)  
 **Date**: _____________________
+
+**Note**: Configure this tier after the 5-day canary monitoring period (post-Day 26) in preparation for the 50% expansion phase. It is not a blocker for the 10% internal canary start.
 
 ---
 

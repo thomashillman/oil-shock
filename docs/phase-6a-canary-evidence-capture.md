@@ -166,10 +166,12 @@ The report includes these manual checks that require operator sign-off:
 - [ ] `/api/admin/api-health` returns data
 - [ ] Metrics are flowing in staging environment
 
-### Tier 2: Grafana Monitoring Setup
+### Tier 2: Grafana Monitoring Setup — DEFERRED TO POST-CANARY
+- [ ] **Status**: Not required for 10% canary. Configure after Day 26 canary monitoring.
 - [ ] Grafana dashboard from `docs/grafana-api-health-dashboard.json` is imported
 - [ ] 5 alert rules from `docs/grafana-api-health-alerts.md` are configured
 - [ ] Alerts route to correct channels (Slack, PagerDuty)
+- [ ] **See**: `docs/current-priorities.md` "Deferred Items" for timeline and rationale
 
 ### Tier 3: Team Communication & Procedures
 - [ ] Rollout schedule announced
@@ -239,38 +241,50 @@ The report includes these manual checks that require operator sign-off:
 ## Workflow: Before Day 22 Canary
 
 ```
-1. Verify telemetry in staging (Step 0: Telemetry Verification Sequence above)
+1. **BLOCKER CHECK** (as of 2026-04-27): Preview endpoint stability
+   └─ Known issue: /health, /api/admin/rollout-readiness, /api/admin/rollout-status
+      return HTTP 503 "DNS cache overflow" intermittently
+   └─ See: docs/current-priorities.md "Immediate Blocker: Preview Endpoint Reliability"
+   └─ Must stabilize before proceeding to step 2
+   
+2. Verify telemetry in staging (Step 0: Telemetry Verification Sequence above)
    └─ Ensure collector metrics are flowing
+   └─ Energy feeds should be healthy (0% error rate)
    
-2. Configure Grafana monitoring (Tier 2)
-   └─ Dashboard and alerts must be operational
-   
-3. Run evidence capture tool
+3. Run evidence capture tool (DO NOT proceed if endpoints fail)
    corepack pnpm phase6a:evidence -- \
      --base-url https://staging-worker.example.com \
      --out docs/evidence/phase6a-canary-readiness.md
+   └─ Report status must be READY or WARNING (not INCOMPLETE)
+   └─ All required endpoints must return HTTP 200 with valid JSON
    
 4. Review the generated report
    └─ Check status (ready/warning/blocked)
    └─ Address any warnings or blockers
+   └─ Confirm no INCOMPLETE endpoint failures
    
-5. Obtain manual sign-offs (Tier 3-4)
+5. Configure Grafana monitoring (Tier 2)
+   └─ **Note**: Deferred to post-canary stabilization phase
+   └─ Not required for 10% canary, but needed for 50%+ expansion
+   └─ See: docs/current-priorities.md "Deferred Items"
+   
+6. Obtain manual sign-offs (Tier 3-4)
    └─ Team communication checklist
    └─ Rollback rehearsal validation
    
-6. Store evidence report
+7. Store evidence report
    └─ Save as ops record (e.g., docs/evidence/phase6a-canary-readiness-DATE.md)
    └─ Attach to incident ticket or deployment record
    
-7. Deploy with ENERGY_ROLLOUT_PERCENT=10
+8. Deploy with ENERGY_ROLLOUT_PERCENT=10
    └─ This is a separate manual step (code change + deploy)
    
-8. Verify rollout-status endpoint
+9. Verify rollout-status endpoint
    curl https://production-worker.example.com/api/admin/rollout-status
    └─ Should return phase="canary-internal", rolloutPercent=10
    
-9. Begin monitoring per docs/rollout-monitoring-strategy.md
-   └─ Daily checklist for Days 22-26
+10. Begin monitoring per docs/rollout-monitoring-strategy.md
+    └─ Daily checklist for Days 22-26
 ```
 
 ---
