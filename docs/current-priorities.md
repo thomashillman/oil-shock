@@ -4,10 +4,12 @@ This document captures the current sequencing and decision constraints for work 
 
 ## Current status
 
-- **Phase 6A (Energy Engine) execution phase (Days 22-52)** — May 2026, weeks 4-8
+- **Phase 6A (Energy Engine) pre-canary readiness validation** — Blocked at evidence collection
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
-  - **NEXT**: Gradual rollout execution (0% → 10% → 50% → 100% → stabilization)
-  - Phase 1 (Days 22-26): Internal canary at 10%
+  - **CURRENT PHASE**: Pre-canary readiness validation (evidence collection)
+  - **10% CANARY BLOCKED**: See "Immediate blocker" below
+  - **Reason**: Preview endpoint reliability instability. Required endpoints intermittently return HTTP 503 `DNS cache overflow`, preventing formal evidence capture completion
+  - Phase 1 (Days 22-26): Internal canary at 10% — **will not start until blocker resolved**
   - Phase 2 (Days 27-35): Public expansion 50%
   - Phase 3 (Days 36-42): Full rollout 100%
   - Phase 4 (Days 43-52): Stabilization monitoring
@@ -42,59 +44,108 @@ This document captures the current sequencing and decision constraints for work 
 - [x] Implement `/api/admin/api-health` endpoint (per-feed monitoring)
 - [x] Create API health tracking (D1 schema + Grafana dashboard)
 
-**Stream 3: Production Rollout (Days 22-52)** — 🔄 IN PROGRESS
+**Stream 3: Production Rollout (Days 22-52)** — 🔴 BLOCKED AT EVIDENCE COLLECTION
 
 Preparation Phase (Before Day 22):
 
-**Step -1: D1 Target Preflight** (TOOL-COMPLETE, operator action required)
+**Step -1: D1 Target Preflight** — ✅ COMPLETE
 - [x] **TOOL-COMPLETE**: D1 target preflight guardrail implemented
 - [x] **TOOL-COMPLETE**: Detects unsafe D1 ID sharing patterns (preview-production critical, root sharing warnings)
 - [x] **TOOL-COMPLETE**: Validates required migration files exist
 - [x] **TOOL-COMPLETE**: Generates Markdown preflight report with Cloudflare D1 commands
-- [ ] **OPERATOR-ACTION**: Run `corepack pnpm phase6a:d1:preflight` and review report
-- [ ] **OPERATOR-ACTION**: Resolve D1 configuration issues (especially preview-production sharing)
-- [ ] **OPERATOR-ACTION**: Apply migrations 0014, 0015, 0016 only after explicit confirmation
-- [ ] Reference: `docs/phase-6a-d1-target-preflight-task.md`
+- [x] **OPERATOR-ACTION**: Migrations 0014, 0015, 0016 applied to preview database
+- [x] **PREVIEW SEPARATION**: Preview and production D1 databases separated and verified
+- [x] Reference: `docs/evidence/phase6a-d1-target-preflight.md`
 
-**Step 0: Telemetry Setup** (CODE-COMPLETE in main, live-operator verification required)
-- [x] **CODE-COMPLETE**: Wire energy collector to use `instrumentedFetch()` (merged to main)
+**Step 0: Telemetry Setup** — ✅ CODE-COMPLETE, ✅ LIVE-VERIFIED (feeds healthy)
+- [x] **CODE-COMPLETE**: Wire energy collector to use `instrumentedFetch()` (merged to main, PR #???)
 - [x] **CODE-COMPLETE**: D1 schema and API health endpoints implemented
-- [ ] **LIVE-VERIFY**: Confirm D1 migrations 0014/0015/0016 are applied (Step -1 prerequisite)
-- [ ] **LIVE-VERIFY**: Run staging collection and verify metrics recorded to `api_health_metrics`
-- [ ] **LIVE-VERIFY**: Confirm `/api/admin/api-health` returns live data in staging
-- [ ] **LIVE-VERIFY**: Verify telemetry flowing in staging environment
-- [ ] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
+- [x] **LIVE-VERIFY**: D1 migrations 0014/0015/0016 applied and verified
+- [x] **LIVE-VERIFY**: Staging collection confirms metrics recorded to `api_health_metrics`
+- [x] **LIVE-VERIFY**: `/api/admin/api-health` returns live data in staging: 3 Energy feeds healthy (0% error rate)
+- [x] **LIVE-VERIFY**: Telemetry flowing in staging environment (EIA feeds responding)
+- [x] Reference: `docs/TELEMETRY_SETUP_GUIDE.md`, `docs/evidence/phase6a-staging-telemetry-verification.md`
 
-**Step 1: Grafana Monitoring Setup**
+**Step 1: Grafana Monitoring Setup** — ⏳ DEFERRED (not immediate blocker for canary)
 - [ ] Import Grafana dashboard (`docs/grafana-api-health-dashboard.json`)
 - [ ] Configure 5 Grafana alert rules (`docs/grafana-api-health-alerts.md`)
 - [ ] Test dashboard queries against live D1 data
 - [ ] Verify alert routing (Slack, PagerDuty)
+- [ ] **Status**: Deferred to post-canary stabilization phase. Required before broader expansion and operational maturity, but not blocking 10% canary start
 - [ ] Reference: `docs/GRAFANA_SETUP_GUIDE.md`
 
-**Step 2: Evidence Capture & Readiness Report**
+**Step 2: Evidence Capture & Readiness Report** — 🔴 BLOCKED (see immediate blocker below)
+- [x] Phase 6A evidence capture tool implemented and tested (PR #86 fixed formatter safety)
 - [ ] Run Phase 6A evidence capture tool to verify all prerequisites
   - `corepack pnpm phase6a:evidence -- --base-url https://staging-worker.example.com`
-  - Review generated report: status should be "ready"
-  - Save report as ops record
-  - Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/phase-6a-staging-telemetry-verification-task.md`
+  - **CURRENT STATUS**: Report is INCOMPLETE due to endpoint failures
+  - **BLOCKER**: Required endpoints intermittently return HTTP 503 `DNS cache overflow`
+  - Must resolve endpoint reliability before evidence can be READY
+  - Reference: `docs/phase-6a-canary-evidence-capture.md`, `docs/evidence/phase6a-readiness-index.md`
 
-**Step 3: Team Communication & Procedures**
-- [ ] Update team comms (schedule, phases, success criteria)
+**Step 3: Team Communication & Procedures** — ⏳ WAITING FOR STEP 2
+- [ ] Team notification of readiness (deferred until Step 2 complete)
 - [ ] Create incident response runbook (rollback procedures, root cause investigation)
 - [ ] Rehearse rollback procedure (ENERGY_ROLLOUT_PERCENT=0)
 
-Execution Phase:
-- [ ] Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring)
+### Immediate Blocker: Preview Endpoint Reliability
+
+**Current Status**: 🔴 BLOCKED — Evidence collection is incomplete
+
+**Root Cause**: Preview endpoints intermittently return HTTP 503 with non-JSON response body: `"DNS cache overflow"`
+
+**Affected Endpoints**:
+- `/health` — HTTP 503 `DNS cache overflow`
+- `/api/admin/rollout-readiness` — HTTP 503 `DNS cache overflow`
+- `/api/admin/rollout-status` — HTTP 503 `DNS cache overflow`
+- `/api/admin/api-health` — HTTP 200 ✅ (operational)
+
+**Evidence Capture Requirement** (PR #86 fix):
+- All required endpoints must return HTTP 200 with valid JSON
+- Any HTTP 503 or non-JSON response automatically marks evidence INCOMPLETE
+- Manual probing or "mostly OK" observations do not override formal evidence capture requirement
+- **Manual verification is not sufficient for canary approval** — evidence capture must succeed
+
+**What Must Be Resolved Before Canary**:
+1. Stabilize or diagnose preview endpoint reliability
+2. Eliminate HTTP 503 `DNS cache overflow` errors from required endpoints
+3. Rerun evidence capture until status is READY or acceptable WARNING
+4. Confirm evidence report is internally consistent and all feeds healthy
+5. No endpoint failures during capture window
+
+**Next Steps**:
+- **Step A (Immediate)**: Stabilise/diagnose preview endpoint reliability (infrastructure investigation)
+- **Step B**: Rerun evidence capture with stable endpoints
+- **Step C**: Rollback rehearsal in staging
+- **Step D**: Team communication and schedule coordination
+- **Step E**: Accountable owner review of all sign-offs
+- **Step F**: 10% canary deployment (only after all previous steps complete)
+
+### Execution Phase (Blocked Until Blocker Resolved)
+
+**Canary Remains Blocked Until**:
+- [x] D1 preview/production separation complete
+- [x] Telemetry flowing and feeds healthy
+- [x] Evidence capture tool safety fixed (PR #86)
+- [x] Canonical Worker naming fixed (PR #85)
+- [x] Vercel preview routing to canonical preview Worker verified
+- [ ] **Fresh evidence report is READY or acceptable WARNING** (currently INCOMPLETE)
+- [ ] **All required endpoints stable (HTTP 200, valid JSON)** (currently intermittent HTTP 503)
+- [ ] Rollback rehearsal complete
+- [ ] Team communication sent
+- [ ] Accountable owner review recorded
+
+**Timeline After Blocker Resolved**:
+- Week 1 (Days 22-26): Internal canary at 10% (5-day monitoring)
   - Day 22: Deploy ENERGY_ROLLOUT_PERCENT=10, verify canary setup
   - Days 23-26: Execute daily monitoring checklist
-- [ ] Week 2 (Days 27-35): Public expansion 50%
+- Week 2 (Days 27-35): Public expansion 50%
   - Day 27: Increase to ENERGY_ROLLOUT_PERCENT=50
   - Days 28-35: Monitor 50/50 split, compare metrics
-- [ ] Week 3 (Days 36-42): Full rollout 100%
+- Week 3 (Days 36-42): Full rollout 100%
   - Day 36: Increase to ENERGY_ROLLOUT_PERCENT=100
   - Days 37-42: Monitor for regressions
-- [ ] Week 4 (Days 43-52): Stabilization
+- Week 4 (Days 43-52): Stabilization
   - Days 43-52: Long-term stability monitoring, prepare Phase 6B
 
 ### Pre-Phase-6A: Documentation (COMPLETE)
@@ -106,8 +157,18 @@ Execution Phase:
 - [x] Rollout strategy (0% → 100%) documented
 - [x] Rollback procedures documented
 - [x] Implementation plan updated (main docs)
+- [x] Evidence capture tool implemented (PR #86: formatter safety fixed)
+- [x] Canonical Worker naming fixed (PR #85: explicit preview/production targeting)
 
-See: `/docs/phase-6a-energy.md`, `/docs/validation-strategy.md`, `/docs/pre-deploy-gates.md`, `/docs/energy-rollout-strategy.md`, `/docs/failure-handling.md`, `/docs/phase-6-rollback-procedures.md`, `/docs/phase-6b-macro-releases.md`, `PRE_DEPLOY_CHECKLIST.md`
+See: `/docs/phase-6a-energy.md`, `/docs/validation-strategy.md`, `/docs/pre-deploy-gates.md`, `/docs/energy-rollout-strategy.md`, `/docs/failure-handling.md`, `/docs/phase-6-rollback-procedures.md`, `/docs/phase-6b-macro-releases.md`, `docs/evidence/phase6a-readiness-index.md`
+
+### Deferred Items (Not Blocking Canary)
+
+**Grafana Dashboard & Alerts**:
+- **Status**: Deferred to post-canary stabilization phase (after Days 22-26)
+- **Reason**: Not required for 10% canary readiness; required before broader expansion to 50%+ and for operational monitoring maturity
+- **Reference**: `docs/GRAFANA_SETUP_GUIDE.md`, `docs/grafana-api-health-dashboard.json`, `docs/grafana-api-health-alerts.md`
+- **Timeline**: Implement after internal canary validates stability (post-Day 26)
 
 ## Immediate priorities
 
