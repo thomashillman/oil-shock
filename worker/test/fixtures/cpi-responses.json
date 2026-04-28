@@ -1,0 +1,57 @@
+{
+  "success": {
+    "status": "REQUEST_SUCCEEDED",
+    "Results": {
+      "series": [
+        {
+          "seriesID": "CUUR0000SA0",
+          "data": [
+            {
+              "year": "2026",
+              "period": "M04",
+              "periodName": "April",
+              "latest": true,
+              "value": "316.582",
+              "footnotes": [
+                {
+                  "code": "P",
+                  "text": "Preliminary"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "releaseTimestamp": "2026-05-12T12:30:00.000Z",
+      "releaseName": "Consumer Price Index"
+    }
+  },
+  "missingValue": {
+    "status": "REQUEST_SUCCEEDED",
+    "Results": {
+      "series": [
+        {
+          "seriesID": "CUUR0000SA0",
+          "data": [
+            {
+              "year": "2026",
+              "period": "M04",
+              "latest": true
+            }
+          ]
+        }
+      ]
+    },
+    "metadata": {
+      "releaseTimestamp": "2026-05-12T12:30:00.000Z"
+    }
+  },
+  "malformed": {
+    "status": "REQUEST_SUCCEEDED",
+    "Results": {
+      "series": "not-an-array"
+    }
+  }
+}

@@ -1,18 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../src/env";
 import type { NormalizedPoint } from "../../src/types";
+import type { CpiObservationCandidate } from "../../src/jobs/collectors/cpi";
 
-const { mockCollectEnergy, mockCollectMacroReleases } = vi.hoisted(() => ({
+const { mockCollectEnergy, mockCollectCpi } = vi.hoisted(() => ({
   mockCollectEnergy: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>(),
-  mockCollectMacroReleases: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>()
+  mockCollectCpi: vi.fn<(_: Env, __: string) => Promise<CpiObservationCandidate[]>>()
 }));
 
 vi.mock("../../src/jobs/collectors/energy", () => ({
   collectEnergy: mockCollectEnergy
 }));
 
-vi.mock("../../src/jobs/collectors/macro-releases", () => ({
-  collectMacroReleases: mockCollectMacroReleases
+vi.mock("../../src/jobs/collectors/cpi", () => ({
+  collectCpi: mockCollectCpi
 }));
 
 import { runCollection } from "../../src/jobs/collect";
@@ -52,6 +53,9 @@ class MockD1Database {
   private readonly observations: Row[] = [];
   private readonly feedChecks: Row[] = [];
   private readonly feedRegistry: Row[];
+  private readonly triggerEvents: Row[] = [];
+  private readonly ruleState: Row[] = [];
+  private readonly actionLog: Row[] = [];
 
   constructor(options?: { failObservationWrites?: boolean; feedRegistry?: Row[] }) {
     this.failObservationWrites = options?.failObservationWrites ?? false;
@@ -139,7 +143,8 @@ class MockD1Database {
         result: params[4],
         checked_at: params[5],
         status: params[6],
-        details_json: params[10]
+        details_json: params[10],
+        error_message: params[9]
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -157,7 +162,7 @@ class MockD1Database {
     throw new Error(`Unhandled query: ${query}`);
   }
 
-  async all<T>(query: string, _params: unknown[]): Promise<{ results: T[] }> {
+  async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
     if (normalized.includes("from series_points")) {
       return { results: this.seriesPoints as T[] };
@@ -171,12 +176,21 @@ class MockD1Database {
     if (normalized.includes("from runs")) {
       return { results: this.runs as T[] };
     }
+    if (normalized.includes("from trigger_events")) {
+      return { results: this.triggerEvents as T[] };
+    }
+    if (normalized.includes("from rule_state")) {
+      return { results: this.ruleState as T[] };
+    }
+    if (normalized.includes("from action_log")) {
+      return { results: this.actionLog as T[] };
+    }
     if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
-      const engineKey = _params[0];
+      const engineKey = params[0];
       return { results: this.feedRegistry.filter((row) => row.engine_key === engineKey && row.enabled === 1) as T[] };
     }
     if (normalized.includes("from feed_registry") && normalized.includes("order by feed_key")) {
-      const engineKey = _params[0];
+      const engineKey = params[0];
       return { results: this.feedRegistry.filter((row) => row.engine_key === engineKey) as T[] };
     }
     throw new Error(`Unhandled all query: ${query}`);
@@ -219,10 +233,26 @@ const ENERGY_POINTS: NormalizedPoint[] = [
   }
 ];
 
+const CPI_OBSERVATION: CpiObservationCandidate = {
+  engineKey: "cpi",
+  feedKey: "macro_release.us_cpi.all_items_index",
+  seriesKey: "macro_release.us_cpi.all_items_index",
+  releaseKey: "cpi:2026-04",
+  asOfDate: "2026-04",
+  observedAt: "2026-05-12T12:30:00.000Z",
+  value: 316.582,
+  unit: "index",
+  metadata: {
+    provider: "BLS",
+    sourceSeriesId: "CUUR0000SA0",
+    bridge: "cpi_collect_only_v1"
+  }
+};
+
 describe("runCollection energy dual-write", () => {
   beforeEach(() => {
     mockCollectEnergy.mockReset().mockResolvedValue(ENERGY_POINTS);
-    mockCollectMacroReleases.mockReset().mockResolvedValue([]);
+    mockCollectCpi.mockReset().mockResolvedValue([CPI_OBSERVATION]);
   });
 
   it("still writes Energy points to legacy series_points", async () => {
@@ -302,13 +332,23 @@ describe("runCollection energy dual-write", () => {
     expect(runs.results[0]).toMatchObject({ status: "failed" });
   });
 
-  it("does not invoke macro release collector", async () => {
+
+  it("keeps prior semantics when Energy collector fails by completing run without throwing", async () => {
+    mockCollectEnergy.mockRejectedValueOnce(new Error("energy upstream failed"));
     const db = new MockD1Database();
-    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
 
-    expect(mockCollectMacroReleases).not.toHaveBeenCalled();
+    await expect(runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"))).resolves.toBeUndefined();
+
+    const seriesPoints = await db.prepare("SELECT * FROM series_points").all<Row>();
+    expect(seriesPoints.results).toHaveLength(0);
+
+    const observations = await db.prepare("SELECT * FROM observations").all<Row>();
+    expect(observations.results).toHaveLength(0);
+
+    const runs = await db.prepare("SELECT * FROM runs").all<Row>();
+    expect(runs.results).toHaveLength(1);
+    expect(runs.results[0]).toMatchObject({ status: "success" });
   });
-
   it("skips disabled feeds for observations and feed_checks while preserving legacy writes", async () => {
     const db = new MockD1Database({
       feedRegistry: [
@@ -343,5 +383,94 @@ describe("runCollection energy dual-write", () => {
 
     const checks = await db.prepare("SELECT * FROM feed_checks").all<Row>();
     expect(checks.results).toHaveLength(2);
+  });
+
+  it("does not write CPI observations or success feed checks when CPI feed is disabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const cpiObservations = (await db.prepare("SELECT * FROM observations").all<Row>()).results.filter(
+      (row) => row.engine_key === "cpi"
+    );
+    expect(cpiObservations).toHaveLength(0);
+
+    const cpiFeedChecks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results.filter(
+      (row) => row.engine_key === "cpi"
+    );
+    expect(cpiFeedChecks).toHaveLength(0);
+    expect(mockCollectCpi).not.toHaveBeenCalled();
+  });
+
+  it("writes CPI observations and success feed checks when CPI feed is enabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
+      ]
+    });
+
+    const env = makeEnv(db);
+    await runCollection(env, new Date("2026-04-27T00:00:00.000Z"));
+    await runCollection(env, new Date("2026-04-27T00:00:00.000Z"));
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const cpiObservations = observations.filter((row) => row.engine_key === "cpi");
+    expect(cpiObservations).toHaveLength(1);
+    expect(cpiObservations[0]).toMatchObject({
+      feed_key: "macro_release.us_cpi.all_items_index",
+      release_key: "cpi:2026-04"
+    });
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const cpiChecks = checks.filter((row) => row.engine_key === "cpi");
+    expect(cpiChecks).toHaveLength(2);
+    expect(cpiChecks[0]).toMatchObject({ result: "success", status: "ok" });
+  });
+
+  it("records CPI error feed_check when CPI collection fails", async () => {
+    mockCollectCpi.mockRejectedValueOnce(new Error("cpi fixture parse failed"));
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const cpiChecks = checks.filter((row) => row.engine_key === "cpi");
+    expect(cpiChecks).toHaveLength(1);
+    expect(cpiChecks[0]).toMatchObject({
+      feed_key: "macro_release.us_cpi.all_items_index",
+      result: "error",
+      status: "error",
+      error_message: "cpi fixture parse failed"
+    });
+  });
+
+  it("keeps CPI collect-only and does not write rule_state, trigger_events, or action_log rows", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    await expect(db.prepare("SELECT * FROM rule_state").all<Row>()).resolves.toEqual({ results: [] });
+    await expect(db.prepare("SELECT * FROM trigger_events").all<Row>()).resolves.toEqual({ results: [] });
+    await expect(db.prepare("SELECT * FROM action_log").all<Row>()).resolves.toEqual({ results: [] });
   });
 });
