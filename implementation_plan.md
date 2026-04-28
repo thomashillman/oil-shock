@@ -36,7 +36,7 @@ Not complete yet:
 - No full action manager for portfolio guardrails (current bridge is Energy-only logging with Guardrail Policy v1 checks only).
 - No generic multi-engine runtime API surface.
 - No Macro Signals frontend built from backend engine/feed registries.
-- No CPI collect-only bridge in runtime collection flow.
+- CPI collect-only bridge now exists (registry-gated, disabled by default, fixture-parsed to observations/feed_checks).
 - No Fed pivot, UK macro, valuation, or momentum engines.
 - No live guardrail enforcement, execution, notifications, or allocation changes.
 
@@ -46,6 +46,19 @@ Working estimate:
 - Full Macro Signals platform: roughly 25 to 30 percent complete.
 
 The next work should be additive and staged. Do not delete old Oil Shock or snapshot behaviour until the new engine path is proven, tested, and consumed by the frontend.
+
+Still incomplete after CPI collect-only bridge:
+
+- CPI rules
+- CPI trigger events
+- CPI guardrails
+- CPI action decisions
+- Generic multi-engine runtime APIs
+- Frontend registry console
+- Live guardrails
+- Execution
+- Notifications
+- Allocation changes
 
 ## Definition of complete
 

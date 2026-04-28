@@ -22,6 +22,13 @@ This document captures the current sequencing and decision constraints for work 
   - Decisions now pass through Guardrail Policy v1 (Energy-only, logging-only) before `action_log` writes; supported Energy triggers remain `decision="ignored"` because no execution policy exists
   - CPI and macro release collection remain disabled
 - **Macro Signals bridge slice (April 2026): Engine Runtime Read API v1 (Energy-first)** — ✅ COMPLETE
+- **Macro Signals bridge slice (April 2026): CPI collect-only bridge** — ✅ COMPLETE
+  - CPI feed is seeded in `feed_registry` as `macro_release.us_cpi.headline_yoy`
+  - CPI registry row is disabled by default (`enabled=0`) and collection is registry-gated
+  - When enabled, CPI fixture parsing writes collect-only `observations` and `feed_checks`
+  - CPI bridge does not write `rule_state`, `trigger_events`, guardrail decisions, or `action_log`
+  - Runtime listing remains Energy-only until a dedicated CPI runtime visibility slice lands
+
   - Added read-only runtime inspection endpoints: `GET /api/engines` and `GET /api/engines/energy/runtime`
   - Runtime response exposes Energy chain state in stable JSON: `feedHealth`, `observations`, `ruleState`, `triggerEvents`, and `actions`
   - `actions[].details` includes stored guardrail rationale when present in `action_log.details_json`
@@ -210,7 +217,8 @@ Near-term follow-up after Rule Engine v2 bridge completion:
 
 Near-term follow-up after runtime-read API v1:
 
-- Add CPI collect-only bridge once Energy bridge stability evidence supports expansion, or
+- Harden CPI runtime visibility and diagnostics now that CPI collect-only bridge evidence exists, or
+- Add CPI Rule Engine skeleton only after collect-only evidence remains stable, or
 - Harden runtime-read contracts (pagination, retention, and engine registry growth) before generic multi-engine API rollout.
 
 ### 3. Keep durable context in the repo

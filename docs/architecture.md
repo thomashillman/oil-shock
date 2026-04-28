@@ -245,3 +245,22 @@ Update this document when any of the following change materially:
 - ledger adjustment behaviour
 
 This document is the durable home for implementation detail that is too volatile or too long for `AGENTS.md` or `CLAUDE.md`.
+
+
+## CPI collect-only bridge (registry-gated)
+
+A CPI collect-only bridge now exists for Macro Signals validation.
+
+- Collector: `worker/src/jobs/collectors/cpi.ts`
+- Feed key: `macro_release.us_cpi.headline_yoy`
+- Engine key: `cpi`
+- Registry seed: `db/migrations/0019_seed_cpi_feed_registry.sql`
+
+Current behaviour:
+
+- CPI feed collection is gated by `feed_registry` enablement for `engine_key='cpi'`.
+- CPI registry rows are seeded disabled by default (`enabled=0`).
+- When CPI is enabled, the collector parses a fixture response and writes to `observations` plus `feed_checks`.
+- CPI writes are idempotent through the existing `observations` unique key and upsert path.
+- CPI bridge scope currently stops at collect/observation/feed-check; it does **not** write `rule_state`, `trigger_events`, guardrail decisions, or `action_log`.
+- Energy runtime chain and endpoints remain unchanged (`GET /api/engines` and `GET /api/engines/energy/runtime` stay Energy-first).
