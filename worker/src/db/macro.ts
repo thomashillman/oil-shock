@@ -31,6 +31,29 @@ export interface FeedCheckInput {
   details?: Record<string, unknown> | null;
 }
 
+export interface FeedRegistryRow {
+  engineKey: string;
+  feedKey: string;
+  displayName: string | null;
+  enabled: boolean;
+}
+
+export interface FeedCheckRow {
+  engineKey: string;
+  feedKey: string;
+  checkedAt: string;
+  step: string | null;
+  result: string | null;
+  status: string;
+  errorMessage: string | null;
+  latencyMs: number | null;
+}
+
+export interface FeedHealthRow extends FeedRegistryRow {
+  status: "ok" | "error" | "unknown";
+  latestCheck: FeedCheckRow | null;
+}
+
 export interface RuleStateInput {
   engineKey: string;
   ruleKey: string;
@@ -233,6 +256,106 @@ export async function recordFeedCheck(env: Env, input: FeedCheckInput): Promise<
       input.details ? JSON.stringify(input.details) : null
     )
     .run();
+}
+
+export async function listRegisteredFeeds(env: Env, engineKey: string): Promise<FeedRegistryRow[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, display_name, enabled
+    FROM feed_registry
+    WHERE engine_key = ?
+    ORDER BY feed_key
+    `
+  )
+    .bind(engineKey)
+    .all<{
+      engine_key: string;
+      feed_key: string;
+      display_name: string | null;
+      enabled: number;
+    }>();
+
+  return result.results.map((row) => ({
+    engineKey: row.engine_key,
+    feedKey: row.feed_key,
+    displayName: row.display_name,
+    enabled: row.enabled === 1
+  }));
+}
+
+export async function listEnabledFeedKeys(env: Env, engineKey: string): Promise<string[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT feed_key
+    FROM feed_registry
+    WHERE engine_key = ?
+      AND enabled = 1
+    ORDER BY feed_key
+    `
+  )
+    .bind(engineKey)
+    .all<{ feed_key: string }>();
+
+  return result.results.map((row) => row.feed_key);
+}
+
+export async function getLatestFeedChecks(env: Env, engineKey: string): Promise<FeedCheckRow[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, checked_at, step, result, status, error_message, latency_ms
+    FROM feed_checks
+    WHERE engine_key = ?
+    ORDER BY checked_at DESC
+    `
+  )
+    .bind(engineKey)
+    .all<{
+      engine_key: string;
+      feed_key: string;
+      checked_at: string;
+      step: string | null;
+      result: string | null;
+      status: string;
+      error_message: string | null;
+      latency_ms: number | null;
+    }>();
+
+  const latestByFeed = new Map<string, FeedCheckRow>();
+  for (const row of result.results) {
+    if (latestByFeed.has(row.feed_key)) {
+      continue;
+    }
+    latestByFeed.set(row.feed_key, {
+      engineKey: row.engine_key,
+      feedKey: row.feed_key,
+      checkedAt: row.checked_at,
+      step: row.step,
+      result: row.result,
+      status: row.status,
+      errorMessage: row.error_message,
+      latencyMs: row.latency_ms
+    });
+  }
+
+  return [...latestByFeed.values()];
+}
+
+export async function getFeedHealthSummary(env: Env, engineKey: string): Promise<FeedHealthRow[]> {
+  const [feeds, checks] = await Promise.all([
+    listRegisteredFeeds(env, engineKey),
+    getLatestFeedChecks(env, engineKey)
+  ]);
+  const checksByFeedKey = new Map(checks.map((check) => [check.feedKey, check] as const));
+
+  return feeds.map((feed) => {
+    const latestCheck = checksByFeedKey.get(feed.feedKey) ?? null;
+    const status = latestCheck ? (latestCheck.status === "ok" ? "ok" : "error") : "unknown";
+    return {
+      ...feed,
+      status,
+      latestCheck
+    };
+  });
 }
 
 export async function upsertRuleState(env: Env, input: RuleStateInput): Promise<void> {

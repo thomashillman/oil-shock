@@ -4,6 +4,12 @@ This document captures the current sequencing and decision constraints for work 
 
 ## Current status
 
+- **Macro Signals bridge slice (April 2026): Energy registry-backed feed execution + feed health route** — ✅ COMPLETE
+  - Energy continues bridge dual-write: legacy `series_points` plus macro `observations`
+  - Energy observation/feed-check bridge writes are now filtered by enabled `feed_registry` rows when Energy registry rows exist
+  - `/api/feed-health` now reports read-only feed health from `feed_registry` + latest `feed_checks`
+  - Fallback remains in place: when no Energy registry rows exist, Energy observation writes still include all Energy points
+  - CPI and macro release collection remain disabled
 - **Phase 6A (Energy Engine) pre-canary readiness validation** — Blocked at evidence collection
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
   - **CURRENT PHASE**: Pre-canary readiness validation (evidence collection)
