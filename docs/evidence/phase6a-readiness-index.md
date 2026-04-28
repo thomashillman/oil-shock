@@ -36,6 +36,12 @@
 **Status**: ✅ COMPLETE
 **Key Finding**: Preview/production D1 separation complete, all migrations applied and verified
 
+### Endpoint Reliability Diagnostic
+**How to run**: `docs/evidence/phase6a-preview-endpoint-reliability-diagnostics.md`
+**Output file**: `docs/evidence/phase6a-preview-endpoint-probe.json` (generated at runtime)
+**Status**: Probe tool in place — run to capture repeatable failure counts, Ray IDs, and colo distribution
+**Purpose**: Turns intermittent HTTP 503 `DNS cache overflow` from anecdotal into counted, structured evidence suitable for a Cloudflare support ticket
+
 ---
 
 ## Completed Readiness Work
@@ -105,10 +111,11 @@
 
 ## Next Steps
 
-### Step A (Immediate): Stabilise/Diagnose Preview Endpoint Reliability
-- Investigate HTTP 503 `DNS cache overflow` root cause
-- Determine if this is transient infrastructure issue or application problem
-- Confirm that endpoints stabilize with HTTP 200 + valid JSON responses
+### Step A (Immediate): Diagnose Preview Endpoint Reliability
+- Run `phase6a:probe-preview-endpoints` (30 attempts, 1s delay) to capture formal failure evidence
+- Review `docs/evidence/phase6a-preview-endpoint-probe.json` for Ray IDs and colo distribution
+- If `dns_cache_overflow_count > 0`, open a Cloudflare support ticket with Ray IDs and colo data
+- See `docs/evidence/phase6a-preview-endpoint-reliability-diagnostics.md` for full instructions
 
 ### Step B: Rerun Evidence Capture
 ```bash
