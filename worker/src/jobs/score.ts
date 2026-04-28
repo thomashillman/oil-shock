@@ -8,6 +8,7 @@ import {
 } from "../db/client";
 import { evaluateRules } from "../core/rules/engine";
 import { runEnergyRuleEngineV2 } from "../core/rules/energy-v2";
+import { runActionManagerForEngine } from "../core/actions/action-manager";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 
@@ -88,10 +89,20 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
   }
 
   // Phase 3: Rule Engine v2 bridge lifecycle (fails closed on persistence errors).
-  await runEnergyRuleEngineV2(env, {
+  const ruleEngineResult = await runEnergyRuleEngineV2(env, {
     runKey,
     releaseKey: nowIso.slice(0, 10),
     evaluatedAt: nowIso
+  });
+
+  // Phase 4: Action Manager logging bridge (logging-only, fail-closed on persistence errors).
+  if (!ruleEngineResult.results.some((result) => Boolean(result.triggerEvent))) {
+    return;
+  }
+
+  await runActionManagerForEngine(env, {
+    engineKey: "energy",
+    nowIso
   });
 }
 
