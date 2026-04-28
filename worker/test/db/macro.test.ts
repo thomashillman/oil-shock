@@ -4,10 +4,14 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  getFeedHealthSummary,
+  getLatestFeedChecks,
   getLatestObservation,
   insertActionLog,
   insertRenderedOutput,
   insertTriggerEvent,
+  listEnabledFeedKeys,
+  listRegisteredFeeds,
   recordFeedCheck,
   upsertObservation,
   upsertRuleState
@@ -36,11 +40,16 @@ class MockPreparedStatement {
   async first<T>(): Promise<T | null> {
     return this.db.first<T>(this.query, this.params);
   }
+
+  async all<T>(): Promise<{ results: T[] }> {
+    return this.db.all<T>(this.query, this.params);
+  }
 }
 
 class MockD1Database {
   private observations: Row[] = [];
   private feedChecks: Row[] = [];
+  private feedRegistry: Row[] = [];
   private ruleStates: Row[] = [];
   private triggerEvents: Row[] = [];
   private actionLogs: Row[] = [];
@@ -219,14 +228,49 @@ class MockD1Database {
       return (filtered[0] as T | undefined) ?? null;
     }
 
+    if (normalized.includes("select count(*) as count from feed_registry")) {
+      const engineKey = params[0];
+      const count = this.feedRegistry.filter((row) => row.engine_key === engineKey).length;
+      return { count } as T;
+    }
+
     throw new Error(`Unhandled first query: ${query}`);
   }
 
+  async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
+    const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
+      const engineKey = params[0];
+      return {
+        results: this.feedRegistry.filter((row) => row.engine_key === engineKey && row.enabled === 1) as T[]
+      };
+    }
+    if (normalized.includes("from feed_registry") && normalized.includes("order by feed_key")) {
+      const engineKey = params[0];
+      return {
+        results: this.feedRegistry
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => String(a.feed_key).localeCompare(String(b.feed_key))) as T[]
+      };
+    }
+    if (normalized.includes("from feed_checks") && normalized.includes("order by checked_at desc")) {
+      const engineKey = params[0];
+      return {
+        results: this.feedChecks
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at))) as T[]
+      };
+    }
+
+    throw new Error(`Unhandled all query: ${query}`);
+  }
+
   table(
-    name: "observations" | "feed_checks" | "rule_state" | "trigger_events" | "action_log" | "rendered_outputs"
+    name: "observations" | "feed_checks" | "feed_registry" | "rule_state" | "trigger_events" | "action_log" | "rendered_outputs"
   ): Row[] {
     if (name === "observations") return this.observations;
     if (name === "feed_checks") return this.feedChecks;
+    if (name === "feed_registry") return this.feedRegistry;
     if (name === "rule_state") return this.ruleStates;
     if (name === "trigger_events") return this.triggerEvents;
     if (name === "action_log") return this.actionLogs;
@@ -305,6 +349,29 @@ describe("macro core migration", () => {
       "rule_state",
       "trigger_events"
     ]);
+  });
+
+  skipIfNoSqlite3("0018 seed migration inserts Energy registry rows idempotently", () => {
+    const dbPath = createDbPath();
+    applyAllMigrations(dbPath);
+
+    const migrationPath = resolve(process.cwd(), "../db/migrations/0018_seed_energy_feed_registry.sql");
+    applyMigrationFile(dbPath, migrationPath);
+
+    const seededRows = runSqlite(
+      dbPath,
+      "SELECT engine_key || ':' || feed_key FROM feed_registry WHERE engine_key = 'energy' ORDER BY feed_key;"
+    ).split("\n");
+    expect(seededRows).toEqual([
+      "energy:energy_spread.diesel_wti_crack",
+      "energy:energy_spread.wti_brent_spread"
+    ]);
+
+    const seededCount = runSqlite(
+      dbPath,
+      "SELECT COUNT(*) FROM feed_registry WHERE engine_key = 'energy' AND feed_key IN ('energy_spread.wti_brent_spread', 'energy_spread.diesel_wti_crack');"
+    );
+    expect(seededCount).toBe("2");
   });
 });
 
@@ -526,5 +593,48 @@ describe("macro db helpers", () => {
     });
 
     expect(db.table("rendered_outputs")).toHaveLength(1);
+  });
+
+  it("lists registered feeds and enabled feed keys for an engine", async () => {
+    const db = new MockD1Database();
+    db.table("feed_registry").push(
+      { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+      { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 0 },
+      { engine_key: "other", feed_key: "other.feed", enabled: 1 }
+    );
+    const env = testEnv(db);
+
+    const registered = await listRegisteredFeeds(env, "energy");
+    const enabledKeys = await listEnabledFeedKeys(env, "energy");
+
+    expect(registered.map((row) => row.feedKey)).toEqual([
+      "energy_spread.diesel_wti_crack",
+      "energy_spread.wti_brent_spread"
+    ]);
+    expect(enabledKeys).toEqual(["energy_spread.wti_brent_spread"]);
+  });
+
+  it("returns latest feed checks per feed and derives health summary", async () => {
+    const db = new MockD1Database();
+    db.table("feed_registry").push(
+      { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", display_name: "WTI-Brent Spread", enabled: 1 },
+      { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", display_name: "Diesel-WTI Crack", enabled: 1 },
+      { engine_key: "energy", feed_key: "energy_spread.unknown", display_name: "No checks yet", enabled: 1 }
+    );
+    db.table("feed_checks").push(
+      { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", checked_at: "2026-04-27T00:00:00.000Z", step: "save_observation", result: "success", status: "ok", error_message: null },
+      { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", checked_at: "2026-04-26T00:00:00.000Z", step: "save_observation", result: "failed", status: "error", error_message: "older failure" },
+      { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", checked_at: "2026-04-27T00:00:00.000Z", step: "save_observation", result: "failed", status: "error", error_message: "save failed" }
+    );
+    const env = testEnv(db);
+
+    const checks = await getLatestFeedChecks(env, "energy");
+    const summary = await getFeedHealthSummary(env, "energy");
+
+    expect(checks).toHaveLength(2);
+    expect(summary).toHaveLength(3);
+    expect(summary.find((row) => row.feedKey === "energy_spread.wti_brent_spread")?.status).toBe("ok");
+    expect(summary.find((row) => row.feedKey === "energy_spread.diesel_wti_crack")?.status).toBe("error");
+    expect(summary.find((row) => row.feedKey === "energy_spread.unknown")?.status).toBe("unknown");
   });
 });

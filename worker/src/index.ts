@@ -21,6 +21,7 @@ import { handleGetRolloutStatus } from "./routes/admin-rollout";
 import { handleGetValidationStatus } from "./routes/admin-validation";
 import { handleGetApiHealth } from "./routes/admin-api-health";
 import { handleGetRolloutReadiness } from "./routes/admin-rollout-readiness";
+import { handleGetFeedHealth } from "./routes/feed-health";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -215,6 +216,10 @@ export default {
       }
       if (request.method === "GET" && pathname === "/api/v1/energy/state") {
         response = await handleGetEnergyState(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/feed-health") {
+        response = await handleGetFeedHealth(env);
         return withCors(response, request, env);
       }
 

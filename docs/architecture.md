@@ -50,6 +50,7 @@ Current Worker routes include:
 - `GET /api/coverage`
 - `GET /api/ledger/review`
 - `GET /api/v1/energy/state`
+- `GET /api/feed-health`
 - `POST /api/ledger`
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc`
@@ -81,6 +82,24 @@ Key tables and responsibilities:
 - `state_change_events`: state transition history for clocks and dwell logic
 - `config_thresholds`: runtime scoring constants and gates
 - `impairment_ledger`: manual score adjustments
+- `feed_registry`: macro feed metadata and enablement state (bridge currently wired for Energy feed keys only)
+- `feed_checks`: per-feed collection and save checks used for feed-health reporting
+- `observations`: macro bridge observation store (currently dual-written from Energy collection)
+
+## Macro Signals bridge runtime (current)
+
+The runtime remains bridge-shaped rather than full registry-driven orchestration:
+
+- Legacy collector writes to `series_points` still run and remain the source for existing Oil Shock scoring and snapshot routes.
+- Energy collection dual-writes matching points into `observations`.
+- Energy observation/feed-check writes consult `feed_registry` enabled rows when Energy registry rows exist.
+- If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
+- `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
+
+Current limitation:
+
+- Only Energy is wired into this bridge path.
+- CPI and macro release collection remain disabled in runtime collection flow.
 
 ## Scoring and state model
 

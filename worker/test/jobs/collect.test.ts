@@ -39,6 +39,10 @@ class MockPreparedStatement {
   async all<T>(): Promise<{ results: T[] }> {
     return this.db.all<T>(this.query, this.params);
   }
+
+  async first<T>(): Promise<T | null> {
+    return this.db.first<T>(this.query, this.params);
+  }
 }
 
 class MockD1Database {
@@ -47,8 +51,14 @@ class MockD1Database {
   private readonly seriesPoints: Row[] = [];
   private readonly observations: Row[] = [];
   private readonly feedChecks: Row[] = [];
+  private readonly feedRegistry: Row[];
 
-  constructor(private readonly failObservationWrites = false) {}
+  constructor(options?: { failObservationWrites?: boolean; feedRegistry?: Row[] }) {
+    this.failObservationWrites = options?.failObservationWrites ?? false;
+    this.feedRegistry = [...(options?.feedRegistry ?? [])];
+  }
+
+  private readonly failObservationWrites: boolean;
 
   prepare(query: string): MockPreparedStatement {
     return new MockPreparedStatement(this, query);
@@ -134,6 +144,16 @@ class MockD1Database {
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
 
+    if (normalized.includes("insert into feed_registry")) {
+      this.feedRegistry.push({
+        id: this.nextId++,
+        engine_key: params[0],
+        feed_key: params[1],
+        enabled: params[2]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+
     throw new Error(`Unhandled query: ${query}`);
   }
 
@@ -151,7 +171,25 @@ class MockD1Database {
     if (normalized.includes("from runs")) {
       return { results: this.runs as T[] };
     }
+    if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
+      const engineKey = _params[0];
+      return { results: this.feedRegistry.filter((row) => row.engine_key === engineKey && row.enabled === 1) as T[] };
+    }
+    if (normalized.includes("from feed_registry") && normalized.includes("order by feed_key")) {
+      const engineKey = _params[0];
+      return { results: this.feedRegistry.filter((row) => row.engine_key === engineKey) as T[] };
+    }
     throw new Error(`Unhandled all query: ${query}`);
+  }
+
+  async first<T>(query: string, params: unknown[]): Promise<T | null> {
+    const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("select count(*) as count from feed_registry")) {
+      const engineKey = params[0];
+      const count = this.feedRegistry.filter((row) => row.engine_key === engineKey).length;
+      return { count } as T;
+    }
+    throw new Error(`Unhandled first query: ${query}`);
   }
 }
 
@@ -188,7 +226,12 @@ describe("runCollection energy dual-write", () => {
   });
 
   it("still writes Energy points to legacy series_points", async () => {
-    const db = new MockD1Database();
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 }
+      ]
+    });
     await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
 
     const written = await db.prepare("SELECT * FROM series_points").all<Row>();
@@ -196,7 +239,12 @@ describe("runCollection energy dual-write", () => {
   });
 
   it("also writes Energy points to observations", async () => {
-    const db = new MockD1Database();
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 }
+      ]
+    });
     await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
 
     const rows = await db.prepare("SELECT * FROM observations").all<Row>();
@@ -209,7 +257,12 @@ describe("runCollection energy dual-write", () => {
   });
 
   it("is idempotent for observations across repeated collection runs", async () => {
-    const db = new MockD1Database();
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 }
+      ]
+    });
     const env = makeEnv(db);
 
     await runCollection(env, new Date("2026-04-27T00:00:00.000Z"));
@@ -220,7 +273,12 @@ describe("runCollection energy dual-write", () => {
   });
 
   it("appends feed_checks for successful Energy observation writes", async () => {
-    const db = new MockD1Database();
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 }
+      ]
+    });
     await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
 
     const rows = await db.prepare("SELECT * FROM feed_checks").all<Row>();
@@ -234,7 +292,7 @@ describe("runCollection energy dual-write", () => {
   });
 
   it("marks run failed and rethrows when observation write fails", async () => {
-    const db = new MockD1Database(true);
+    const db = new MockD1Database({ failObservationWrites: true });
     const env = makeEnv(db);
 
     await expect(runCollection(env, new Date("2026-04-27T00:00:00.000Z"))).rejects.toThrow("observation write failed");
@@ -249,5 +307,41 @@ describe("runCollection energy dual-write", () => {
     await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
 
     expect(mockCollectMacroReleases).not.toHaveBeenCalled();
+  });
+
+  it("skips disabled feeds for observations and feed_checks while preserving legacy writes", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const legacy = await db.prepare("SELECT * FROM series_points").all<Row>();
+    expect(legacy.results).toHaveLength(2);
+
+    const observations = await db.prepare("SELECT * FROM observations").all<Row>();
+    expect(observations.results).toHaveLength(1);
+    expect(observations.results[0]?.feed_key).toBe("energy_spread.wti_brent_spread");
+
+    const checks = await db.prepare("SELECT * FROM feed_checks").all<Row>();
+    expect(checks.results).toHaveLength(1);
+    expect(checks.results[0]?.feed_key).toBe("energy_spread.wti_brent_spread");
+  });
+
+  it("falls back to writing all Energy observations when registry has no Energy rows", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [{ engine_key: "other", feed_key: "other.feed", enabled: 1 }]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const observations = await db.prepare("SELECT * FROM observations").all<Row>();
+    expect(observations.results).toHaveLength(2);
+
+    const checks = await db.prepare("SELECT * FROM feed_checks").all<Row>();
+    expect(checks.results).toHaveLength(2);
   });
 });

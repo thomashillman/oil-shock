@@ -19,11 +19,14 @@ Implemented or partially implemented today:
 - A small rule evaluator over `physicalStress`, `priceSignal`, and `marketResponse`.
 - Operator shell with dashboard, rule editor, and backfill panels.
 - Health, rollout, validation, and gate-related admin plumbing.
+- Macro Core Schema v1 (`feed_registry`, `feed_checks`, `observations`, `rule_state`, `trigger_events`, `action_log`, `rendered_outputs`) plus baseline DB helpers.
+- Energy bridge dual-write from collection into both `series_points` and macro `observations`.
+- Energy registry-backed bridge filtering for macro observation/feed-check writes.
+- Read-only `/api/feed-health` endpoint backed by registry metadata and latest feed checks.
 
 Not complete yet:
 
 - No target multi-engine schema as the primary model.
-- No first-class `feed_registry`, `feed_checks`, `observations`, `rule_state`, `trigger_events`, `action_log`, or `rendered_outputs` runtime path.
 - No registry-driven collector runner.
 - No generic rule lifecycle that persists state, detects transitions, emits trigger events, and dispatches action intents.
 - No full action manager for portfolio guardrails.
@@ -33,8 +36,8 @@ Not complete yet:
 
 Working estimate:
 
-- Macro Rules Engine slice: roughly 30 to 35 percent complete.
-- Full Macro Signals platform: roughly 20 to 25 percent complete.
+- Macro Rules Engine slice: roughly 40 to 45 percent complete.
+- Full Macro Signals platform: roughly 25 to 30 percent complete.
 
 The next work should be additive and staged. Do not delete old Oil Shock or snapshot behaviour until the new engine path is proven, tested, and consumed by the frontend.
 
@@ -107,6 +110,8 @@ corepack pnpm docs:check
 
 ## Phase 1: Add the target schema as an additive migration
 
+Status: complete (Macro Core Schema v1 shipped in prior slices).
+
 Goal: create the persistence foundation without breaking the existing runtime.
 
 Files to create or update:
@@ -160,6 +165,8 @@ corepack pnpm typecheck
 ```
 
 ## Phase 2: Introduce feed registry and observation writes
+
+Status: in progress (Energy bridge slice complete: seeded registry rows, registry-aware observation filtering, feed health API).
 
 Goal: move from hardcoded collection output to registry-backed feed ingestion while preserving old reads.
 

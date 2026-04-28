@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import type { NormalizedPoint } from "../types";
 import { writeSeriesPoints, startRun, finishRun } from "../db/client";
-import { upsertObservation, recordFeedCheck } from "../db/macro";
+import { listEnabledFeedKeys, listRegisteredFeeds, upsertObservation, recordFeedCheck } from "../db/macro";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 import { collectEnergy } from "./collectors/energy";
@@ -12,9 +12,19 @@ async function writeEnergyObservations(
   runKey: string,
   nowIso: string
 ): Promise<void> {
+  const [registeredFeeds, enabledFeedKeys] = await Promise.all([
+    listRegisteredFeeds(env, "energy"),
+    listEnabledFeedKeys(env, "energy")
+  ]);
+  const enabledFeedKeySet = new Set(enabledFeedKeys);
+  const filterByRegistry = registeredFeeds.length > 0;
+
   for (const point of points) {
     const asOfDate = point.observedAt.split("T")[0] ?? point.observedAt;
     const feedKey = point.seriesKey;
+    if (filterByRegistry && !enabledFeedKeySet.has(feedKey)) {
+      continue;
+    }
     const releaseKey = `energy:${point.seriesKey}:${point.observedAt}`;
 
     await upsertObservation(env, {
