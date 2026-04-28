@@ -73,6 +73,18 @@ export interface RuleStateRow {
   evaluatedAt: string;
 }
 
+export interface RuntimeActionRow {
+  engineKey: string;
+  ruleKey: string | null;
+  releaseKey: string | null;
+  decisionKey: string;
+  decision: "allowed" | "blocked" | "ignored" | "error";
+  actionType: string;
+  rationale: string | null;
+  decidedAt: string;
+  details: Record<string, unknown> | null;
+}
+
 export interface RuleStateInput {
   engineKey: string;
   ruleKey: string;
@@ -513,6 +525,197 @@ export async function getRuleState(
     })(),
     evaluatedAt: row.evaluated_at
   };
+}
+
+function normalizeRuntimeLimit(limit: number): number {
+  if (!Number.isFinite(limit)) {
+    return 25;
+  }
+  return Math.min(Math.max(Math.trunc(limit), 1), 50);
+}
+
+export async function listRuntimeObservations(env: Env, engineKey: string, limit: number): Promise<ObservationRow[]> {
+  const safeLimit = normalizeRuntimeLimit(limit);
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      engine_key,
+      feed_key,
+      series_key,
+      release_key,
+      as_of_date,
+      observed_at,
+      value
+    FROM observations
+    WHERE engine_key = ?
+    ORDER BY observed_at DESC, as_of_date DESC, series_key ASC
+    LIMIT ?
+    `
+  )
+    .bind(engineKey, safeLimit)
+    .all<{
+      engine_key: string;
+      feed_key: string;
+      series_key: string;
+      release_key: string;
+      as_of_date: string;
+      observed_at: string;
+      value: number;
+    }>();
+
+  return result.results.map((row) => ({
+    engineKey: row.engine_key,
+    feedKey: row.feed_key,
+    seriesKey: row.series_key,
+    releaseKey: row.release_key,
+    asOfDate: row.as_of_date,
+    observedAt: row.observed_at,
+    value: row.value
+  }));
+}
+
+export async function listRuntimeRuleState(env: Env, engineKey: string, limit: number): Promise<RuleStateRow[]> {
+  const safeLimit = normalizeRuntimeLimit(limit);
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      engine_key,
+      rule_key,
+      state_key,
+      release_key,
+      state_json,
+      evaluated_at
+    FROM rule_state
+    WHERE engine_key = ?
+    ORDER BY evaluated_at DESC, rule_key ASC, state_key ASC
+    LIMIT ?
+    `
+  )
+    .bind(engineKey, safeLimit)
+    .all<{
+      engine_key: string;
+      rule_key: string;
+      state_key: string;
+      release_key: string | null;
+      state_json: string;
+      evaluated_at: string;
+    }>();
+
+  return result.results.map((row) => ({
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    stateKey: row.state_key,
+    releaseKey: row.release_key,
+    state: (() => {
+      try {
+        return JSON.parse(row.state_json) as Record<string, unknown>;
+      } catch (error) {
+        throw new Error(
+          `Failed to parse rule_state state_json for engineKey=${row.engine_key} ruleKey=${row.rule_key} stateKey=${row.state_key}: ${String(error)}`
+        );
+      }
+    })(),
+    evaluatedAt: row.evaluated_at
+  }));
+}
+
+export async function listRuntimeTriggerEvents(env: Env, engineKey: string, limit: number): Promise<TriggerEventRow[]> {
+  const safeLimit = normalizeRuntimeLimit(limit);
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      engine_key,
+      rule_key,
+      release_key,
+      transition_key,
+      previous_state,
+      new_state,
+      status,
+      reason,
+      run_key,
+      triggered_at,
+      computed_json,
+      details_json
+    FROM trigger_events
+    WHERE engine_key = ?
+    ORDER BY triggered_at DESC, release_key DESC, rule_key ASC, transition_key ASC
+    LIMIT ?
+    `
+  )
+    .bind(engineKey, safeLimit)
+    .all<{
+      engine_key: string;
+      rule_key: string;
+      release_key: string;
+      transition_key: string;
+      previous_state: string | null;
+      new_state: string;
+      status: string;
+      reason: string | null;
+      run_key: string | null;
+      triggered_at: string;
+      computed_json: string | null;
+      details_json: string | null;
+    }>();
+
+  return result.results.map(mapTriggerEventRow);
+}
+
+export async function listRuntimeActions(env: Env, engineKey: string, limit: number): Promise<RuntimeActionRow[]> {
+  const safeLimit = normalizeRuntimeLimit(limit);
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      engine_key,
+      rule_key,
+      release_key,
+      decision_key,
+      decision,
+      action_type,
+      rationale,
+      decided_at,
+      details_json
+    FROM action_log
+    WHERE engine_key = ?
+    ORDER BY decided_at DESC, decision_key ASC
+    LIMIT ?
+    `
+  )
+    .bind(engineKey, safeLimit)
+    .all<{
+      engine_key: string;
+      rule_key: string | null;
+      release_key: string | null;
+      decision_key: string;
+      decision: "allowed" | "blocked" | "ignored" | "error";
+      action_type: string;
+      rationale: string | null;
+      decided_at: string;
+      details_json: string | null;
+    }>();
+
+  return result.results.map((row) => ({
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    releaseKey: row.release_key,
+    decisionKey: row.decision_key,
+    decision: row.decision,
+    actionType: row.action_type,
+    rationale: row.rationale,
+    decidedAt: row.decided_at,
+    details: (() => {
+      if (!row.details_json) {
+        return null;
+      }
+      try {
+        return JSON.parse(row.details_json) as Record<string, unknown>;
+      } catch (error) {
+        throw new Error(
+          `Failed to parse action_log details_json for engineKey=${row.engine_key} decisionKey=${row.decision_key}: ${String(error)}`
+        );
+      }
+    })()
+  }));
 }
 
 export async function insertTriggerEvent(env: Env, input: TriggerEventInput): Promise<void> {

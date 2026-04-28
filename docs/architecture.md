@@ -51,6 +51,8 @@ Current Worker routes include:
 - `GET /api/ledger/review`
 - `GET /api/v1/energy/state`
 - `GET /api/feed-health`
+- `GET /api/engines`
+- `GET /api/engines/energy/runtime`
 - `POST /api/ledger`
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc`
@@ -98,6 +100,13 @@ The runtime remains bridge-shaped rather than full registry-driven orchestration
 - Energy observation/feed-check writes consult `feed_registry` enabled rows when Energy registry rows exist.
 - If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
 - `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
+- `GET /api/engines` lists active runtime-read engines (currently Energy only).
+- `GET /api/engines/energy/runtime` is a read-only runtime inspection endpoint that returns the Energy runtime chain state for:
+  - latest feed health (`feed_registry` + `feed_checks`)
+  - latest `observations` rows
+  - current `rule_state` rows
+  - recent `trigger_events`
+  - recent `action_log` decisions including guardrail rationale in `details`
 - Energy scoring now invokes a bridge Rule Engine v2 lifecycle after the existing legacy `scores` write. The v2 lifecycle reads Energy `observations`, evaluates typed Energy rules, persists `rule_state`, and inserts idempotent `trigger_events` for state transitions.
 - After successful Energy Rule Engine v2 transitions, a logging-only Action Manager bridge reads confirmed Energy `trigger_events`, evaluates Guardrail Policy v1, and writes idempotent `action_log` decisions using deterministic decision keys (duplicate decision keys are evaluated and skipped from writes).
 
@@ -107,6 +116,7 @@ Current limitation:
 - CPI and macro release collection remain disabled in runtime collection flow.
 - Action Manager is logging-only and does not execute trades, notifications, allocations, or live guardrail enforcement.
 - Guardrail Policy v1 is Energy-only and logging-only; supported Energy triggers still resolve to `decision = "ignored"` because no execution policy is configured.
+- Runtime read endpoints are read-only diagnostics; they do not trigger collection, scoring, guardrail execution, or action execution.
 
 ## Scoring and state model
 

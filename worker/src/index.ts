@@ -22,6 +22,12 @@ import { handleGetValidationStatus } from "./routes/admin-validation";
 import { handleGetApiHealth } from "./routes/admin-api-health";
 import { handleGetRolloutReadiness } from "./routes/admin-rollout-readiness";
 import { handleGetFeedHealth } from "./routes/feed-health";
+import {
+  handleEngineList,
+  handleEnergyRuntime,
+  handleRuntimeMethodNotAllowed,
+  handleUnknownRuntimeEngine
+} from "./routes/engine-runtime";
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   if (!env.ADMIN_API_BEARER_TOKEN) return true;
@@ -220,6 +226,27 @@ export default {
       }
       if (request.method === "GET" && pathname === "/api/feed-health") {
         response = await handleGetFeedHealth(env);
+        return withCors(response, request, env);
+      }
+      if (pathname === "/api/engines") {
+        if (request.method !== "GET") {
+          response = handleRuntimeMethodNotAllowed();
+          return withCors(response, request, env);
+        }
+        response = await handleEngineList();
+        return withCors(response, request, env);
+      }
+      if (pathname.startsWith("/api/engines/") && pathname.endsWith("/runtime")) {
+        if (request.method !== "GET") {
+          response = handleRuntimeMethodNotAllowed();
+          return withCors(response, request, env);
+        }
+        const engineKey = pathname.slice("/api/engines/".length, -"/runtime".length).replace(/\/+$/, "");
+        if (engineKey !== "energy") {
+          response = handleUnknownRuntimeEngine(engineKey);
+          return withCors(response, request, env);
+        }
+        response = await handleEnergyRuntime(env);
         return withCors(response, request, env);
       }
 

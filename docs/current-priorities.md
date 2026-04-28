@@ -21,6 +21,12 @@ This document captures the current sequencing and decision constraints for work 
   - Decisions are explicitly logging-only (`action_type=log_only`); no trades, notifications, allocation changes, or live guardrail enforcement are executed
   - Decisions now pass through Guardrail Policy v1 (Energy-only, logging-only) before `action_log` writes; supported Energy triggers remain `decision="ignored"` because no execution policy exists
   - CPI and macro release collection remain disabled
+- **Macro Signals bridge slice (April 2026): Engine Runtime Read API v1 (Energy-first)** — ✅ COMPLETE
+  - Added read-only runtime inspection endpoints: `GET /api/engines` and `GET /api/engines/energy/runtime`
+  - Runtime response exposes Energy chain state in stable JSON: `feedHealth`, `observations`, `ruleState`, `triggerEvents`, and `actions`
+  - `actions[].details` includes stored guardrail rationale when present in `action_log.details_json`
+  - Endpoints are read-only diagnostics; no mutation, execution, notification, allocation, or rollout behavior changed
+  - CPI remains disabled and is not listed as an active runtime engine
 - **Phase 6A (Energy Engine) pre-canary readiness validation** — Blocked at evidence collection
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
   - **CURRENT PHASE**: Pre-canary readiness validation (evidence collection)
@@ -201,6 +207,11 @@ Near-term follow-up after Rule Engine v2 bridge completion:
 
 - Introduce generic engine-scoped APIs when backend contracts are stable enough to expose consistently, or
 - Add collect-only CPI bridge after Energy Guardrail Policy v1 stability evidence is captured.
+
+Near-term follow-up after runtime-read API v1:
+
+- Add CPI collect-only bridge once Energy bridge stability evidence supports expansion, or
+- Harden runtime-read contracts (pagination, retention, and engine registry growth) before generic multi-engine API rollout.
 
 ### 3. Keep durable context in the repo
 
