@@ -19,6 +19,7 @@ export interface ActionCandidate {
 
 export interface ActionManagerResult {
   processedCount: number;
+  skippedCount: number;
   allowedCount: number;
   blockedCount: number;
   ignoredCount: number;

@@ -138,6 +138,7 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     });
     mockRunActionManagerForEngine.mockReset().mockResolvedValue({
       processedCount: 0,
+      skippedCount: 0,
       allowedCount: 0,
       blockedCount: 0,
       ignoredCount: 0,

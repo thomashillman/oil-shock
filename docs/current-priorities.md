@@ -17,7 +17,7 @@ This document captures the current sequencing and decision constraints for work 
   - CPI and macro release collection remain disabled
 - **Macro Signals bridge slice (April 2026): Energy Action Manager logging bridge** — ✅ COMPLETE
   - Energy scoring now invokes an Action Manager bridge after successful legacy scoring and successful Energy Rule Engine v2 lifecycle transitions
-  - The bridge reads confirmed, unlogged Energy `trigger_events` and writes idempotent decisions into `action_log`
+  - The bridge reads confirmed Energy `trigger_events`, evaluates Guardrail Policy v1, and writes idempotent decisions into `action_log` (duplicate decision keys are evaluated and skipped from writes)
   - Decisions are explicitly logging-only (`action_type=log_only`); no trades, notifications, allocation changes, or live guardrail enforcement are executed
   - Decisions now pass through Guardrail Policy v1 (Energy-only, logging-only) before `action_log` writes; supported Energy triggers remain `decision="ignored"` because no execution policy exists
   - CPI and macro release collection remain disabled

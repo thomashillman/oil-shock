@@ -3,12 +3,12 @@ import type { Env } from "../../../src/env";
 import type { TriggerEventRow } from "../../../src/db/macro";
 
 const {
-  mockListUnloggedConfirmedTriggerEvents,
+  mockListConfirmedTriggerEvents,
   mockHasActionLogDecisionForKey,
   mockHasActionLogDecisionForRuleRelease,
   mockInsertActionLog
 } = vi.hoisted(() => ({
-  mockListUnloggedConfirmedTriggerEvents: vi.fn<(_: Env, __: string) => Promise<TriggerEventRow[]>>(),
+  mockListConfirmedTriggerEvents: vi.fn<(_: Env, __: string) => Promise<TriggerEventRow[]>>(),
   mockHasActionLogDecisionForKey: vi.fn<(_: Env, __: { engineKey: string; decisionKey: string }) => Promise<boolean>>(),
   mockHasActionLogDecisionForRuleRelease: vi.fn<
     (_: Env, __: { engineKey: string; ruleKey: string; releaseKey: string; decisionKey: string }) => Promise<boolean>
@@ -20,7 +20,7 @@ vi.mock("../../../src/db/macro", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/db/macro")>();
   return {
     ...actual,
-    listUnloggedConfirmedTriggerEvents: mockListUnloggedConfirmedTriggerEvents,
+    listConfirmedTriggerEvents: mockListConfirmedTriggerEvents,
     hasActionLogDecisionForKey: mockHasActionLogDecisionForKey,
     hasActionLogDecisionForRuleRelease: mockHasActionLogDecisionForRuleRelease,
     insertActionLog: mockInsertActionLog
@@ -55,14 +55,14 @@ function env(): Env {
 
 describe("runActionManagerForEngine", () => {
   beforeEach(() => {
-    mockListUnloggedConfirmedTriggerEvents.mockReset().mockResolvedValue([]);
     mockHasActionLogDecisionForKey.mockReset().mockResolvedValue(false);
     mockHasActionLogDecisionForRuleRelease.mockReset().mockResolvedValue(false);
     mockInsertActionLog.mockReset().mockResolvedValue();
+    mockListConfirmedTriggerEvents.mockReset().mockResolvedValue([]);
   });
 
   it("calls guardrail-related history checks before writing action_log", async () => {
-    mockListUnloggedConfirmedTriggerEvents.mockResolvedValue([event]);
+    mockListConfirmedTriggerEvents.mockResolvedValue([event]);
 
     await runActionManagerForEngine(env(), {
       engineKey: "energy",
@@ -82,7 +82,7 @@ describe("runActionManagerForEngine", () => {
   });
 
   it("writes action_log rationale from guardrail policy for supported events", async () => {
-    mockListUnloggedConfirmedTriggerEvents.mockResolvedValue([event]);
+    mockListConfirmedTriggerEvents.mockResolvedValue([event]);
 
     const result = await runActionManagerForEngine(env(), {
       engineKey: "energy",
@@ -101,7 +101,7 @@ describe("runActionManagerForEngine", () => {
   });
 
   it("remains idempotent and does not write duplicate action_log rows on replay", async () => {
-    mockListUnloggedConfirmedTriggerEvents.mockResolvedValue([event]);
+    mockListConfirmedTriggerEvents.mockResolvedValue([event]);
     mockHasActionLogDecisionForKey.mockResolvedValue(true);
 
     const result = await runActionManagerForEngine(env(), {
@@ -110,12 +110,13 @@ describe("runActionManagerForEngine", () => {
     });
 
     expect(result.processedCount).toBe(1);
+    expect(result.skippedCount).toBe(1);
     expect(result.ignoredCount).toBe(1);
     expect(mockInsertActionLog).not.toHaveBeenCalled();
   });
 
   it("fails closed on persistence failure", async () => {
-    mockListUnloggedConfirmedTriggerEvents.mockResolvedValue([event]);
+    mockListConfirmedTriggerEvents.mockResolvedValue([event]);
     mockInsertActionLog.mockRejectedValue(new Error("action_log write failed"));
 
     await expect(
@@ -127,7 +128,7 @@ describe("runActionManagerForEngine", () => {
   });
 
   it("handles unsupported events as ignored decisions", async () => {
-    mockListUnloggedConfirmedTriggerEvents.mockResolvedValue([{ ...event, ruleKey: "energy.unsupported" }]);
+    mockListConfirmedTriggerEvents.mockResolvedValue([{ ...event, ruleKey: "energy.unsupported" }]);
 
     const result = await runActionManagerForEngine(env(), {
       engineKey: "energy",

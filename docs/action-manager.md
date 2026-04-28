@@ -14,10 +14,11 @@ For Energy scoring runs:
 
 1. Legacy Energy score write succeeds.
 2. Energy Rule Engine v2 lifecycle succeeds.
-3. If v2 produced trigger transitions, Action Manager reads confirmed, unlogged Energy trigger events.
+3. If v2 produced trigger transitions, Action Manager reads confirmed Energy trigger events.
 4. Action Manager evaluates each trigger event through Guardrail Policy v1 (Energy-only, logging-only).
 5. Action Manager writes an idempotent `action_log` row using the policy decision and rationale.
    Supported Energy confirmation triggers remain `decision = "ignored"` with `action_type = "log_only"` because no execution policy is configured yet.
+   Duplicate decision-key events are evaluated and counted as skipped without writing a new `action_log` row.
 
 ## Guardrail Policy v1 (current)
 
