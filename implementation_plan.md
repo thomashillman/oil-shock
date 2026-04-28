@@ -26,6 +26,7 @@ Implemented or partially implemented today:
 - Energy Rule Engine v2 bridge lifecycle that reads `observations`, writes `rule_state`, and emits idempotent `trigger_events` for Energy confirmation transitions.
 - Energy Action Manager logging bridge that reads confirmed Energy `trigger_events` and writes idempotent logging-only decisions to `action_log`.
 - Energy Guardrail Policy v1 logging-only layer that evaluates confirmed Energy triggers (duplicate decision key, same rule/release, execution-policy absence, cooldown placeholder) before writing `action_log`.
+- Engine Runtime Read API v1 (Energy-first): `GET /api/engines` and `GET /api/engines/energy/runtime` for read-only runtime inspection across `feedHealth`, `observations`, `ruleState`, `triggerEvents`, and `actions`.
 
 Not complete yet:
 
@@ -33,9 +34,11 @@ Not complete yet:
 - No registry-driven collector runner.
 - No generic multi-engine rule lifecycle; current Rule Engine v2 lifecycle bridge is Energy-only.
 - No full action manager for portfolio guardrails (current bridge is Energy-only logging with Guardrail Policy v1 checks only).
-- No generic engine-scoped API surface.
+- No generic multi-engine runtime API surface.
 - No Macro Signals frontend built from backend engine/feed registries.
-- No CPI, Fed pivot, UK macro, valuation, or momentum engines.
+- No CPI collect-only bridge in runtime collection flow.
+- No Fed pivot, UK macro, valuation, or momentum engines.
+- No live guardrail enforcement, execution, notifications, or allocation changes.
 
 Working estimate:
 
@@ -306,6 +309,10 @@ corepack pnpm typecheck
 ## Phase 5: Introduce generic engine-scoped APIs
 
 Goal: expose the new engine model without immediately removing old routes.
+
+Status: in progress.
+- ✅ Energy Runtime Read API v1 added (`GET /api/engines`, `GET /api/engines/energy/runtime`).
+- ⏳ Still incomplete: CPI collect-only bridge, generic multi-engine runtime APIs, frontend registry console, live guardrails, execution, notifications, and allocation changes.
 
 Files to create or update:
 

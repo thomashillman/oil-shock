@@ -13,6 +13,10 @@ import {
   insertActionLog,
   insertRenderedOutput,
   insertTriggerEvent,
+  listRuntimeActions,
+  listRuntimeObservations,
+  listRuntimeRuleState,
+  listRuntimeTriggerEvents,
   listConfirmedTriggerEvents,
   listUnloggedConfirmedTriggerEvents,
   listLatestObservationsForEngine,
@@ -282,6 +286,22 @@ class MockD1Database {
           }) as T[]
       };
     }
+    if (normalized.includes("from observations") && normalized.includes("order by observed_at desc")) {
+      const engineKey = params[0];
+      const limit = Number(params[1]);
+      return {
+        results: this.observations
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => {
+            const observed = String(b.observed_at).localeCompare(String(a.observed_at));
+            if (observed !== 0) return observed;
+            const asOf = String(b.as_of_date).localeCompare(String(a.as_of_date));
+            if (asOf !== 0) return asOf;
+            return String(a.series_key).localeCompare(String(b.series_key));
+          })
+          .slice(0, limit) as T[]
+      };
+    }
     if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
       const engineKey = params[0];
       return {
@@ -317,6 +337,42 @@ class MockD1Database {
               (!includeRuleFilter || row.rule_key === ruleKey)
           )
           .sort((a, b) => String(b.triggered_at).localeCompare(String(a.triggered_at))) as T[]
+      };
+    }
+    if (normalized.includes("from rule_state") && normalized.includes("order by evaluated_at desc")) {
+      const engineKey = params[0];
+      const limit = Number(params[1]);
+      return {
+        results: this.ruleStates
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => {
+            const evaluated = String(b.evaluated_at).localeCompare(String(a.evaluated_at));
+            if (evaluated !== 0) return evaluated;
+            const rule = String(a.rule_key).localeCompare(String(b.rule_key));
+            if (rule !== 0) return rule;
+            return String(a.state_key).localeCompare(String(b.state_key));
+          })
+          .slice(0, limit) as T[]
+      };
+    }
+    if (normalized.includes("from trigger_events") && normalized.includes("order by triggered_at desc") && normalized.includes("limit ?")) {
+      const engineKey = params[0];
+      const limit = Number(params[1]);
+      return {
+        results: this.triggerEvents
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => String(b.triggered_at).localeCompare(String(a.triggered_at)))
+          .slice(0, limit) as T[]
+      };
+    }
+    if (normalized.includes("from action_log") && normalized.includes("order by decided_at desc")) {
+      const engineKey = params[0];
+      const limit = Number(params[1]);
+      return {
+        results: this.actionLogs
+          .filter((row) => row.engine_key === engineKey)
+          .sort((a, b) => String(b.decided_at).localeCompare(String(a.decided_at)))
+          .slice(0, limit) as T[]
       };
     }
     if (normalized.includes("from trigger_events te") && normalized.includes("left join action_log al")) {
@@ -890,6 +946,170 @@ describe("macro db helpers", () => {
 
     expect(latest["energy_spread.wti_brent_spread"]?.value).toBe(0.8);
     expect(latest["energy_spread.diesel_wti_crack"]?.value).toBe(0.7);
+  });
+
+  it("listRuntimeObservations filters by engine, orders newest-first, and respects limit", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("observations").push(
+      {
+        engine_key: "energy",
+        feed_key: "energy_spread.wti_brent_spread",
+        series_key: "energy_spread.wti_brent_spread",
+        release_key: "2026-04-27",
+        as_of_date: "2026-04-27",
+        observed_at: "2026-04-27T00:00:00.000Z",
+        value: 0.4
+      },
+      {
+        engine_key: "energy",
+        feed_key: "energy_spread.wti_brent_spread",
+        series_key: "energy_spread.wti_brent_spread",
+        release_key: "2026-04-28",
+        as_of_date: "2026-04-28",
+        observed_at: "2026-04-28T00:00:00.000Z",
+        value: 0.8
+      },
+      {
+        engine_key: "cpi",
+        feed_key: "macro_release.us_cpi",
+        series_key: "macro_release.us_cpi",
+        release_key: "2026-04",
+        as_of_date: "2026-04-12",
+        observed_at: "2026-04-12T13:30:00.000Z",
+        value: 2.9
+      }
+    );
+
+    const rows = await listRuntimeObservations(env, "energy", 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.engineKey).toBe("energy");
+    expect(rows[0]?.observedAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("listRuntimeRuleState parses JSON, filters by engine, orders deterministically, and respects limit", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("rule_state").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        state_key: "current",
+        release_key: "2026-04-28",
+        state_json: '{"status":"active"}',
+        evaluated_at: "2026-04-28T00:00:00.000Z"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        state_key: "previous",
+        release_key: "2026-04-27",
+        state_json: '{"status":"inactive"}',
+        evaluated_at: "2026-04-27T00:00:00.000Z"
+      },
+      {
+        engine_key: "cpi",
+        rule_key: "cpi.surprise",
+        state_key: "current",
+        release_key: "2026-04",
+        state_json: '{"status":"active"}',
+        evaluated_at: "2026-04-12T13:30:00.000Z"
+      }
+    );
+
+    const rows = await listRuntimeRuleState(env, "energy", 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.state).toEqual({ status: "active" });
+  });
+
+  it("listRuntimeRuleState throws contextual error for malformed state_json", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("rule_state").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      state_key: "current",
+      release_key: "2026-04-28",
+      state_json: "{invalid",
+      evaluated_at: "2026-04-28T00:00:00.000Z"
+    });
+
+    await expect(listRuntimeRuleState(env, "energy", 25)).rejects.toThrow(
+      "Failed to parse rule_state state_json for engineKey=energy ruleKey=energy.confirmation.spread_widening stateKey=current"
+    );
+  });
+
+  it("listRuntimeTriggerEvents filters by engine, orders newest-first, and applies limit", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-28",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "newer",
+        run_key: "run-2",
+        triggered_at: "2026-04-28T00:00:00.000Z",
+        computed_json: "{}",
+        details_json: "{}"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-27",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "older",
+        run_key: "run-1",
+        triggered_at: "2026-04-27T00:00:00.000Z",
+        computed_json: "{}",
+        details_json: "{}"
+      }
+    );
+    const rows = await listRuntimeTriggerEvents(env, "energy", 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.triggeredAt).toBe("2026-04-28T00:00:00.000Z");
+  });
+
+  it("listRuntimeActions includes guardrail details and contextual parse errors", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("action_log").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      release_key: "2026-04-28",
+      decision_key: "energy:energy.confirmation.spread_widening:2026-04-28:inactive->active",
+      decision: "ignored",
+      action_type: "log_only",
+      rationale: "logging only",
+      decided_at: "2026-04-28T00:01:00.000Z",
+      details_json: '{"guardrail":{"result":"blocked","reasons":["missing_feed"]}}'
+    });
+
+    const rows = await listRuntimeActions(env, "energy", 25);
+    expect(rows[0]?.details).toEqual({ guardrail: { result: "blocked", reasons: ["missing_feed"] } });
+
+    db.table("action_log").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      release_key: "2026-04-29",
+      decision_key: "energy:energy.confirmation.spread_widening:2026-04-29:inactive->active",
+      decision: "ignored",
+      action_type: "log_only",
+      rationale: "bad json",
+      decided_at: "2026-04-29T00:01:00.000Z",
+      details_json: "{invalid"
+    });
+
+    await expect(listRuntimeActions(env, "energy", 25)).rejects.toThrow(
+      "Failed to parse action_log details_json for engineKey=energy decisionKey=energy:energy.confirmation.spread_widening:2026-04-29:inactive->active"
+    );
   });
 
   it("getRuleState reads previously persisted rule state", async () => {
