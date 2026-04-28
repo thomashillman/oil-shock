@@ -16,6 +16,7 @@ For Energy scoring runs:
 2. Energy Rule Engine v2 lifecycle succeeds.
 3. If v2 produced trigger transitions, Action Manager reads confirmed, unlogged Energy trigger events.
 4. Action Manager maps each event to a logging-only decision and inserts an idempotent `action_log` row.
+   Supported Energy confirmation triggers are currently logged as `decision = "ignored"` with `action_type = "log_only"` because no execution policy is configured yet.
 
 ## Idempotency
 
