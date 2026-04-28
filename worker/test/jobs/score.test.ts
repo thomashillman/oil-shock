@@ -4,9 +4,15 @@ import type { Env } from "../../src/env";
 const { mockRunEnergyRuleEngineV2 } = vi.hoisted(() => ({
   mockRunEnergyRuleEngineV2: vi.fn<(_: Env, __: { runKey: string; releaseKey: string; evaluatedAt: string }) => Promise<unknown>>()
 }));
+const { mockRunActionManagerForEngine } = vi.hoisted(() => ({
+  mockRunActionManagerForEngine: vi.fn<(_: Env, __: { engineKey: string; nowIso: string }) => Promise<unknown>>()
+}));
 
 vi.mock("../../src/core/rules/energy-v2", () => ({
   runEnergyRuleEngineV2: mockRunEnergyRuleEngineV2
+}));
+vi.mock("../../src/core/actions/action-manager", () => ({
+  runActionManagerForEngine: mockRunActionManagerForEngine
 }));
 
 import { runScore } from "../../src/jobs/score";
@@ -119,7 +125,24 @@ function makeEnv(db: MockD1Database): Env {
 
 describe("runScore Energy compatibility with rule engine v2 bridge", () => {
   beforeEach(() => {
-    mockRunEnergyRuleEngineV2.mockReset().mockResolvedValue({ results: [] });
+    mockRunEnergyRuleEngineV2.mockReset().mockResolvedValue({
+      results: [
+        {
+          ruleKey: "energy.confirmation.spread_widening",
+          status: "active",
+          computed: {},
+          stateUpdates: [],
+          triggerEvent: { transitionKey: "inactive->active", newState: "active" }
+        }
+      ]
+    });
+    mockRunActionManagerForEngine.mockReset().mockResolvedValue({
+      processedCount: 0,
+      allowedCount: 0,
+      blockedCount: 0,
+      ignoredCount: 0,
+      errorCount: 0
+    });
   });
 
   it("preserves legacy score write behavior while invoking Energy rule engine v2", async () => {
@@ -135,6 +158,20 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     expect(db.scores).toHaveLength(1);
     expect(db.scores[0]?.engine_key).toBe("energy");
     expect(mockRunEnergyRuleEngineV2).toHaveBeenCalledTimes(1);
+    expect(mockRunActionManagerForEngine).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke action manager when rule engine v2 reports no trigger events", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.7, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.6, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+    mockRunEnergyRuleEngineV2.mockResolvedValue({ results: [] });
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(mockRunActionManagerForEngine).not.toHaveBeenCalled();
   });
 
   it("fails the scoring run when rule engine v2 persistence fails", async () => {
@@ -149,6 +186,7 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     await expect(runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"))).rejects.toThrow("rule_state write failed");
 
     expect(db.runs[0]?.status).toBe("failed");
+    expect(mockRunActionManagerForEngine).not.toHaveBeenCalled();
   });
 
   it("skips rule engine v2 when legacy energy scoring fails", async () => {
@@ -163,5 +201,18 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
 
     expect(db.scores).toHaveLength(0);
     expect(mockRunEnergyRuleEngineV2).not.toHaveBeenCalled();
+    expect(mockRunActionManagerForEngine).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when action manager persistence fails", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.7, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.6, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+    mockRunActionManagerForEngine.mockRejectedValue(new Error("action_log write failed"));
+
+    await expect(runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"))).rejects.toThrow("action_log write failed");
+    expect(db.runs[0]?.status).toBe("failed");
   });
 });

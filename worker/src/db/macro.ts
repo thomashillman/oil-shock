@@ -109,6 +109,21 @@ export interface ActionLogInput {
   details?: Record<string, unknown> | null;
 }
 
+export interface TriggerEventRow {
+  engineKey: string;
+  ruleKey: string;
+  releaseKey: string;
+  transitionKey: string;
+  previousState: string | null;
+  newState: string;
+  status: string;
+  reason: string | null;
+  runKey: string | null;
+  triggeredAt: string;
+  computed: Record<string, unknown> | null;
+  details: Record<string, unknown> | null;
+}
+
 export interface RenderedOutputInput {
   engineKey: string;
   outputKey: string;
@@ -534,6 +549,128 @@ export async function insertTriggerEvent(env: Env, input: TriggerEventInput): Pr
       input.details ? JSON.stringify(input.details) : null
     )
     .run();
+}
+
+function mapTriggerEventRow(row: {
+  engine_key: string;
+  rule_key: string;
+  release_key: string;
+  transition_key: string;
+  previous_state: string | null;
+  new_state: string;
+  status: string;
+  reason: string | null;
+  run_key: string | null;
+  triggered_at: string;
+  computed_json: string | null;
+  details_json: string | null;
+}): TriggerEventRow {
+  return {
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    releaseKey: row.release_key,
+    transitionKey: row.transition_key,
+    previousState: row.previous_state,
+    newState: row.new_state,
+    status: row.status,
+    reason: row.reason,
+    runKey: row.run_key,
+    triggeredAt: row.triggered_at,
+    computed: row.computed_json ? (JSON.parse(row.computed_json) as Record<string, unknown>) : null,
+    details: row.details_json ? (JSON.parse(row.details_json) as Record<string, unknown>) : null
+  };
+}
+
+export async function listConfirmedTriggerEvents(
+  env: Env,
+  engineKey: string,
+  ruleKey?: string
+): Promise<TriggerEventRow[]> {
+  const includeRuleFilter = Boolean(ruleKey);
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      engine_key,
+      rule_key,
+      release_key,
+      transition_key,
+      previous_state,
+      new_state,
+      status,
+      reason,
+      run_key,
+      triggered_at,
+      computed_json,
+      details_json
+    FROM trigger_events
+    WHERE engine_key = ?
+      AND status = 'confirmed'
+      AND (? = 0 OR rule_key = ?)
+    ORDER BY triggered_at DESC, release_key DESC, rule_key ASC, transition_key ASC
+    `
+  )
+    .bind(engineKey, includeRuleFilter ? 1 : 0, ruleKey ?? null)
+    .all<{
+      engine_key: string;
+      rule_key: string;
+      release_key: string;
+      transition_key: string;
+      previous_state: string | null;
+      new_state: string;
+      status: string;
+      reason: string | null;
+      run_key: string | null;
+      triggered_at: string;
+      computed_json: string | null;
+      details_json: string | null;
+    }>();
+
+  return result.results.map(mapTriggerEventRow);
+}
+
+export async function listUnloggedConfirmedTriggerEvents(env: Env, engineKey: string): Promise<TriggerEventRow[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      te.engine_key,
+      te.rule_key,
+      te.release_key,
+      te.transition_key,
+      te.previous_state,
+      te.new_state,
+      te.status,
+      te.reason,
+      te.run_key,
+      te.triggered_at,
+      te.computed_json,
+      te.details_json
+    FROM trigger_events te
+    LEFT JOIN action_log al
+      ON al.engine_key = te.engine_key
+      AND al.decision_key = te.engine_key || ':' || te.rule_key || ':' || te.release_key || ':' || te.transition_key
+    WHERE te.engine_key = ?
+      AND te.status = 'confirmed'
+      AND al.id IS NULL
+    ORDER BY te.triggered_at DESC, te.release_key DESC, te.rule_key ASC, te.transition_key ASC
+    `
+  )
+    .bind(engineKey)
+    .all<{
+      engine_key: string;
+      rule_key: string;
+      release_key: string;
+      transition_key: string;
+      previous_state: string | null;
+      new_state: string;
+      status: string;
+      reason: string | null;
+      run_key: string | null;
+      triggered_at: string;
+      computed_json: string | null;
+      details_json: string | null;
+    }>();
+
+  return result.results.map(mapTriggerEventRow);
 }
 
 export async function insertActionLog(env: Env, input: ActionLogInput): Promise<void> {

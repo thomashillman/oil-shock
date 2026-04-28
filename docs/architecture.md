@@ -87,6 +87,7 @@ Key tables and responsibilities:
 - `observations`: macro bridge observation store (currently dual-written from Energy collection)
 - `rule_state`: persistent Rule Engine v2 lifecycle state (currently Energy bridge rules)
 - `trigger_events`: idempotent Rule Engine v2 transition events (currently Energy bridge rules)
+- `action_log`: Action Manager decision log (currently Energy logging-only bridge decisions)
 
 ## Macro Signals bridge runtime (current)
 
@@ -98,12 +99,13 @@ The runtime remains bridge-shaped rather than full registry-driven orchestration
 - If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
 - `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
 - Energy scoring now invokes a bridge Rule Engine v2 lifecycle after the existing legacy `scores` write. The v2 lifecycle reads Energy `observations`, evaluates typed Energy rules, persists `rule_state`, and inserts idempotent `trigger_events` for state transitions.
+- After successful Energy Rule Engine v2 transitions, a logging-only Action Manager bridge reads confirmed, unlogged Energy `trigger_events` and writes idempotent `action_log` decisions using deterministic decision keys.
 
 Current limitation:
 
 - Only Energy is wired into this bridge path.
 - CPI and macro release collection remain disabled in runtime collection flow.
-- Rule Engine v2 currently emits state and transition events only; it does not execute action intents, guardrails, or portfolio decisions.
+- Action Manager is logging-only and does not execute trades, notifications, allocations, or live guardrail enforcement.
 
 ## Scoring and state model
 

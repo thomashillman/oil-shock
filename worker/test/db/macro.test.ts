@@ -11,6 +11,8 @@ import {
   insertActionLog,
   insertRenderedOutput,
   insertTriggerEvent,
+  listConfirmedTriggerEvents,
+  listUnloggedConfirmedTriggerEvents,
   listLatestObservationsForEngine,
   listEnabledFeedKeys,
   listRegisteredFeeds,
@@ -282,6 +284,40 @@ class MockD1Database {
         results: this.feedChecks
           .filter((row) => row.engine_key === engineKey)
           .sort((a, b) => String(b.checked_at).localeCompare(String(a.checked_at))) as T[]
+      };
+    }
+    if (normalized.includes("from trigger_events") && normalized.includes("status = 'confirmed'") && normalized.includes("(? = 0 or rule_key = ?)")) {
+      const engineKey = params[0];
+      const includeRuleFilter = Number(params[1]) === 1;
+      const ruleKey = params[2];
+      return {
+        results: this.triggerEvents
+          .filter(
+            (row) =>
+              row.engine_key === engineKey &&
+              row.status === "confirmed" &&
+              (!includeRuleFilter || row.rule_key === ruleKey)
+          )
+          .sort((a, b) => String(b.triggered_at).localeCompare(String(a.triggered_at))) as T[]
+      };
+    }
+    if (normalized.includes("from trigger_events te") && normalized.includes("left join action_log al")) {
+      const engineKey = params[0];
+      const existingDecisionKeys = new Set(
+        this.actionLogs
+          .filter((row) => row.engine_key === engineKey)
+          .map((row) => String(row.decision_key))
+      );
+      return {
+        results: this.triggerEvents
+          .filter((row) => {
+            if (row.engine_key !== engineKey || row.status !== "confirmed") {
+              return false;
+            }
+            const decisionKey = `${row.engine_key}:${row.rule_key}:${row.release_key}:${row.transition_key}`;
+            return !existingDecisionKeys.has(decisionKey);
+          })
+          .sort((a, b) => String(b.triggered_at).localeCompare(String(a.triggered_at))) as T[]
       };
     }
 
@@ -596,6 +632,119 @@ describe("macro db helpers", () => {
     await insertTriggerEvent(env, event);
 
     expect(db.table("trigger_events")).toHaveLength(1);
+  });
+
+  it("listConfirmedTriggerEvents filters by engine/rule and returns newest first", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-28",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "newest",
+        run_key: "run-2",
+        triggered_at: "2026-04-28T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-27",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "older",
+        run_key: "run-1",
+        triggered_at: "2026-04-27T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-26",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "pending",
+        reason: "not-confirmed",
+        run_key: "run-0",
+        triggered_at: "2026-04-26T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      },
+      {
+        engine_key: "other",
+        rule_key: "other.rule",
+        release_key: "2026-04-28",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "wrong-engine",
+        run_key: "run-3",
+        triggered_at: "2026-04-28T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      }
+    );
+
+    const events = await listConfirmedTriggerEvents(env, "energy", "energy.confirmation.spread_widening");
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.releaseKey)).toEqual(["2026-04-28", "2026-04-27"]);
+  });
+
+  it("listUnloggedConfirmedTriggerEvents excludes already logged trigger events", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-28",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "new",
+        run_key: "run-2",
+        triggered_at: "2026-04-28T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-27",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "already-logged",
+        run_key: "run-1",
+        triggered_at: "2026-04-27T00:00:00.000Z",
+        computed_json: null,
+        details_json: "{}"
+      }
+    );
+    db.table("action_log").push({
+      engine_key: "energy",
+      decision_key: "energy:energy.confirmation.spread_widening:2026-04-27:inactive->active",
+      decision: "allowed",
+      action_type: "log_only",
+      decided_at: "2026-04-27T00:01:00.000Z"
+    });
+
+    const events = await listUnloggedConfirmedTriggerEvents(env, "energy");
+    expect(events).toHaveLength(1);
+    expect(events[0]?.releaseKey).toBe("2026-04-28");
   });
 
   it("listLatestObservationsForEngine returns newest observation per requested series", async () => {
