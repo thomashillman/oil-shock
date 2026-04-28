@@ -19,6 +19,7 @@ This document captures the current sequencing and decision constraints for work 
   - Energy scoring now invokes an Action Manager bridge after successful legacy scoring and successful Energy Rule Engine v2 lifecycle transitions
   - The bridge reads confirmed, unlogged Energy `trigger_events` and writes idempotent decisions into `action_log`
   - Decisions are explicitly logging-only (`action_type=log_only`); no trades, notifications, allocation changes, or live guardrail enforcement are executed
+  - Decisions now pass through Guardrail Policy v1 (Energy-only, logging-only) before `action_log` writes; supported Energy triggers remain `decision="ignored"` because no execution policy exists
   - CPI and macro release collection remain disabled
 - **Phase 6A (Energy Engine) pre-canary readiness validation** — Blocked at evidence collection
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
@@ -198,8 +199,8 @@ Prefer additive, foundational changes over large rewrites that assume a finished
 
 Near-term follow-up after Rule Engine v2 bridge completion:
 
-- Add Action Manager logging over `trigger_events`, or
-- Introduce generic engine-scoped APIs when backend contracts are stable enough to expose consistently.
+- Introduce generic engine-scoped APIs when backend contracts are stable enough to expose consistently, or
+- Add collect-only CPI bridge after Energy Guardrail Policy v1 stability evidence is captured.
 
 ### 3. Keep durable context in the repo
 

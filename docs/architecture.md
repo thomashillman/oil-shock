@@ -99,13 +99,14 @@ The runtime remains bridge-shaped rather than full registry-driven orchestration
 - If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
 - `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
 - Energy scoring now invokes a bridge Rule Engine v2 lifecycle after the existing legacy `scores` write. The v2 lifecycle reads Energy `observations`, evaluates typed Energy rules, persists `rule_state`, and inserts idempotent `trigger_events` for state transitions.
-- After successful Energy Rule Engine v2 transitions, a logging-only Action Manager bridge reads confirmed, unlogged Energy `trigger_events` and writes idempotent `action_log` decisions using deterministic decision keys.
+- After successful Energy Rule Engine v2 transitions, a logging-only Action Manager bridge reads confirmed, unlogged Energy `trigger_events`, evaluates Guardrail Policy v1, and writes idempotent `action_log` decisions using deterministic decision keys.
 
 Current limitation:
 
 - Only Energy is wired into this bridge path.
 - CPI and macro release collection remain disabled in runtime collection flow.
 - Action Manager is logging-only and does not execute trades, notifications, allocations, or live guardrail enforcement.
+- Guardrail Policy v1 is Energy-only and logging-only; supported Energy triggers still resolve to `decision = "ignored"` because no execution policy is configured.
 
 ## Scoring and state model
 

@@ -8,6 +8,8 @@ import {
   getLatestFeedChecks,
   getLatestObservation,
   getRuleState,
+  hasActionLogDecisionForKey,
+  hasActionLogDecisionForRuleRelease,
   insertActionLog,
   insertRenderedOutput,
   insertTriggerEvent,
@@ -240,6 +242,22 @@ class MockD1Database {
     if (normalized.includes("from rule_state")) {
       const row = this.ruleStates.find(
         (item) => item.engine_key === params[0] && item.rule_key === params[1] && item.state_key === params[2]
+      );
+      return (row as T | undefined) ?? null;
+    }
+
+    if (normalized.includes("from action_log") && normalized.includes("decision_key = ?")) {
+      const row = this.actionLogs.find((item) => item.engine_key === params[0] && item.decision_key === params[1]);
+      return (row as T | undefined) ?? null;
+    }
+
+    if (normalized.includes("from action_log") && normalized.includes("rule_key = ?") && normalized.includes("decision_key <> ?")) {
+      const row = this.actionLogs.find(
+        (item) =>
+          item.engine_key === params[0] &&
+          item.rule_key === params[1] &&
+          item.release_key === params[2] &&
+          item.decision_key !== params[3]
       );
       return (row as T | undefined) ?? null;
     }
@@ -938,6 +956,58 @@ describe("macro db helpers", () => {
     const rows = db.table("action_log");
     expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.decision)).toEqual(["allowed", "blocked"]);
+  });
+
+  it("hasActionLogDecisionForKey filters by engine_key and decision_key", async () => {
+    const db = new MockD1Database();
+    db.table("action_log").push(
+      { engine_key: "energy", decision_key: "key-1" },
+      { engine_key: "other", decision_key: "key-1" }
+    );
+    const env = testEnv(db);
+
+    await expect(
+      hasActionLogDecisionForKey(env, { engineKey: "energy", decisionKey: "key-1" })
+    ).resolves.toBe(true);
+    await expect(
+      hasActionLogDecisionForKey(env, { engineKey: "energy", decisionKey: "missing" })
+    ).resolves.toBe(false);
+  });
+
+  it("hasActionLogDecisionForRuleRelease filters by engine_key, rule_key, and release_key excluding current decision_key", async () => {
+    const db = new MockD1Database();
+    db.table("action_log").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-28",
+        decision_key: "old-key"
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.other",
+        release_key: "2026-04-28",
+        decision_key: "other-rule"
+      }
+    );
+    const env = testEnv(db);
+
+    await expect(
+      hasActionLogDecisionForRuleRelease(env, {
+        engineKey: "energy",
+        ruleKey: "energy.confirmation.spread_widening",
+        releaseKey: "2026-04-28",
+        decisionKey: "new-key"
+      })
+    ).resolves.toBe(true);
+    await expect(
+      hasActionLogDecisionForRuleRelease(env, {
+        engineKey: "energy",
+        ruleKey: "energy.confirmation.spread_widening",
+        releaseKey: "2026-04-28",
+        decisionKey: "old-key"
+      })
+    ).resolves.toBe(false);
   });
 
   it("insertRenderedOutput is idempotent when releaseKey is omitted", async () => {

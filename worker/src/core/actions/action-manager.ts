@@ -1,6 +1,12 @@
 import type { Env } from "../../env";
-import { insertActionLog, listUnloggedConfirmedTriggerEvents } from "../../db/macro";
-import { buildEnergyActionDecision } from "./energy-actions";
+import {
+  hasActionLogDecisionForKey,
+  hasActionLogDecisionForRuleRelease,
+  insertActionLog,
+  listUnloggedConfirmedTriggerEvents
+} from "../../db/macro";
+import { decisionKeyForTriggerEvent } from "./energy-actions";
+import { evaluateEnergyGuardrailPolicy } from "../guardrails/energy-policy";
 import type { ActionDecisionDraft, ActionManagerResult } from "./types";
 
 function emptyResult(): ActionManagerResult {
@@ -33,8 +39,45 @@ export async function runActionManagerForEngine(
   const result = emptyResult();
 
   for (const event of events) {
-    const draft = input.engineKey === "energy" ? buildEnergyActionDecision(event) : null;
-    if (!draft) {
+    if (input.engineKey !== "energy") {
+      continue;
+    }
+
+    const decisionKey = decisionKeyForTriggerEvent(event);
+    const duplicateDecisionExists = await hasActionLogDecisionForKey(env, {
+      engineKey: input.engineKey,
+      decisionKey
+    });
+    const sameRuleReleaseDecisionExists = await hasActionLogDecisionForRuleRelease(env, {
+      engineKey: input.engineKey,
+      ruleKey: event.ruleKey,
+      releaseKey: event.releaseKey,
+      decisionKey
+    });
+    const policy = evaluateEnergyGuardrailPolicy({
+      event,
+      duplicateDecisionExists,
+      sameRuleReleaseDecisionExists
+    });
+    const draft: ActionDecisionDraft = {
+      engineKey: event.engineKey,
+      ruleKey: event.ruleKey,
+      releaseKey: event.releaseKey,
+      decisionKey,
+      decision: policy.decision,
+      actionType: policy.actionType,
+      rationale: policy.rationale,
+      details: {
+        ...policy.details,
+        checks: policy.checks,
+        transitionKey: event.transitionKey,
+        previousState: event.previousState,
+        newState: event.newState
+      }
+    };
+
+    if (duplicateDecisionExists) {
+      increment(result, draft);
       continue;
     }
 
