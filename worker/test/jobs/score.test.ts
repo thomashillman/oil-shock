@@ -44,6 +44,7 @@ class MockD1Database {
   scores: Row[] = [];
   rules: Row[] = [];
   seriesPoints: Row[] = [];
+  failRulesQuery = false;
 
   prepare(query: string): MockPreparedStatement {
     return new MockPreparedStatement(this, query);
@@ -96,6 +97,9 @@ class MockD1Database {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
 
     if (normalized.includes("from rules") && normalized.includes("where engine_key = ?") && normalized.includes("is_active = 1")) {
+      if (this.failRulesQuery) {
+        throw new Error("legacy rule evaluation failed");
+      }
       const engineKey = params[0];
       return { results: this.rules.filter((row) => row.engine_key === engineKey && row.is_active === 1) as T[] };
     }
@@ -145,5 +149,19 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     await expect(runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"))).rejects.toThrow("rule_state write failed");
 
     expect(db.runs[0]?.status).toBe("failed");
+  });
+
+  it("skips rule engine v2 when legacy energy scoring fails", async () => {
+    const db = new MockD1Database();
+    db.failRulesQuery = true;
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.7, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.6, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(db.scores).toHaveLength(0);
+    expect(mockRunEnergyRuleEngineV2).not.toHaveBeenCalled();
   });
 });

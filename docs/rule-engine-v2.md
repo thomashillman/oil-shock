@@ -30,6 +30,7 @@ This document describes the currently implemented Rule Engine v2 bridge lifecycl
     - `inactive` when below threshold
     - `no_data` when required observations are missing
   - Emits trigger event only for `inactive -> active` transition.
+  - Current thresholds are **temporary bridge constants** in code for this slice only; they are not final rule-threshold contracts.
 
 ## Idempotency
 

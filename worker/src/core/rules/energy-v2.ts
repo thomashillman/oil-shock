@@ -9,8 +9,11 @@ import { runRuleEngineV2 } from "./engine-v2";
 import type { RuleContext, RuleDefinitionV2, RuleResult } from "./types-v2";
 
 const ENERGY_CONFIRMATION_RULE = "energy.confirmation.spread_widening";
-const WTI_BRENT_THRESHOLD = 0.6;
-const DIESEL_WTI_THRESHOLD = 0.55;
+// Temporary bridge thresholds for Energy Rule Engine v2 lifecycle only.
+// These are intentionally scoped to this bridge slice and should move to
+// configured runtime thresholds once dedicated rule-threshold keys exist.
+const TEMP_BRIDGE_WTI_BRENT_THRESHOLD = 0.6;
+const TEMP_BRIDGE_DIESEL_WTI_THRESHOLD = 0.55;
 
 function evaluateEnergyConfirmation(context: RuleContext): RuleResult {
   const spread = context.observations["energy_spread.wti_brent_spread"]?.value;
@@ -30,7 +33,7 @@ function evaluateEnergyConfirmation(context: RuleContext): RuleResult {
     };
   }
 
-  const active = spread >= WTI_BRENT_THRESHOLD && crack >= DIESEL_WTI_THRESHOLD;
+  const active = spread >= TEMP_BRIDGE_WTI_BRENT_THRESHOLD && crack >= TEMP_BRIDGE_DIESEL_WTI_THRESHOLD;
   const priorStatus = String(context.priorState.current?.status ?? "inactive");
   const nextStatus = active ? "active" : "inactive";
 
@@ -40,8 +43,10 @@ function evaluateEnergyConfirmation(context: RuleContext): RuleResult {
     computed: {
       spread,
       crack,
-      spreadThreshold: WTI_BRENT_THRESHOLD,
-      crackThreshold: DIESEL_WTI_THRESHOLD
+      spreadThreshold: TEMP_BRIDGE_WTI_BRENT_THRESHOLD,
+      crackThreshold: TEMP_BRIDGE_DIESEL_WTI_THRESHOLD,
+      wtiBrentThresholdSource: "temporary_bridge_constant",
+      dieselWtiThresholdSource: "temporary_bridge_constant"
     },
     stateUpdates: [
       {

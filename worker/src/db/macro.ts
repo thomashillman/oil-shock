@@ -487,7 +487,15 @@ export async function getRuleState(
     ruleKey: row.rule_key,
     stateKey: row.state_key,
     releaseKey: row.release_key,
-    state: JSON.parse(row.state_json) as Record<string, unknown>,
+    state: (() => {
+      try {
+        return JSON.parse(row.state_json) as Record<string, unknown>;
+      } catch (error) {
+        throw new Error(
+          `Failed to parse rule_state JSON for engineKey=${engineKey} ruleKey=${ruleKey} stateKey=${stateKey}: ${String(error)}`
+        );
+      }
+    })(),
     evaluatedAt: row.evaluated_at
   };
 }

@@ -396,6 +396,40 @@ describe("macro core migration", () => {
     );
     expect(seededCount).toBe("2");
   });
+
+  skipIfNoSqlite3("trigger_events unique key prevents duplicates for same transition identity", () => {
+    const dbPath = createDbPath();
+    applyAllMigrations(dbPath);
+
+    runSqlite(
+      dbPath,
+      `
+      INSERT INTO trigger_events (engine_key, rule_key, release_key, transition_key, new_state, triggered_at)
+      VALUES ('energy', 'energy.confirmation.spread_widening', '2026-04-28', 'inactive->active', 'active', '2026-04-28T00:00:00.000Z');
+      `
+    );
+
+    runSqlite(
+      dbPath,
+      `
+      INSERT OR IGNORE INTO trigger_events (engine_key, rule_key, release_key, transition_key, new_state, triggered_at)
+      VALUES ('energy', 'energy.confirmation.spread_widening', '2026-04-28', 'inactive->active', 'active', '2026-04-28T00:00:00.000Z');
+      `
+    );
+
+    const count = runSqlite(
+      dbPath,
+      `
+      SELECT COUNT(*) FROM trigger_events
+      WHERE engine_key = 'energy'
+        AND rule_key = 'energy.confirmation.spread_widening'
+        AND release_key = '2026-04-28'
+        AND transition_key = 'inactive->active';
+      `
+    );
+
+    expect(count).toBe("1");
+  });
 });
 
 describe("macro db helpers", () => {
@@ -618,6 +652,23 @@ describe("macro db helpers", () => {
 
     const current = await getRuleState(env, "energy", "energy.confirmation.spread_widening", "current");
     expect(current?.state).toEqual({ status: "active" });
+  });
+
+  it("getRuleState throws a descriptive error when state_json is invalid", async () => {
+    const db = new MockD1Database();
+    db.table("rule_state").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      state_key: "current",
+      release_key: "2026-04-28",
+      state_json: "{invalid-json",
+      evaluated_at: "2026-04-28T00:00:00.000Z"
+    });
+    const env = testEnv(db);
+
+    await expect(getRuleState(env, "energy", "energy.confirmation.spread_widening", "current")).rejects.toThrow(
+      "Failed to parse rule_state JSON for engineKey=energy ruleKey=energy.confirmation.spread_widening stateKey=current"
+    );
   });
 
   it("insertActionLog writes allowed/blocked decisions and is idempotent by engine_key + decision_key", async () => {

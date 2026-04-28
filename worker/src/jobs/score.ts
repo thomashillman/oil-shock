@@ -21,6 +21,7 @@ export function safeValue(value: number | null): number {
 export async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
   let wtiBrentSpread, dieselWtiCrack, curveSlope;
   const componentErrors: string[] = [];
+  let legacyScoreSucceeded = true;
 
   // Phase 1: Collect data with per-component error tracking
   try {
@@ -77,8 +78,13 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
     }
   } catch (error) {
     componentErrors.push("scorer");
+    legacyScoreSucceeded = false;
     log("error", "Energy scorer failed", { runKey, error: String(error), componentErrors });
     // Graceful degradation: don't re-throw, continue with stale data available for fallback
+  }
+
+  if (!legacyScoreSucceeded) {
+    return;
   }
 
   // Phase 3: Rule Engine v2 bridge lifecycle (fails closed on persistence errors).

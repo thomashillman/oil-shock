@@ -97,4 +97,22 @@ describe("energy rule engine v2", () => {
     expect(activeCase.writes.triggerEvents).toBe(1);
     expect(inactiveCase.writes.triggerEvents).toBe(0);
   });
+
+  it("exposes temporary bridge thresholds in computed output", async () => {
+    const { env } = makeEnv([
+      { series_key: "energy_spread.wti_brent_spread", value: 0.61, observed_at: "2026-04-28T00:00:00.000Z", release_key: "2026-04-28" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.56, observed_at: "2026-04-28T00:00:00.000Z", release_key: "2026-04-28" }
+    ]);
+
+    const result = await runEnergyRuleEngineV2(env, {
+      runKey: "run-bridge-thresholds",
+      evaluatedAt: "2026-04-28T00:00:00.000Z",
+      releaseKey: "2026-04-28"
+    });
+
+    expect(result.results[0]?.computed).toMatchObject({
+      wtiBrentThresholdSource: "temporary_bridge_constant",
+      dieselWtiThresholdSource: "temporary_bridge_constant"
+    });
+  });
 });
