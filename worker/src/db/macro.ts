@@ -54,6 +54,25 @@ export interface FeedHealthRow extends FeedRegistryRow {
   latestCheck: FeedCheckRow | null;
 }
 
+export interface ObservationRow {
+  engineKey: string;
+  feedKey: string;
+  seriesKey: string;
+  releaseKey: string;
+  asOfDate: string;
+  observedAt: string;
+  value: number;
+}
+
+export interface RuleStateRow {
+  engineKey: string;
+  ruleKey: string;
+  stateKey: string;
+  releaseKey: string | null;
+  state: Record<string, unknown>;
+  evaluatedAt: string;
+}
+
 export interface RuleStateInput {
   engineKey: string;
   ruleKey: string;
@@ -224,6 +243,51 @@ export async function getLatestObservation(
   };
 }
 
+export async function listLatestObservationsForEngine(
+  env: Env,
+  engineKey: string,
+  seriesKeys: string[]
+): Promise<Record<string, { value: number; observedAt: string; releaseKey: string }>> {
+  if (seriesKeys.length === 0) {
+    return {};
+  }
+
+  const placeholders = seriesKeys.map(() => "?").join(", ");
+  const result = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, series_key, release_key, as_of_date, observed_at, value
+    FROM observations
+    WHERE engine_key = ?
+      AND series_key IN (${placeholders})
+    ORDER BY series_key ASC, as_of_date DESC, observed_at DESC
+    `
+  )
+    .bind(engineKey, ...seriesKeys)
+    .all<{
+      engine_key: string;
+      feed_key: string;
+      series_key: string;
+      release_key: string;
+      as_of_date: string;
+      observed_at: string;
+      value: number;
+    }>();
+
+  const latestBySeries: Record<string, { value: number; observedAt: string; releaseKey: string }> = {};
+  for (const row of result.results) {
+    if (latestBySeries[row.series_key]) {
+      continue;
+    }
+    latestBySeries[row.series_key] = {
+      value: row.value,
+      observedAt: row.observed_at,
+      releaseKey: row.release_key
+    };
+  }
+
+  return latestBySeries;
+}
+
 export async function recordFeedCheck(env: Env, input: FeedCheckInput): Promise<void> {
   await env.DB.prepare(
     `
@@ -386,6 +450,54 @@ export async function upsertRuleState(env: Env, input: RuleStateInput): Promise<
       input.evaluatedAt
     )
     .run();
+}
+
+export async function getRuleState(
+  env: Env,
+  engineKey: string,
+  ruleKey: string,
+  stateKey: string
+): Promise<RuleStateRow | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT engine_key, rule_key, state_key, release_key, state_json, evaluated_at
+    FROM rule_state
+    WHERE engine_key = ?
+      AND rule_key = ?
+      AND state_key = ?
+    LIMIT 1
+    `
+  )
+    .bind(engineKey, ruleKey, stateKey)
+    .first<{
+      engine_key: string;
+      rule_key: string;
+      state_key: string;
+      release_key: string | null;
+      state_json: string;
+      evaluated_at: string;
+    }>();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    engineKey: row.engine_key,
+    ruleKey: row.rule_key,
+    stateKey: row.state_key,
+    releaseKey: row.release_key,
+    state: (() => {
+      try {
+        return JSON.parse(row.state_json) as Record<string, unknown>;
+      } catch (error) {
+        throw new Error(
+          `Failed to parse rule_state JSON for engineKey=${engineKey} ruleKey=${ruleKey} stateKey=${stateKey}: ${String(error)}`
+        );
+      }
+    })(),
+    evaluatedAt: row.evaluated_at
+  };
 }
 
 export async function insertTriggerEvent(env: Env, input: TriggerEventInput): Promise<void> {

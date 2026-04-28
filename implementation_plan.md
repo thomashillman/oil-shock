@@ -23,12 +23,13 @@ Implemented or partially implemented today:
 - Energy bridge dual-write from collection into both `series_points` and macro `observations`.
 - Energy registry-backed bridge filtering for macro observation/feed-check writes.
 - Read-only `/api/feed-health` endpoint backed by registry metadata and latest feed checks.
+- Energy Rule Engine v2 bridge lifecycle that reads `observations`, writes `rule_state`, and emits idempotent `trigger_events` for Energy confirmation transitions.
 
 Not complete yet:
 
 - No target multi-engine schema as the primary model.
 - No registry-driven collector runner.
-- No generic rule lifecycle that persists state, detects transitions, emits trigger events, and dispatches action intents.
+- No generic multi-engine rule lifecycle; current Rule Engine v2 lifecycle bridge is Energy-only.
 - No full action manager for portfolio guardrails.
 - No generic engine-scoped API surface.
 - No Macro Signals frontend built from backend engine/feed registries.
@@ -208,7 +209,15 @@ corepack pnpm typecheck
 
 ## Phase 3: Build Rule Engine v2 lifecycle
 
+Status: in progress (Energy bridge lifecycle slice complete).
+
 Goal: replace score-only rule adjustment with a full stateful rule lifecycle.
+
+Delivered in current slice:
+
+- Added typed Rule Engine v2 lifecycle primitives (`RuleContext`, `RuleResult`, state updates, trigger event drafts).
+- Added Energy-specific Rule Engine v2 bridge runner that reads Energy `observations`, evaluates confirmation transitions, writes `rule_state`, and emits idempotent `trigger_events`.
+- Kept legacy Energy `scores` write and `/api/v1/energy/state` behaviour unchanged while invoking Rule Engine v2 as an additional bridge step.
 
 Files to create or update:
 

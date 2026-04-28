@@ -85,6 +85,8 @@ Key tables and responsibilities:
 - `feed_registry`: macro feed metadata and enablement state (bridge currently wired for Energy feed keys only)
 - `feed_checks`: per-feed collection and save checks used for feed-health reporting
 - `observations`: macro bridge observation store (currently dual-written from Energy collection)
+- `rule_state`: persistent Rule Engine v2 lifecycle state (currently Energy bridge rules)
+- `trigger_events`: idempotent Rule Engine v2 transition events (currently Energy bridge rules)
 
 ## Macro Signals bridge runtime (current)
 
@@ -95,11 +97,13 @@ The runtime remains bridge-shaped rather than full registry-driven orchestration
 - Energy observation/feed-check writes consult `feed_registry` enabled rows when Energy registry rows exist.
 - If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
 - `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
+- Energy scoring now invokes a bridge Rule Engine v2 lifecycle after the existing legacy `scores` write. The v2 lifecycle reads Energy `observations`, evaluates typed Energy rules, persists `rule_state`, and inserts idempotent `trigger_events` for state transitions.
 
 Current limitation:
 
 - Only Energy is wired into this bridge path.
 - CPI and macro release collection remain disabled in runtime collection flow.
+- Rule Engine v2 currently emits state and transition events only; it does not execute action intents, guardrails, or portfolio decisions.
 
 ## Scoring and state model
 
