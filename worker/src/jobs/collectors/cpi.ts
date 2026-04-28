@@ -2,8 +2,8 @@ import type { Env } from "../../env";
 import fixture from "./fixtures/cpi-response.json";
 
 const CPI_ENGINE_KEY = "cpi";
-const CPI_FEED_KEY = "macro_release.us_cpi.headline_yoy";
-const CPI_SERIES_KEY = "macro_release.us_cpi.headline_yoy";
+const CPI_FEED_KEY = "macro_release.us_cpi.all_items_index";
+const CPI_SERIES_KEY = "macro_release.us_cpi.all_items_index";
 
 interface CpiSeriesPoint {
   year?: string;
@@ -33,7 +33,7 @@ export interface CpiObservationCandidate {
   asOfDate: string;
   observedAt: string;
   value: number;
-  unit: "percent";
+  unit: "index";
   metadata: {
     provider: "BLS";
     sourceSeriesId: string;
@@ -95,7 +95,7 @@ export function parseCpiFixture(response: unknown): CpiObservationCandidate {
     asOfDate,
     observedAt,
     value: numericValue,
-    unit: "percent",
+    unit: "index",
     metadata: {
       provider: "BLS",
       sourceSeriesId: firstSeries.seriesID ?? "unknown",

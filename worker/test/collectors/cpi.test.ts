@@ -8,13 +8,13 @@ describe("parseCpiFixture", () => {
     const parsed = parseCpiFixture(fixtures.success);
     expect(parsed).toEqual<CpiObservationCandidate>({
       engineKey: "cpi",
-      feedKey: "macro_release.us_cpi.headline_yoy",
-      seriesKey: "macro_release.us_cpi.headline_yoy",
+      feedKey: "macro_release.us_cpi.all_items_index",
+      seriesKey: "macro_release.us_cpi.all_items_index",
       releaseKey: "cpi:2026-04",
       asOfDate: "2026-04",
       observedAt: "2026-05-12T12:30:00.000Z",
-      value: 3.4,
-      unit: "percent",
+      value: 316.582,
+      unit: "index",
       metadata: {
         provider: "BLS",
         sourceSeriesId: "CUUR0000SA0",
@@ -43,6 +43,6 @@ describe("collectCpi", () => {
     const env = createTestEnv();
     const result = await collectCpi(env, "2026-04-27T00:00:00.000Z");
     expect(result).toHaveLength(1);
-    expect(result[0]?.feedKey).toBe("macro_release.us_cpi.headline_yoy");
+    expect(result[0]?.feedKey).toBe("macro_release.us_cpi.all_items_index");
   });
 });

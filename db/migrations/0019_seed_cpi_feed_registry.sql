@@ -15,10 +15,10 @@ INSERT OR IGNORE INTO feed_registry (
   metadata_json
 ) VALUES (
   'cpi',
-  'macro_release.us_cpi.headline_yoy',
+  'macro_release.us_cpi.all_items_index',
   'BLS',
   'BLS',
-  'US CPI Headline YoY',
+  'US CPI All Items Index',
   'macro_release',
   2592000,
   3456000,

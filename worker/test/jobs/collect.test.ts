@@ -235,13 +235,13 @@ const ENERGY_POINTS: NormalizedPoint[] = [
 
 const CPI_OBSERVATION: CpiObservationCandidate = {
   engineKey: "cpi",
-  feedKey: "macro_release.us_cpi.headline_yoy",
-  seriesKey: "macro_release.us_cpi.headline_yoy",
+  feedKey: "macro_release.us_cpi.all_items_index",
+  seriesKey: "macro_release.us_cpi.all_items_index",
   releaseKey: "cpi:2026-04",
   asOfDate: "2026-04",
   observedAt: "2026-05-12T12:30:00.000Z",
-  value: 3.4,
-  unit: "percent",
+  value: 316.582,
+  unit: "index",
   metadata: {
     provider: "BLS",
     sourceSeriesId: "CUUR0000SA0",
@@ -332,6 +332,23 @@ describe("runCollection energy dual-write", () => {
     expect(runs.results[0]).toMatchObject({ status: "failed" });
   });
 
+
+  it("keeps prior semantics when Energy collector fails by completing run without throwing", async () => {
+    mockCollectEnergy.mockRejectedValueOnce(new Error("energy upstream failed"));
+    const db = new MockD1Database();
+
+    await expect(runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"))).resolves.toBeUndefined();
+
+    const seriesPoints = await db.prepare("SELECT * FROM series_points").all<Row>();
+    expect(seriesPoints.results).toHaveLength(0);
+
+    const observations = await db.prepare("SELECT * FROM observations").all<Row>();
+    expect(observations.results).toHaveLength(0);
+
+    const runs = await db.prepare("SELECT * FROM runs").all<Row>();
+    expect(runs.results).toHaveLength(1);
+    expect(runs.results[0]).toMatchObject({ status: "success" });
+  });
   it("skips disabled feeds for observations and feed_checks while preserving legacy writes", async () => {
     const db = new MockD1Database({
       feedRegistry: [
@@ -373,7 +390,7 @@ describe("runCollection energy dual-write", () => {
       feedRegistry: [
         { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
         { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
-        { engine_key: "cpi", feed_key: "macro_release.us_cpi.headline_yoy", enabled: 0 }
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 0 }
       ]
     });
 
@@ -396,7 +413,7 @@ describe("runCollection energy dual-write", () => {
       feedRegistry: [
         { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
         { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
-        { engine_key: "cpi", feed_key: "macro_release.us_cpi.headline_yoy", enabled: 1 }
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
       ]
     });
 
@@ -408,7 +425,7 @@ describe("runCollection energy dual-write", () => {
     const cpiObservations = observations.filter((row) => row.engine_key === "cpi");
     expect(cpiObservations).toHaveLength(1);
     expect(cpiObservations[0]).toMatchObject({
-      feed_key: "macro_release.us_cpi.headline_yoy",
+      feed_key: "macro_release.us_cpi.all_items_index",
       release_key: "cpi:2026-04"
     });
 
@@ -424,7 +441,7 @@ describe("runCollection energy dual-write", () => {
       feedRegistry: [
         { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
         { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
-        { engine_key: "cpi", feed_key: "macro_release.us_cpi.headline_yoy", enabled: 1 }
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
       ]
     });
 
@@ -434,7 +451,7 @@ describe("runCollection energy dual-write", () => {
     const cpiChecks = checks.filter((row) => row.engine_key === "cpi");
     expect(cpiChecks).toHaveLength(1);
     expect(cpiChecks[0]).toMatchObject({
-      feed_key: "macro_release.us_cpi.headline_yoy",
+      feed_key: "macro_release.us_cpi.all_items_index",
       result: "error",
       status: "error",
       error_message: "cpi fixture parse failed"
@@ -446,7 +463,7 @@ describe("runCollection energy dual-write", () => {
       feedRegistry: [
         { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
         { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
-        { engine_key: "cpi", feed_key: "macro_release.us_cpi.headline_yoy", enabled: 1 }
+        { engine_key: "cpi", feed_key: "macro_release.us_cpi.all_items_index", enabled: 1 }
       ]
     });
 

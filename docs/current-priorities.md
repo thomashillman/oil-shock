@@ -23,7 +23,7 @@ This document captures the current sequencing and decision constraints for work 
   - CPI and macro release collection remain disabled
 - **Macro Signals bridge slice (April 2026): Engine Runtime Read API v1 (Energy-first)** — ✅ COMPLETE
 - **Macro Signals bridge slice (April 2026): CPI collect-only bridge** — ✅ COMPLETE
-  - CPI feed is seeded in `feed_registry` as `macro_release.us_cpi.headline_yoy`
+  - CPI feed is seeded in `feed_registry` as `macro_release.us_cpi.all_items_index`
   - CPI registry row is disabled by default (`enabled=0`) and collection is registry-gated
   - When enabled, CPI fixture parsing writes collect-only `observations` and `feed_checks`
   - CPI bridge does not write `rule_state`, `trigger_events`, guardrail decisions, or `action_log`

@@ -101,13 +101,21 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
   await startRun(env, runKey, "collect");
   log("info", "Starting collection run", { runKey, nowIso });
   try {
-    const [energyResult, enabledCpiFeedKeys] = await Promise.all([
-      collectEnergy(env, nowIso),
+    const [energyResults, enabledCpiFeedKeys] = await Promise.all([
+      Promise.allSettled([collectEnergy(env, nowIso)]),
       listEnabledFeedKeys(env, "cpi")
     ]);
 
-    const energyPoints: NormalizedPoint[] = [...energyResult];
-    const points: NormalizedPoint[] = [...energyResult];
+    const energyPoints: NormalizedPoint[] = [];
+    const points: NormalizedPoint[] = [];
+    for (const result of energyResults) {
+      if (result.status === "fulfilled") {
+        energyPoints.push(...result.value);
+        points.push(...result.value);
+      } else {
+        log("error", "Collector failed", { error: String(result.reason) });
+      }
+    }
 
     await writeSeriesPoints(env, points);
     await writeEnergyObservations(env, energyPoints, runKey, nowIso);

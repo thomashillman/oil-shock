@@ -252,7 +252,7 @@ This document is the durable home for implementation detail that is too volatile
 A CPI collect-only bridge now exists for Macro Signals validation.
 
 - Collector: `worker/src/jobs/collectors/cpi.ts`
-- Feed key: `macro_release.us_cpi.headline_yoy`
+- Feed key: `macro_release.us_cpi.all_items_index`
 - Engine key: `cpi`
 - Registry seed: `db/migrations/0019_seed_cpi_feed_registry.sql`
 

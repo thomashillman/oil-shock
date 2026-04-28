@@ -8,7 +8,7 @@ describe("CPI feed registry migration", () => {
 
     expect(migration).toContain("INSERT OR IGNORE INTO feed_registry");
     expect(migration).toContain("'cpi'");
-    expect(migration).toContain("'macro_release.us_cpi.headline_yoy'");
+    expect(migration).toContain("'macro_release.us_cpi.all_items_index'");
     expect(migration).toContain("'BLS'");
     expect(migration).toContain("'macro_release'");
     expect(migration).toMatch(/\b0\b/);
