@@ -32,9 +32,10 @@ export function buildEnergyActionDecision(event: TriggerEventRow): ActionDecisio
       ruleKey: event.ruleKey,
       releaseKey: event.releaseKey,
       decisionKey: decisionKeyFor(event),
-      decision: "allowed",
+      decision: "ignored",
       actionType: "log_only",
-      rationale: "logging-only bridge accepted confirmed trigger event; no trade execution occurred",
+      rationale:
+        "logging-only bridge recorded confirmed trigger event; no execution policy configured and no trade execution occurred",
       details: {
         transitionKey: event.transitionKey,
         previousState: event.previousState,

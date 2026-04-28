@@ -565,6 +565,13 @@ function mapTriggerEventRow(row: {
   computed_json: string | null;
   details_json: string | null;
 }): TriggerEventRow {
+  const identity = {
+    engine_key: row.engine_key,
+    rule_key: row.rule_key,
+    release_key: row.release_key,
+    transition_key: row.transition_key
+  };
+
   return {
     engineKey: row.engine_key,
     ruleKey: row.rule_key,
@@ -576,9 +583,32 @@ function mapTriggerEventRow(row: {
     reason: row.reason,
     runKey: row.run_key,
     triggeredAt: row.triggered_at,
-    computed: row.computed_json ? (JSON.parse(row.computed_json) as Record<string, unknown>) : null,
-    details: row.details_json ? (JSON.parse(row.details_json) as Record<string, unknown>) : null
+    computed: parseTriggerEventJson(identity, "computed_json", row.computed_json),
+    details: parseTriggerEventJson(identity, "details_json", row.details_json)
   };
+}
+
+function parseTriggerEventJson(
+  row: {
+    engine_key: string;
+    rule_key: string;
+    release_key: string;
+    transition_key: string;
+  },
+  fieldName: "computed_json" | "details_json",
+  value: string | null
+): Record<string, unknown> | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `Failed to parse trigger_events ${fieldName} for engineKey=${row.engine_key} ruleKey=${row.rule_key} releaseKey=${row.release_key} transitionKey=${row.transition_key}: ${String(error)}`
+    );
+  }
 }
 
 export async function listConfirmedTriggerEvents(

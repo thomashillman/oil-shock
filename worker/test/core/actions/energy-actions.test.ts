@@ -26,10 +26,11 @@ describe("buildEnergyActionDecision", () => {
       ruleKey: "energy.confirmation.spread_widening",
       releaseKey: "2026-04-28",
       decisionKey: "energy:energy.confirmation.spread_widening:2026-04-28:inactive->active",
-      decision: "allowed",
+      decision: "ignored",
       actionType: "log_only"
     });
     expect(draft?.rationale).toContain("logging-only");
+    expect(draft?.rationale).toContain("no execution policy configured");
     expect(draft?.rationale).toContain("no trade execution");
   });
 

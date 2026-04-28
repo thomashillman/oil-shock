@@ -747,6 +747,93 @@ describe("macro db helpers", () => {
     expect(events[0]?.releaseKey).toBe("2026-04-28");
   });
 
+  it("listConfirmedTriggerEvents throws contextual error for malformed computed_json", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      release_key: "2026-04-28",
+      transition_key: "inactive->active",
+      previous_state: "inactive",
+      new_state: "active",
+      status: "confirmed",
+      reason: "bad-computed",
+      run_key: "run-1",
+      triggered_at: "2026-04-28T00:00:00.000Z",
+      computed_json: "{invalid",
+      details_json: "{}"
+    });
+
+    await expect(listConfirmedTriggerEvents(env, "energy")).rejects.toThrow(
+      "Failed to parse trigger_events computed_json for engineKey=energy ruleKey=energy.confirmation.spread_widening releaseKey=2026-04-28 transitionKey=inactive->active"
+    );
+  });
+
+  it("listConfirmedTriggerEvents throws contextual error for malformed details_json", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push({
+      engine_key: "energy",
+      rule_key: "energy.confirmation.spread_widening",
+      release_key: "2026-04-28",
+      transition_key: "inactive->active",
+      previous_state: "inactive",
+      new_state: "active",
+      status: "confirmed",
+      reason: "bad-details",
+      run_key: "run-1",
+      triggered_at: "2026-04-28T00:00:00.000Z",
+      computed_json: "{}",
+      details_json: "{invalid"
+    });
+
+    await expect(listConfirmedTriggerEvents(env, "energy")).rejects.toThrow(
+      "Failed to parse trigger_events details_json for engineKey=energy ruleKey=energy.confirmation.spread_widening releaseKey=2026-04-28 transitionKey=inactive->active"
+    );
+  });
+
+  it("listConfirmedTriggerEvents supports valid and null trigger-event JSON fields", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("trigger_events").push(
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-28",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "with-json",
+        run_key: "run-1",
+        triggered_at: "2026-04-28T00:00:00.000Z",
+        computed_json: '{"spread":0.72}',
+        details_json: '{"source":"rule-engine"}'
+      },
+      {
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        release_key: "2026-04-27",
+        transition_key: "inactive->active",
+        previous_state: "inactive",
+        new_state: "active",
+        status: "confirmed",
+        reason: "with-null",
+        run_key: "run-0",
+        triggered_at: "2026-04-27T00:00:00.000Z",
+        computed_json: null,
+        details_json: null
+      }
+    );
+
+    const events = await listConfirmedTriggerEvents(env, "energy");
+    expect(events[0]?.computed).toEqual({ spread: 0.72 });
+    expect(events[0]?.details).toEqual({ source: "rule-engine" });
+    expect(events[1]?.computed).toBeNull();
+    expect(events[1]?.details).toBeNull();
+  });
+
   it("listLatestObservationsForEngine returns newest observation per requested series", async () => {
     const db = new MockD1Database();
     const env = testEnv(db);

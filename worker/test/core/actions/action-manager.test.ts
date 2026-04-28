@@ -66,7 +66,8 @@ describe("runActionManagerForEngine", () => {
     });
 
     expect(first.processedCount).toBe(1);
-    expect(first.allowedCount).toBe(1);
+    expect(first.allowedCount).toBe(0);
+    expect(first.ignoredCount).toBe(1);
     expect(mockInsertActionLog).toHaveBeenCalledTimes(1);
     expect(second.processedCount).toBe(0);
     expect(second.allowedCount).toBe(0);
