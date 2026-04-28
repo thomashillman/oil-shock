@@ -7,9 +7,11 @@ import {
   getFeedHealthSummary,
   getLatestFeedChecks,
   getLatestObservation,
+  getRuleState,
   insertActionLog,
   insertRenderedOutput,
   insertTriggerEvent,
+  listLatestObservationsForEngine,
   listEnabledFeedKeys,
   listRegisteredFeeds,
   recordFeedCheck,
@@ -233,12 +235,33 @@ class MockD1Database {
       const count = this.feedRegistry.filter((row) => row.engine_key === engineKey).length;
       return { count } as T;
     }
+    if (normalized.includes("from rule_state")) {
+      const row = this.ruleStates.find(
+        (item) => item.engine_key === params[0] && item.rule_key === params[1] && item.state_key === params[2]
+      );
+      return (row as T | undefined) ?? null;
+    }
 
     throw new Error(`Unhandled first query: ${query}`);
   }
 
   async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("from observations") && normalized.includes("series_key in")) {
+      const engineKey = params[0];
+      const keys = new Set(params.slice(1).map((value) => String(value)));
+      return {
+        results: this.observations
+          .filter((row) => row.engine_key === engineKey && keys.has(String(row.series_key)))
+          .sort((a, b) => {
+            const bySeries = String(a.series_key).localeCompare(String(b.series_key));
+            if (bySeries !== 0) return bySeries;
+            const byAsOf = String(b.as_of_date).localeCompare(String(a.as_of_date));
+            if (byAsOf !== 0) return byAsOf;
+            return String(b.observed_at).localeCompare(String(a.observed_at));
+          }) as T[]
+      };
+    }
     if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
       const engineKey = params[0];
       return {
@@ -539,6 +562,62 @@ describe("macro db helpers", () => {
     await insertTriggerEvent(env, event);
 
     expect(db.table("trigger_events")).toHaveLength(1);
+  });
+
+  it("listLatestObservationsForEngine returns newest observation per requested series", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    await upsertObservation(env, {
+      engineKey: "energy",
+      feedKey: "energy_spread.wti_brent_spread",
+      seriesKey: "energy_spread.wti_brent_spread",
+      releaseKey: "2026-04-27",
+      asOfDate: "2026-04-27",
+      observedAt: "2026-04-27T00:00:00.000Z",
+      value: 0.4
+    });
+    await upsertObservation(env, {
+      engineKey: "energy",
+      feedKey: "energy_spread.wti_brent_spread",
+      seriesKey: "energy_spread.wti_brent_spread",
+      releaseKey: "2026-04-28",
+      asOfDate: "2026-04-28",
+      observedAt: "2026-04-28T00:00:00.000Z",
+      value: 0.8
+    });
+    await upsertObservation(env, {
+      engineKey: "energy",
+      feedKey: "energy_spread.diesel_wti_crack",
+      seriesKey: "energy_spread.diesel_wti_crack",
+      releaseKey: "2026-04-28",
+      asOfDate: "2026-04-28",
+      observedAt: "2026-04-28T00:00:00.000Z",
+      value: 0.7
+    });
+
+    const latest = await listLatestObservationsForEngine(env, "energy", [
+      "energy_spread.wti_brent_spread",
+      "energy_spread.diesel_wti_crack"
+    ]);
+
+    expect(latest["energy_spread.wti_brent_spread"]?.value).toBe(0.8);
+    expect(latest["energy_spread.diesel_wti_crack"]?.value).toBe(0.7);
+  });
+
+  it("getRuleState reads previously persisted rule state", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    await upsertRuleState(env, {
+      engineKey: "energy",
+      ruleKey: "energy.confirmation.spread_widening",
+      stateKey: "current",
+      releaseKey: "2026-04-28",
+      state: { status: "active" },
+      evaluatedAt: "2026-04-28T00:00:00.000Z"
+    });
+
+    const current = await getRuleState(env, "energy", "energy.confirmation.spread_widening", "current");
+    expect(current?.state).toEqual({ status: "active" });
   });
 
   it("insertActionLog writes allowed/blocked decisions and is idempotent by engine_key + decision_key", async () => {

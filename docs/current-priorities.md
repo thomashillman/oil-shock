@@ -10,6 +10,11 @@ This document captures the current sequencing and decision constraints for work 
   - `/api/feed-health` now reports read-only feed health from `feed_registry` + latest `feed_checks`
   - Fallback remains in place: when no Energy registry rows exist, Energy observation writes still include all Energy points
   - CPI and macro release collection remain disabled
+- **Macro Signals bridge slice (April 2026): Energy Rule Engine v2 lifecycle** — ✅ COMPLETE
+  - Energy scoring now runs a typed Rule Engine v2 lifecycle bridge after the existing legacy Energy score write
+  - The bridge reads Energy `observations`, persists rule lifecycle state in `rule_state`, and inserts idempotent transition rows in `trigger_events`
+  - Existing `/api/v1/energy/state` and legacy score storage paths remain compatible
+  - CPI and macro release collection remain disabled
 - **Phase 6A (Energy Engine) pre-canary readiness validation** — Blocked at evidence collection
   - Infrastructure complete: Gate system, validation tests, rollout controls, API health tracking all merged to main
   - **CURRENT PHASE**: Pre-canary readiness validation (evidence collection)
@@ -185,6 +190,11 @@ Keep collection, scoring, snapshot writing, and the current API surface working 
 ### 2. Stage Macro Signals changes, do not jump there conceptually
 
 Prefer additive, foundational changes over large rewrites that assume a finished multi-engine design. Build the bridge before crossing it.
+
+Near-term follow-up after Rule Engine v2 bridge completion:
+
+- Add Action Manager logging over `trigger_events`, or
+- Introduce generic engine-scoped APIs when backend contracts are stable enough to expose consistently.
 
 ### 3. Keep durable context in the repo
 

@@ -3,11 +3,11 @@ import {
   finishRun,
   getLatestSeriesValue,
   startRun,
-  loadThresholds,
   listActiveRules,
   writeEngineScore
 } from "../db/client";
 import { evaluateRules } from "../core/rules/engine";
+import { runEnergyRuleEngineV2 } from "../core/rules/energy-v2";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 
@@ -41,7 +41,7 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
     return;
   }
 
-  // Phase 2: Score with per-component error tracking
+  // Phase 2: Keep legacy Energy score write behaviour.
   try {
     const physicalStress = safeValue(wtiBrentSpread.value);
     const marketResponse = safeValue(dieselWtiCrack.value);
@@ -80,6 +80,13 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
     log("error", "Energy scorer failed", { runKey, error: String(error), componentErrors });
     // Graceful degradation: don't re-throw, continue with stale data available for fallback
   }
+
+  // Phase 3: Rule Engine v2 bridge lifecycle (fails closed on persistence errors).
+  await runEnergyRuleEngineV2(env, {
+    runKey,
+    releaseKey: nowIso.slice(0, 10),
+    evaluatedAt: nowIso
+  });
 }
 
 export async function runScore(env: Env, now = new Date()): Promise<void> {
@@ -89,7 +96,7 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
   log("info", "Starting scoring run", { runKey });
 
   try {
-    // Phase 3: Oil Shock scoring retired. Only run new Macro Signals engines.
+    // Oil Shock scoring retired. Run active Macro Signals engines.
     await runEnergyScore(env, nowIso, runKey);
     await finishRun(env, runKey, "success", {
       message: "Macro Signals engines scored"
