@@ -4,8 +4,12 @@ import type { ActionDecisionDraft } from "./types";
 const SUPPORTED_RULE_KEY = "energy.confirmation.spread_widening";
 const SUPPORTED_TRANSITION_KEY = "inactive->active";
 
-function decisionKeyFor(event: TriggerEventRow): string {
+export function decisionKeyForTriggerEvent(event: TriggerEventRow): string {
   return `${event.engineKey}:${event.ruleKey}:${event.releaseKey}:${event.transitionKey}`;
+}
+
+export function isSupportedEnergyTriggerEvent(event: TriggerEventRow): boolean {
+  return event.ruleKey === SUPPORTED_RULE_KEY && event.transitionKey === SUPPORTED_TRANSITION_KEY;
 }
 
 export function buildEnergyActionDecision(event: TriggerEventRow): ActionDecisionDraft | null {
@@ -18,7 +22,7 @@ export function buildEnergyActionDecision(event: TriggerEventRow): ActionDecisio
       engineKey: event.engineKey,
       ruleKey: event.ruleKey,
       releaseKey: event.releaseKey,
-      decisionKey: decisionKeyFor(event),
+      decisionKey: decisionKeyForTriggerEvent(event),
       decision: "error",
       actionType: "log_only",
       rationale: "logging-only bridge received malformed trigger details; no trade execution",
@@ -26,12 +30,12 @@ export function buildEnergyActionDecision(event: TriggerEventRow): ActionDecisio
     };
   }
 
-  if (event.ruleKey === SUPPORTED_RULE_KEY && event.transitionKey === SUPPORTED_TRANSITION_KEY) {
+  if (isSupportedEnergyTriggerEvent(event)) {
     return {
       engineKey: event.engineKey,
       ruleKey: event.ruleKey,
       releaseKey: event.releaseKey,
-      decisionKey: decisionKeyFor(event),
+      decisionKey: decisionKeyForTriggerEvent(event),
       decision: "ignored",
       actionType: "log_only",
       rationale:
@@ -48,7 +52,7 @@ export function buildEnergyActionDecision(event: TriggerEventRow): ActionDecisio
     engineKey: event.engineKey,
     ruleKey: event.ruleKey,
     releaseKey: event.releaseKey,
-    decisionKey: decisionKeyFor(event),
+    decisionKey: decisionKeyForTriggerEvent(event),
     decision: "ignored",
     actionType: "log_only",
     rationale: "logging-only bridge has no execution policy configured for this trigger",

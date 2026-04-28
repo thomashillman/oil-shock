@@ -1,11 +1,18 @@
 import type { Env } from "../../env";
-import { insertActionLog, listUnloggedConfirmedTriggerEvents } from "../../db/macro";
-import { buildEnergyActionDecision } from "./energy-actions";
+import {
+  hasActionLogDecisionForKey,
+  hasActionLogDecisionForRuleRelease,
+  insertActionLog,
+  listConfirmedTriggerEvents
+} from "../../db/macro";
+import { decisionKeyForTriggerEvent } from "./energy-actions";
+import { evaluateEnergyGuardrailPolicy } from "../guardrails/energy-policy";
 import type { ActionDecisionDraft, ActionManagerResult } from "./types";
 
 function emptyResult(): ActionManagerResult {
   return {
     processedCount: 0,
+    skippedCount: 0,
     allowedCount: 0,
     blockedCount: 0,
     ignoredCount: 0,
@@ -25,7 +32,7 @@ export async function runActionManagerForEngine(
   env: Env,
   input: { engineKey: string; nowIso: string }
 ): Promise<ActionManagerResult> {
-  const events = await listUnloggedConfirmedTriggerEvents(env, input.engineKey);
+  const events = await listConfirmedTriggerEvents(env, input.engineKey);
   if (events.length === 0) {
     return emptyResult();
   }
@@ -33,8 +40,46 @@ export async function runActionManagerForEngine(
   const result = emptyResult();
 
   for (const event of events) {
-    const draft = input.engineKey === "energy" ? buildEnergyActionDecision(event) : null;
-    if (!draft) {
+    if (input.engineKey !== "energy") {
+      continue;
+    }
+
+    const decisionKey = decisionKeyForTriggerEvent(event);
+    const duplicateDecisionExists = await hasActionLogDecisionForKey(env, {
+      engineKey: input.engineKey,
+      decisionKey
+    });
+    const sameRuleReleaseDecisionExists = await hasActionLogDecisionForRuleRelease(env, {
+      engineKey: input.engineKey,
+      ruleKey: event.ruleKey,
+      releaseKey: event.releaseKey,
+      decisionKey
+    });
+    const policy = evaluateEnergyGuardrailPolicy({
+      event,
+      duplicateDecisionExists,
+      sameRuleReleaseDecisionExists
+    });
+    const draft: ActionDecisionDraft = {
+      engineKey: event.engineKey,
+      ruleKey: event.ruleKey,
+      releaseKey: event.releaseKey,
+      decisionKey,
+      decision: policy.decision,
+      actionType: policy.actionType,
+      rationale: policy.rationale,
+      details: {
+        ...policy.details,
+        checks: policy.checks,
+        transitionKey: event.transitionKey,
+        previousState: event.previousState,
+        newState: event.newState
+      }
+    };
+
+    if (duplicateDecisionExists) {
+      result.skippedCount += 1;
+      increment(result, draft);
       continue;
     }
 

@@ -25,13 +25,14 @@ Implemented or partially implemented today:
 - Read-only `/api/feed-health` endpoint backed by registry metadata and latest feed checks.
 - Energy Rule Engine v2 bridge lifecycle that reads `observations`, writes `rule_state`, and emits idempotent `trigger_events` for Energy confirmation transitions.
 - Energy Action Manager logging bridge that reads confirmed Energy `trigger_events` and writes idempotent logging-only decisions to `action_log`.
+- Energy Guardrail Policy v1 logging-only layer that evaluates confirmed Energy triggers (duplicate decision key, same rule/release, execution-policy absence, cooldown placeholder) before writing `action_log`.
 
 Not complete yet:
 
 - No target multi-engine schema as the primary model.
 - No registry-driven collector runner.
 - No generic multi-engine rule lifecycle; current Rule Engine v2 lifecycle bridge is Energy-only.
-- No full action manager for portfolio guardrails (current bridge is Energy-only logging).
+- No full action manager for portfolio guardrails (current bridge is Energy-only logging with Guardrail Policy v1 checks only).
 - No generic engine-scoped API surface.
 - No Macro Signals frontend built from backend engine/feed registries.
 - No CPI, Fed pivot, UK macro, valuation, or momentum engines.
@@ -261,7 +262,7 @@ corepack pnpm typecheck
 
 Goal: centralise action decisions and persist every allowed or blocked decision.
 
-Status: in progress (Energy logging-only Action Manager bridge complete).
+Status: in progress (Energy logging-only Action Manager bridge and Guardrail Policy v1 logging checks complete).
 
 Files to create or update:
 
@@ -274,11 +275,11 @@ Files to create or update:
 
 Guardrails to implement first:
 
-- 15 percent monthly cap.
-- Cooling-off period after confirmed trigger.
-- No stacking on the same release or print.
-- Target allocation ceiling.
-- Fail closed if required portfolio or prior action state cannot be read.
+- 15 percent monthly cap. (not implemented yet)
+- Cooling-off period after confirmed trigger. (placeholder only, not configured)
+- No stacking on the same release or print. (partial: same rule/release decision check in Guardrail Policy v1)
+- Target allocation ceiling. (not implemented yet)
+- Fail closed if required portfolio or prior action state cannot be read. (partial: persistence failures fail closed)
 
 Work required:
 

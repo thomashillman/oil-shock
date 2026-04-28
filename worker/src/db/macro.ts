@@ -733,6 +733,46 @@ export async function insertActionLog(env: Env, input: ActionLogInput): Promise<
     .run();
 }
 
+export async function hasActionLogDecisionForKey(
+  env: Env,
+  input: { engineKey: string; decisionKey: string }
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `
+    SELECT id
+    FROM action_log
+    WHERE engine_key = ?
+      AND decision_key = ?
+    LIMIT 1
+    `
+  )
+    .bind(input.engineKey, input.decisionKey)
+    .first<{ id: number }>();
+
+  return Boolean(row);
+}
+
+export async function hasActionLogDecisionForRuleRelease(
+  env: Env,
+  input: { engineKey: string; ruleKey: string; releaseKey: string; decisionKey: string }
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `
+    SELECT id
+    FROM action_log
+    WHERE engine_key = ?
+      AND rule_key = ?
+      AND release_key = ?
+      AND decision_key <> ?
+    LIMIT 1
+    `
+  )
+    .bind(input.engineKey, input.ruleKey, input.releaseKey, input.decisionKey)
+    .first<{ id: number }>();
+
+  return Boolean(row);
+}
+
 export async function insertRenderedOutput(env: Env, input: RenderedOutputInput): Promise<void> {
   const idempotencyKey = input.outputIdempotencyKey ?? `${input.outputKey}:${input.releaseKey ?? ""}:${input.renderedAt}`;
 
