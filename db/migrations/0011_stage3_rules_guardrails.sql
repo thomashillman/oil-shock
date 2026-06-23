@@ -1,5 +1,4 @@
--- Stage 3 additive migration: rule seeds + guardrail flags on snapshots.
-ALTER TABLE signal_snapshots ADD COLUMN guardrail_flags_json TEXT;
+-- guardrail_flags_json is added by 0002_live_contract.sql.
 
 INSERT OR IGNORE INTO rules (
   engine_key,
