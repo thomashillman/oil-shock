@@ -7,6 +7,7 @@
 - Config: `wrangler.jsonc`
 - Local migration:
   - `corepack pnpm db:migrate:local`
+- The live dashboard contract now expects snapshot history, rules management, and guardrail failure routes from the Worker.
 - Deploy:
   - Preview: `wrangler deploy --env preview --config wrangler.jsonc`
   - Production: `wrangler deploy --env production --config wrangler.jsonc`
