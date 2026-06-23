@@ -26,7 +26,42 @@ class FakePreparedStatement {
   }
 }
 
-type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger" | "rules";
+type TableName =
+  | "series_points"
+  | "runs"
+  | "run_evidence"
+  | "signal_snapshots"
+  | "scores"
+  | "impairment_ledger"
+  | "state_change_events"
+  | "config_thresholds"
+  | "rules"
+  | "api_feed_registry"
+  | "api_health_metrics"
+  | "pre_deploy_gates";
+
+const SEED_CONFIG_THRESHOLDS: Row[] = [
+  { key: "state_aligned_threshold_max", value: 0.3 },
+  { key: "state_mild_threshold_min", value: 0.3 },
+  { key: "state_mild_threshold_max", value: 0.5 },
+  { key: "state_persistent_threshold_min", value: 0.5 },
+  { key: "state_persistent_threshold_max", value: 0.75 },
+  { key: "state_deep_threshold_min", value: 0.75 },
+  { key: "shock_age_threshold_hours", value: 72 },
+  { key: "dislocation_persistence_threshold_hours", value: 72 },
+  { key: "transmission_freshness_threshold_days", value: 8 },
+  { key: "ledger_adjustment_magnitude", value: 0.1 },
+  { key: "mismatch_market_response_weight", value: 0.15 },
+  { key: "confirmation_physical_stress_min", value: 0.6 },
+  { key: "confirmation_price_signal_max", value: 0.45 },
+  { key: "confirmation_market_response_min", value: 0.5 },
+  { key: "coverage_missing_penalty", value: 0.34 },
+  { key: "coverage_stale_penalty", value: 0.16 },
+  { key: "coverage_max_penalty", value: 1.0 },
+  { key: "state_deep_persistence_hours", value: 120 },
+  { key: "state_persistent_persistence_hours", value: 72 },
+  { key: "ledger_stale_threshold_days", value: 30 }
+];
 
 export class FakeD1Database {
   private readonly tables: Record<TableName, Row[]> = {
@@ -34,8 +69,59 @@ export class FakeD1Database {
     runs: [],
     run_evidence: [],
     signal_snapshots: [],
+    scores: [],
     impairment_ledger: [],
-    rules: []
+    state_change_events: [],
+    config_thresholds: [...SEED_CONFIG_THRESHOLDS],
+    rules: [
+      {
+        id: 1,
+        engine_key: "oil_shock",
+        rule_key: "oilshock.recognition_gap_bonus",
+        name: "Recognition gap bonus",
+        predicate_json: JSON.stringify({
+          type: "all",
+          predicates: [
+            { type: "threshold", metric: "physicalStress", operator: ">=", value: 0.6 },
+            { type: "threshold", metric: "priceSignal", operator: "<=", value: 0.45 }
+          ]
+        }),
+        weight: 0.03,
+        action: "adjust_mismatch",
+        is_active: 1
+      }
+    ],
+    api_feed_registry: [
+      {
+        feed_name: "eia_wti",
+        provider: "EIA",
+        display_name: "EIA WTI Spot",
+        enabled: 1,
+        freshness_window_hours: 24,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      },
+      {
+        feed_name: "eia_brent",
+        provider: "EIA",
+        display_name: "EIA Brent Spot",
+        enabled: 1,
+        freshness_window_hours: 24,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      },
+      {
+        feed_name: "eia_diesel_wti_crack",
+        provider: "EIA",
+        display_name: "EIA Diesel/WTI Crack",
+        enabled: 1,
+        freshness_window_hours: 24,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      }
+    ],
+    api_health_metrics: [],
+    pre_deploy_gates: []
   };
 
   private nextId = 1;
@@ -90,7 +176,20 @@ export class FakeD1Database {
         clocks_json: params[9],
         ledger_impact_json: params[10],
         guardrail_flags_json: params[11],
-        run_key: params[12]
+        run_key: params[12] ?? null
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into scores")) {
+      this.insert("scores", {
+        engine_key: params[0],
+        feed_key: params[1],
+        scored_at: params[2],
+        score_value: params[3],
+        confidence: params[4] ?? null,
+        flags_json: params[5] ?? null,
+        snapshot_id: normalized.includes("snapshot_id") ? params[6] : null,
+        run_key: normalized.includes("snapshot_id") ? (params[7] ?? null) : (params[6] ?? null)
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -105,18 +204,6 @@ export class FakeD1Database {
         coverage_quality: params[6],
         evidence_group_label: params[7],
         details_json: params[8]
-      });
-      return { success: true, meta: { last_row_id: this.nextId - 1 } };
-    }
-    if (normalized.includes("insert into rules")) {
-      this.insert("rules", {
-        engine_key: params[0],
-        rule_key: params[1],
-        name: params[2],
-        predicate_json: params[3],
-        weight: params[4],
-        action: "adjust_mismatch",
-        is_active: params[5] ?? 1
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -144,18 +231,77 @@ export class FakeD1Database {
       return { success: true, meta: { last_row_id: 0 } };
     }
     if (normalized.startsWith("update rules")) {
-      const engineKey = String(params[3]);
-      const ruleKey = String(params[4]);
-      const row = this.tables.rules.find((item) => item.engine_key === engineKey && item.rule_key === ruleKey);
+      const ruleKey = String(params[3]);
+      const row = this.tables.rules.find((item) => item.rule_key === ruleKey);
       if (row) {
-        if (params[0] !== null && params[0] !== undefined) {
-          row.weight = params[0];
-        }
-        if (params[1] !== null && params[1] !== undefined) {
-          row.predicate_json = params[1];
-        }
-        if (params[2] !== null && params[2] !== undefined) {
-          row.is_active = params[2];
+        row.weight = params[0] ?? row.weight;
+        row.predicate_json = params[1] ?? row.predicate_json;
+        row.is_active = params[2] ?? row.is_active;
+      }
+      return { success: true, meta: { last_row_id: 0 } };
+    }
+    if (normalized.includes("insert into rules")) {
+      this.insert("rules", {
+        engine_key: params[0],
+        rule_key: params[1],
+        name: params[2],
+        predicate_json: params[3],
+        weight: params[4],
+        action: "adjust_mismatch",
+        is_active: params[5]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into state_change_events")) {
+      this.insert("state_change_events", {
+        generated_at: params[0],
+        previous_state: params[1],
+        new_state: params[2],
+        state_transition_duration_seconds: params[3],
+        transmission_pressure_changed: params[4]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into api_health_metrics")) {
+      this.insert("api_health_metrics", {
+        feed_name: params[0],
+        provider: params[1],
+        status: params[2],
+        latency_ms: params[3] ?? null,
+        attempted_at: params[4]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into pre_deploy_gates")) {
+      this.insert("pre_deploy_gates", {
+        flag_name: params[0],
+        gate_name: params[1],
+        status: params[2],
+        signed_off_at: params[3] ?? null,
+        signed_off_by: null,
+        expires_at: null,
+        notes: params[4] ?? null,
+        last_validated_at: null,
+        validation_result: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.startsWith("update pre_deploy_gates")) {
+      // Handle expiration updates from getGateStatus()
+      // UPDATE pre_deploy_gates SET status = 'EXPIRED', updated_at = ? WHERE flag_name = ? AND ...
+      const flagName = params[1];
+      const now = params[0];
+      for (const gate of this.tables.pre_deploy_gates) {
+        if (
+          gate.flag_name === flagName &&
+          gate.status === "SIGNED_OFF" &&
+          gate.expires_at &&
+          gate.expires_at < now
+        ) {
+          gate.status = "EXPIRED";
+          gate.updated_at = now;
         }
       }
       return { success: true, meta: { last_row_id: 0 } };
@@ -165,6 +311,39 @@ export class FakeD1Database {
 
   async first<T>(query: string, params: unknown[]): Promise<T | null> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("count(*) as count from config_thresholds")) {
+      return { count: this.tables.config_thresholds.length } as T;
+    }
+    if (normalized === "select 1") {
+      return { "1": 1 } as T;
+    }
+    // Handle api_health_metrics aggregate query
+    if (normalized.includes("from api_health_metrics") && normalized.includes("count(*) as total")) {
+      const feedName = params[0];
+      const provider = params[1];
+      const attemptedAtThreshold = params[2];
+
+      const metrics = this.tables.api_health_metrics.filter(
+        (m) =>
+          m.feed_name === feedName &&
+          m.provider === provider &&
+          String(m.attempted_at) >= String(attemptedAtThreshold)
+      );
+
+      const total = metrics.length;
+      const successCount = metrics.filter((m) => m.status === "success").length;
+      const failureCount = metrics.filter((m) => m.status === "failure" || m.status === "timeout").length;
+      const lastSuccess = metrics
+        .filter((m) => m.status === "success")
+        .sort((a, b) => String(b.attempted_at).localeCompare(String(a.attempted_at)))[0]?.attempted_at ?? null;
+
+      return {
+        total,
+        success_count: successCount,
+        failure_count: failureCount,
+        last_success: lastSuccess
+      } as T;
+    }
     if (normalized.includes("from series_points")) {
       const seriesKey = params[0];
       const row = [...this.tables.series_points]
@@ -178,17 +357,36 @@ export class FakeD1Database {
       )[0];
       return (row as T) ?? null;
     }
-    if (normalized.includes("from rules")) {
+    if (normalized.includes("from scores")) {
       const engineKey = params[0];
-      const rows = this.tables.rules
-        .filter((item) => item.engine_key === engineKey && Number(item.is_active ?? 0) === 1)
-        .sort((a, b) => Number(a.id) - Number(b.id));
-      return (rows[0] as T) ?? null;
+      const feedKey = params[1];
+      const row = [...this.tables.scores]
+        .filter((item) => item.engine_key === engineKey && item.feed_key === feedKey)
+        .sort((a, b) => String(b.scored_at).localeCompare(String(a.scored_at)))[0];
+      return (row as T) ?? null;
     }
     if (normalized.includes("from runs") && normalized.includes("run_type = 'score'")) {
       const row = [...this.tables.runs]
         .filter((item) => item.run_type === "score")
         .sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))[0];
+      return (row as T) ?? null;
+    }
+    if (normalized.includes("from state_change_events")) {
+      if (normalized.includes("where new_state != 'aligned'") && normalized.includes("order by generated_at asc")) {
+        const row = [...this.tables.state_change_events]
+          .filter((item) => item.new_state !== "aligned")
+          .sort((a, b) => String(a.generated_at).localeCompare(String(b.generated_at)))[0];
+        return (row as T) ?? null;
+      }
+      if (normalized.includes("where transmission_pressure_changed = 1") && normalized.includes("order by generated_at asc")) {
+        const row = [...this.tables.state_change_events]
+          .filter((item) => item.transmission_pressure_changed === 1)
+          .sort((a, b) => String(a.generated_at).localeCompare(String(b.generated_at)))[0];
+        return (row as T) ?? null;
+      }
+      // getLatestStateChangeEvent
+      const row = [...this.tables.state_change_events]
+        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))[0];
       return (row as T) ?? null;
     }
     return null;
@@ -204,25 +402,59 @@ export class FakeD1Database {
       return { results: rows as T[] };
     }
     if (normalized.includes("from impairment_ledger")) {
-      const limit = String(params[0]);
-      const rows = this.tables.impairment_ledger
-        .filter((item) => item.retired_at === null && String(item.review_due_at) <= limit)
-        .sort((a, b) => String(a.review_due_at).localeCompare(String(b.review_due_at)));
+      const rows = [...this.tables.impairment_ledger]
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return { results: rows as T[] };
     }
-    if (normalized.includes("from signal_snapshots")) {
-      const limit = Number(params[0] ?? 0);
-      const rows = [...this.tables.signal_snapshots]
-        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))
-        .slice(0, Number.isFinite(limit) && limit > 0 ? limit : this.tables.signal_snapshots.length);
-      return { results: rows as T[] };
+    if (normalized.includes("from config_thresholds")) {
+      return { results: this.tables.config_thresholds as T[] };
     }
     if (normalized.includes("from rules")) {
-      const engineKey = params[0];
-      const rows = this.tables.rules
-        .filter((item) => item.engine_key === engineKey && Number(item.is_active ?? 0) === 1)
-        .sort((a, b) => Number(a.id) - Number(b.id));
+      return {
+        results: this.tables.rules
+          .filter((row) => row.engine_key === params[0] && row.is_active === 1)
+          .sort((a, b) => Number(a.id) - Number(b.id)) as T[]
+      };
+    }
+    if (normalized.includes("from signal_snapshots")) {
+      const limit = Number(params[0] ?? 50);
+      const rows = [...this.tables.signal_snapshots]
+        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))
+        .slice(0, limit)
+        .map((row) => ({
+          generated_at: row.generated_at,
+          mismatch_score: row.mismatch_score,
+          subscores_json: row.subscores_json
+        }));
       return { results: rows as T[] };
+    }
+    if (normalized.includes("from api_feed_registry")) {
+      return { results: this.tables.api_feed_registry.filter((r) => r.enabled === 1) as T[] };
+    }
+    if (normalized.includes("from api_health_metrics")) {
+      // Handle queries like: SELECT ... FROM api_health_metrics WHERE feed_name = ? AND provider = ? AND attempted_at >= ?
+      let metrics = this.tables.api_health_metrics;
+      if (normalized.includes("where") && params.length >= 3) {
+        const feedName = params[0];
+        const provider = params[1];
+        const attemptedAtThreshold = params[2];
+        metrics = metrics.filter(
+          (m) =>
+            m.feed_name === feedName &&
+            m.provider === provider &&
+            String(m.attempted_at) >= String(attemptedAtThreshold)
+        );
+      }
+      return { results: metrics as T[] };
+    }
+    if (normalized.includes("from pre_deploy_gates")) {
+      // Match getGateStatus query: filter by flag_name if provided
+      let gates = this.tables.pre_deploy_gates;
+      if (params.length > 0) {
+        const flagName = params[0];
+        gates = gates.filter((g) => g.flag_name === flagName);
+      }
+      return { results: gates as T[] };
     }
     return { results: [] };
   }
@@ -232,10 +464,53 @@ export class FakeD1Database {
   }
 }
 
+export function createExecutionContext(): ExecutionContext {
+  return {
+    waitUntil() {},
+    passThroughOnException() {}
+  } as unknown as ExecutionContext;
+}
+
 export function createTestEnv() {
   return {
     APP_ENV: "local" as const,
     PRODUCTION_ORIGIN: "",
-    DB: new FakeD1Database() as unknown as D1Database
+    DB: new FakeD1Database() as unknown as D1Database,
+    EIA_API_KEY: "test-eia-key",
+    GIE_API_KEY: "test-gie-key"
   };
+}
+
+/**
+ * Test helper: disable a feed in the fake registry.
+ * Used to test missing required feed scenarios.
+ */
+export function disableFeedInRegistry(env: any, feedName: string): void {
+  const db = env.DB as any;
+  const feed = db.tables.api_feed_registry.find((f: any) => f.feed_name === feedName);
+  if (feed) {
+    feed.enabled = 0;
+  }
+}
+
+/**
+ * Test helper: add an extra enabled feed to the fake registry.
+ * Used to test that extra seeded feeds don't block Phase 6A readiness.
+ */
+export function addExtraFeedToRegistry(
+  env: any,
+  feedName: string,
+  provider: string,
+  displayName: string
+): void {
+  const db = env.DB as any;
+  db.tables.api_feed_registry.push({
+    feed_name: feedName,
+    provider,
+    display_name: displayName,
+    enabled: 1,
+    freshness_window_hours: 24,
+    timeout_threshold_ms: 30000,
+    error_rate_threshold_pct: 5
+  });
 }

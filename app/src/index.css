@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: #eaecf0; font-family: "Space Grotesk", system-ui, -apple-system, sans-serif; }
+
+button.refresh-btn {
+  transition: background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+button.refresh-btn:hover:not(:disabled) {
+  background: #f9fafb !important;
+  border-color: #d1d5db !important;
+}
+button.refresh-btn:disabled {
+  opacity: 0.4;
+}
+
+@keyframes spin-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+.spin-icon { display: inline-block; animation: spin-ccw 0.9s linear infinite; }

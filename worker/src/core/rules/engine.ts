@@ -41,10 +41,7 @@ const METRICS: RuleMetricKey[] = ["physicalStress", "priceSignal", "marketRespon
 const OPERATORS: RuleOperator[] = [">", ">=", "<", "<=", "==", "!="];
 
 export function isRulePredicate(value: unknown): value is RulePredicate {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   if (candidate.type === "threshold") {
     return (
@@ -56,30 +53,18 @@ export function isRulePredicate(value: unknown): value is RulePredicate {
       Number.isFinite(candidate.value)
     );
   }
-
   if (candidate.type === "all") {
     return Array.isArray(candidate.predicates) && candidate.predicates.every((predicate) => isRulePredicate(predicate));
   }
-
   return false;
 }
 
 function compare(left: number, operator: RuleOperator, right: number): boolean {
-  if (operator === ">") {
-    return left > right;
-  }
-  if (operator === ">=") {
-    return left >= right;
-  }
-  if (operator === "<") {
-    return left < right;
-  }
-  if (operator === "<=") {
-    return left <= right;
-  }
-  if (operator === "==") {
-    return left === right;
-  }
+  if (operator === ">") return left > right;
+  if (operator === ">=") return left >= right;
+  if (operator === "<") return left < right;
+  if (operator === "<=") return left <= right;
+  if (operator === "==") return left === right;
   return left !== right;
 }
 
@@ -87,7 +72,6 @@ function matchesPredicate(predicate: RulePredicate, metrics: RuleMetrics): boole
   if (predicate.type === "threshold") {
     return compare(metrics[predicate.metric], predicate.operator, predicate.value);
   }
-
   return predicate.predicates.every((childPredicate) => matchesPredicate(childPredicate, metrics));
 }
 
@@ -99,7 +83,6 @@ export function evaluateRules(rules: RuleDefinition[], metrics: RuleMetrics): Ru
     if (!matchesPredicate(rule.predicate, metrics)) {
       continue;
     }
-
     appliedRules.push(rule);
     if (rule.action === "adjust_mismatch") {
       totalAdjustment += rule.weight;

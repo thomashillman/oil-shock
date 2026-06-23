@@ -2,6 +2,12 @@
   "name": "oil-shock",
   "private": true,
   "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  },
   "scripts": {
     "build": "corepack pnpm -r --if-present build",
     "typecheck": "corepack pnpm -r --if-present typecheck",
@@ -9,10 +15,13 @@
     "test": "corepack pnpm -r --if-present test",
     "dev:worker": "corepack pnpm --filter @oil-shock/worker dev",
     "dev:web": "corepack pnpm --filter @oil-shock/app dev",
-    "db:migrate:local": "corepack pnpm --filter @oil-shock/worker db:migrate:local",
+    "db:migrate:local": "tsx scripts/apply-all-migrations.ts --local",
     "poc:run": "corepack pnpm db:migrate:local && corepack pnpm build",
-    "replay:validate": "node scripts/replay-validate.mjs",
+    "replay:validate": "tsx scripts/replay-validate.ts",
     "docs:check": "node scripts/docs-check.mjs",
-    "ci:preflight": "corepack pnpm lint && corepack pnpm -r --if-present typecheck && corepack pnpm test && corepack pnpm build"
+    "ci:preflight": "corepack pnpm lint && corepack pnpm -r --if-present typecheck && corepack pnpm test && corepack pnpm phase6a:evidence:test && corepack pnpm build",
+    "phase6a:evidence": "tsx scripts/phase6a/capture-canary-evidence.ts",
+    "phase6a:evidence:test": "corepack pnpm -C worker exec vitest run test/phase6a",
+    "phase6a:d1:preflight": "tsx scripts/phase6a/check-d1-target.ts"
   }
 }

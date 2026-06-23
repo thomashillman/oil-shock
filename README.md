@@ -1,77 +1,78 @@
 # Oil Shock
 
-Oil Shock is a low-cost energy dislocation state engine. It monitors whether
-physical energy constraints are worsening faster than markets are recognizing,
-then publishes a snapshot state with supporting evidence and coverage/freshness
-signals.
-
-## Current Delivery Status
-
-This repository currently includes:
-
-- Live Cloudflare Worker deployments (preview and production)
-- Live Cloudflare D1 database with schema applied
-- Live Vercel frontend deployments (preview and production alias)
-- Operational CI on GitHub Actions
-- Functional UI screens for:
-  - State summary
-  - Evidence table
-  - Ledger review queue
-
-## Live Endpoints
-
-- Frontend (production): `https://oil-shock-web.vercel.app`
-- Frontend (latest preview example): `https://oil-shock-7a0bsn7d3-thomashillmans-projects.vercel.app`
-- Worker API (production): `https://energy-dislocation-engine-production.tj-hillman.workers.dev`
-- Worker API (preview): `https://energy-dislocation-engine-preview.tj-hillman.workers.dev`
+Oil Shock is a low-cost energy dislocation state engine. It detects when
+physical energy constraints appear to be worsening faster than market pricing
+recognizes, then exposes a snapshot state and supporting evidence.
 
 ## Architecture
 
-- Backend runtime: Cloudflare Workers
-- Persistence: Cloudflare D1 (`energy_dislocation`)
-- Frontend: Vite + React
-- CI: GitHub Actions (`.github/workflows/ci.yml`)
-- Testing: Vitest (worker + app), replay validation, docs checks
+- Backend: Cloudflare Workers
+- Storage: Cloudflare D1
+- Frontend: Vite + React (Vercel-friendly)
+- Validation: Vitest + replay validation + docs checks
 
-Core flow:
+Core runtime flow:
 
 1. Collect source signals into `series_points`
-2. Compute mismatch state and write `signal_snapshots` and `run_evidence`
-3. Serve snapshot-backed API responses
-4. Render state/evidence/ledger views in frontend
+2. Score mismatch and write `signal_snapshots` + `run_evidence`
+3. Serve precomputed API responses (`/api/state`, `/api/evidence`, `/api/coverage`)
 
-## API Surface
+For detailed implementation notes, see `docs/architecture.md`. For current transition guidance and sequencing, see `docs/current-priorities.md`.
 
-- `GET /api/state`
-- `GET /api/state/history`
-- `GET /api/evidence`
-- `GET /api/coverage`
-- `GET /api/ledger/review`
-- `GET /api/admin/rules`
-- `POST /api/admin/rules`
-- `POST /api/admin/rules/dry-run`
-- `POST /api/admin/backfill/rescore`
-- `GET /api/admin/guardrails/failures`
-- `POST /api/ledger`
-- `PATCH /api/ledger/:id`
-- `POST /api/admin/run-poc` (manual cycle trigger)
+## Data Sources
+
+All collectors live in `worker/src/jobs/collectors/`. Every emitted point is namespaced under one of three subscore dimensions: `price_signal.*`, `physical_stress.*`, `market_response.*`.
+
+| Source | Endpoint(s) | Auth | Subscore dimension |
+|---|---|---|---|
+| **EIA v2** — WTI spot (`RWTC`) | `https://api.eia.gov/v2/petroleum/pri/spt/data` | `EIA_API_KEY` | `price_signal.spot_wti` |
+| **EIA v2** — futures curve (`RCLC1`, `RCLC12`) | `https://api.eia.gov/v2/petroleum/pri/fut/data` | `EIA_API_KEY` | `price_signal.curve_slope` |
+| **EIA v2** — US crude stocks (`WCESTUS1`) | `https://api.eia.gov/v2/petroleum/stoc/wstk/data` | `EIA_API_KEY` | `physical_stress.inventory_draw` |
+| **EIA v2** — refinery utilization | `https://api.eia.gov/v2/petroleum/pnp/unc/data` | `EIA_API_KEY` | `physical_stress.refinery_utilization` |
+| **EIA v2** — 3:2:1 crack spread (RBOB + ULSD + WTI) | `https://api.eia.gov/v2/petroleum/pri/spt/data` | `EIA_API_KEY` | `market_response.crack_spread` |
+| **ENTSOG** — EU pipeline operational data | `https://transparency.entsog.eu/api/v1/operationaldatas` | none | `physical_stress.eu_pipeline_flow` |
+| **GIE AGSI+** — EU gas storage | `https://agsi.gie.eu/api?type=eu` | `GIE_API_KEY` (header `x-key`) | `physical_stress.eu_gas_storage` |
+| **SEC EDGAR** — 10-K / 10-Q / 8-K filings (5 sectors × 4–6 tickers) | `https://www.sec.gov/files/company_tickers.json`, `https://data.sec.gov/submissions/CIK*.json`, `https://www.sec.gov/Archives/edgar/data/*` | none (User-Agent required) | `market_response.sec_impairment` |
+
+See `docs/architecture.md#data-sources-and-api-endpoints` for series IDs, normalization formulas, rolling windows, and `observedAt` provenance for each feed.
+
+## Scoring at a Glance
+
+The scoring engine produces a `mismatchScore` and a `dislocationState` from three subscores:
+
+```
+mismatchScore = clamp01(
+  physicalStress
+  - priceSignal
+  + marketResponse * mismatch_market_response_weight  // default 0.15
+)
+
+coverageScore = clamp01(
+  1
+  - missingDimensions * coverage_missing_penalty      // default 0.34
+  - staleDimensions   * coverage_stale_penalty        // default 0.16
+)
+```
+
+The `dislocationState` (`aligned` / `mild_divergence` / `persistent_divergence` / `deep_divergence`) is a regime classification gated on score thresholds, confirmation gates (`physicalStress >= 0.6`, `priceSignal <= 0.45`, `marketResponse >= 0.5`), and dwell time in the current state (72h for persistent, 120h for deep). A `null` dwell time can never advance past `mild_divergence`. Stale critical data conservatively downgrades to `aligned`.
+
+Every numeric constant (formula weights, gate thresholds, coverage penalties, dwell windows, ledger magnitudes) is stored in the `config_thresholds` D1 table. See `docs/architecture.md#configurable-thresholds` for the threshold groups and change workflow. Do not hardcode constants in code.
 
 ## Repository Layout
 
-- `worker/` - Worker runtime, collectors, scorer, routes, core logic
-- `app/` - Frontend UI, API client, tests
-- `db/migrations/` - D1 schema migration files
-- `docs/` - Deployment and replay docs
-- `scripts/` - repo utility scripts (`replay-validate`, `docs-check`)
-- `specs/` - planning and execution artifacts
-- `.github/workflows/` - CI workflow definitions
+- `worker/` - Worker runtime, scoring pipeline, API routes
+- `app/` - Frontend scaffold
+- `db/migrations/` - D1 schema migrations
+- `docs/` - Deployment, architecture, and transition docs
+- `scripts/` - CI/support scripts
+- `specs/` - Ralph planning and execution artifacts
 
-## Local Development
+## Quick Start
 
 Requirements:
 
 - Node.js 24+
-- Corepack enabled
+- Corepack enabled (`corepack enable`)
 
 Install:
 
@@ -79,7 +80,7 @@ Install:
 corepack pnpm install
 ```
 
-Apply local DB schema:
+Run local migration:
 
 ```bash
 corepack pnpm db:migrate:local
@@ -97,25 +98,27 @@ Run frontend:
 corepack pnpm dev:web
 ```
 
-## Quality and Validation Commands
+## Validation Commands
 
 - Full preflight: `corepack pnpm ci:preflight`
-- Worker tests: `corepack pnpm -C worker test`
-- Frontend tests: `corepack pnpm -C app test`
 - Replay validation: `corepack pnpm replay:validate`
 - Docs check: `corepack pnpm docs:check`
+- Worker tests: `corepack pnpm -C worker test`
+- App tests: `corepack pnpm -C app test`
 
-## Deployment and Infrastructure
+## CI
 
-See [docs/deploy.md](docs/deploy.md) for:
+GitHub Actions workflow: `.github/workflows/ci.yml`
 
-- Cloudflare Worker/D1 deployment commands
-- Vercel frontend deployment and environment setup
-- Preview/production routing model
-- CORS and environment constraints
+The workflow runs on `push` and `pull_request` against `main` and executes:
 
-## Notes
+- Install (`pnpm install --frozen-lockfile`)
+- Preflight checks (`pnpm ci:preflight`)
+- Replay validation (`pnpm replay:validate`)
+- Docs check (`pnpm docs:check`)
 
-- The frontend is configured to use `VITE_API_BASE_URL` and never exposes backend secrets.
-- Worker CORS in production is pinned to `https://oil-shock-web.vercel.app`.
-- Vercel Git-based builds rely on root `vercel.json` output configuration (`app/dist`).
+## Deployment
+
+See [docs/deploy.md](docs/deploy.md) for Cloudflare and Vercel deployment
+details, environment setup, and preview/production routing. For the frontend,
+set `VITE_API_BASE_URL` in both Vercel preview and production environments.

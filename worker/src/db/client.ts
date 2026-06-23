@@ -1,6 +1,6 @@
 import type { Env } from "../env";
+import type { NormalizedPoint, ScoreEvidence, StateSnapshot, StateChangeEvent, DislocationState, ScoringThresholds } from "../types";
 import { AppError } from "../lib/errors";
-import type { NormalizedPoint, ScoreEvidence, StateSnapshot } from "../types";
 import { isRulePredicate, type RuleDefinition } from "../core/rules/engine";
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
@@ -114,7 +114,8 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey: s
     )
     .run();
 
-  return Number(result.meta.last_row_id ?? 0);
+  const snapshotId = Number(result.meta.last_row_id ?? 0);
+  return snapshotId;
 }
 
 export async function writeRunEvidence(env: Env, runKey: string, evidenceItems: ScoreEvidence[]): Promise<void> {
@@ -166,74 +167,33 @@ export async function getLatestSnapshot(env: Env) {
     coverage_confidence: number;
     source_freshness_json: string;
     evidence_ids_json: string;
-    dislocation_state_json?: string | null;
-    state_rationale?: string | null;
-    subscores_json?: string | null;
-    clocks_json?: string | null;
-    ledger_impact_json?: string | null;
-    guardrail_flags_json?: string | null;
-    run_key?: string | null;
+    dislocation_state_json: string;
+    state_rationale: string;
+    subscores_json: string;
+    clocks_json: string;
+    ledger_impact_json: string | null;
+    guardrail_flags_json: string | null;
+    run_key: string | null;
   }>();
   return row ?? null;
 }
 
-export async function getSnapshotHistory(
-  env: Env,
-  limit: number
-): Promise<
-  Array<{
-    generated_at: string;
-    mismatch_score: number;
-    dislocation_state_json?: string | null;
-  }>
-> {
-  const result = await env.DB.prepare(
+async function getLatestScoreRunKey(env: Env): Promise<string | null> {
+  const run = await env.DB.prepare(
     `
-    SELECT generated_at, mismatch_score, dislocation_state_json
-    FROM signal_snapshots
-    ORDER BY generated_at DESC
-    LIMIT ?
+    SELECT run_key
+    FROM runs
+    WHERE run_type = 'score'
+    ORDER BY started_at DESC
+    LIMIT 1
     `
-  )
-    .bind(limit)
-    .all<{
-      generated_at: string;
-      mismatch_score: number;
-      dislocation_state_json?: string | null;
-    }>();
-  return result.results;
+  ).first<{ run_key: string }>();
+  return run?.run_key ?? null;
 }
 
-export async function getRunEvidenceBySnapshotRunKey(
-  env: Env,
-  snapshotRunKey: string | null | undefined
-): Promise<
-  Array<{
-    evidence_key: string;
-    evidence_group: string;
-    observed_at: string;
-    contribution: number;
-    evidence_classification?: string | null;
-    coverage_quality?: string | null;
-    evidence_group_label?: string | null;
-    details_json: string;
-  }>
-> {
-  const runKey =
-    snapshotRunKey ??
-    (await env.DB.prepare(
-      `
-      SELECT run_key
-      FROM runs
-      WHERE run_type = 'score'
-      ORDER BY started_at DESC
-      LIMIT 1
-      `
-    ).first<{ run_key: string }>())?.run_key;
-
-  if (!runKey) {
-    return [];
-  }
+export async function getRunEvidenceBySnapshotRunKey(env: Env, snapshotRunKey: string | null) {
+  const runKey = snapshotRunKey ?? (await getLatestScoreRunKey(env));
+  if (!runKey) return [];
 
   const result = await env.DB.prepare(
     `
@@ -249,13 +209,200 @@ export async function getRunEvidenceBySnapshotRunKey(
       evidence_group: string;
       observed_at: string;
       contribution: number;
-      evidence_classification?: string | null;
-      coverage_quality?: string | null;
-      evidence_group_label?: string | null;
+      evidence_classification: string;
+      coverage_quality: string;
+      evidence_group_label: string;
       details_json: string;
     }>();
 
   return result.results;
+}
+
+export async function getSnapshotHistory(
+  env: Env,
+  limit: number
+): Promise<{ generated_at: string; mismatch_score: number; dislocation_state_json: string }[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT generated_at, mismatch_score, dislocation_state_json
+    FROM signal_snapshots
+    ORDER BY generated_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(limit)
+    .all<{ generated_at: string; mismatch_score: number; dislocation_state_json: string }>();
+  return result.results;
+}
+
+export async function getLatestStateChangeEvent(env: Env): Promise<{
+  generated_at: string;
+  previous_state: DislocationState | null;
+  new_state: DislocationState;
+  state_transition_duration_seconds: number | null;
+  transmission_pressure_changed: boolean;
+} | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at, previous_state, new_state, state_transition_duration_seconds, transmission_pressure_changed
+    FROM state_change_events
+    ORDER BY generated_at DESC
+    LIMIT 1
+    `
+  ).first<{
+    generated_at: string;
+    previous_state: string | null;
+    new_state: string;
+    state_transition_duration_seconds: number | null;
+    transmission_pressure_changed: boolean;
+  }>();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    generated_at: row.generated_at,
+    previous_state: row.previous_state as DislocationState | null,
+    new_state: row.new_state as DislocationState,
+    state_transition_duration_seconds: row.state_transition_duration_seconds,
+    transmission_pressure_changed: row.transmission_pressure_changed
+  };
+}
+
+export async function writeSateChangeEvent(
+  env: Env,
+  event: {
+    generatedAt: string;
+    previousState: DislocationState | null;
+    newState: DislocationState;
+    stateDurationSeconds: number | null;
+    transmissionChanged: boolean;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO state_change_events (
+      generated_at,
+      previous_state,
+      new_state,
+      state_transition_duration_seconds,
+      transmission_pressure_changed
+    )
+    VALUES (?, ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      event.generatedAt,
+      event.previousState,
+      event.newState,
+      event.stateDurationSeconds,
+      event.transmissionChanged ? 1 : 0
+    )
+    .run();
+}
+
+export async function getFirstNonAlignedStateEvent(env: Env): Promise<{ generated_at: string } | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at
+    FROM state_change_events
+    WHERE new_state != 'aligned'
+    ORDER BY generated_at ASC
+    LIMIT 1
+    `
+  ).first<{ generated_at: string }>();
+  return row ?? null;
+}
+
+export async function getFirstTransmissionEvent(env: Env): Promise<{ generated_at: string } | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT generated_at
+    FROM state_change_events
+    WHERE transmission_pressure_changed = 1
+    ORDER BY generated_at ASC
+    LIMIT 1
+    `
+  ).first<{ generated_at: string }>();
+  return row ?? null;
+}
+
+export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
+  const result = await env.DB.prepare(
+    `SELECT key, value FROM config_thresholds`
+  ).all<{ key: string; value: unknown }>();
+
+  const map = new Map<string, unknown>(result.results.map((r) => [r.key, r.value]));
+
+  const required: Array<[keyof ScoringThresholds, string]> = [
+    ["stateAlignedMax", "state_aligned_threshold_max"],
+    ["stateMildMin", "state_mild_threshold_min"],
+    ["stateMildMax", "state_mild_threshold_max"],
+    ["statePersistentMin", "state_persistent_threshold_min"],
+    ["statePersistentMax", "state_persistent_threshold_max"],
+    ["stateDeepMin", "state_deep_threshold_min"],
+    ["shockAgeThresholdHours", "shock_age_threshold_hours"],
+    ["dislocationPersistenceHours", "dislocation_persistence_threshold_hours"],
+    ["ledgerAdjustmentMagnitude", "ledger_adjustment_magnitude"],
+    ["mismatchMarketResponseWeight", "mismatch_market_response_weight"],
+    ["confirmationPhysicalStressMin", "confirmation_physical_stress_min"],
+    ["confirmationPriceSignalMax", "confirmation_price_signal_max"],
+    ["confirmationMarketResponseMin", "confirmation_market_response_min"],
+    ["coverageMissingPenalty", "coverage_missing_penalty"],
+    ["coverageStalePenalty", "coverage_stale_penalty"],
+    ["coverageMaxPenalty", "coverage_max_penalty"],
+    ["stateDeepPersistenceHours", "state_deep_persistence_hours"],
+    ["statePersistentPersistenceHours", "state_persistent_persistence_hours"],
+    ["ledgerStaleThresholdDays", "ledger_stale_threshold_days"]
+  ];
+
+  const thresholds = {} as ScoringThresholds;
+  for (const [field, key] of required) {
+    const value = map.get(key);
+    if (value === undefined) {
+      throw new AppError(`Missing config_thresholds key: ${key}`, 500, "MISSING_THRESHOLD");
+    }
+    const numericValue = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      throw new AppError(`Invalid config_thresholds value for key: ${key}`, 500, "INVALID_THRESHOLD");
+    }
+    thresholds[field] = numericValue;
+  }
+
+  return thresholds;
+}
+
+export async function getLedgerEntries(env: Env): Promise<
+  {
+    entryKey: string;
+    impactDirection: "increase" | "decrease";
+    createdAt: string;
+    retiredAt: string | null;
+    reviewDueAt: string;
+  }[]
+> {
+  const result = await env.DB.prepare(
+    `
+    SELECT entry_key, impact_direction, created_at, retired_at, review_due_at
+    FROM impairment_ledger
+    ORDER BY created_at DESC
+    `
+  ).all<{
+    entry_key: string;
+    impact_direction: string;
+    created_at: string;
+    retired_at: string | null;
+    review_due_at: string;
+  }>();
+
+  return result.results.map((row) => ({
+    entryKey: row.entry_key,
+    impactDirection: row.impact_direction as "increase" | "decrease",
+    createdAt: row.created_at,
+    retiredAt: row.retired_at,
+    reviewDueAt: row.review_due_at
+  }));
 }
 
 interface RuleRow {
@@ -275,7 +422,6 @@ function normalizeRule(row: RuleRow): RuleDefinition {
   } catch {
     throw new AppError(`Invalid predicate_json for rule: ${row.rule_key}`, 500, "INVALID_RULE");
   }
-
   if (!isRulePredicate(predicate)) {
     throw new AppError(`Unsupported predicate for rule: ${row.rule_key}`, 500, "INVALID_RULE");
   }
@@ -305,8 +451,104 @@ export async function listActiveRules(env: Env, engineKey = "oil_shock"): Promis
   )
     .bind(engineKey)
     .all<RuleRow>();
-
   return rows.results.map(normalizeRule);
+}
+
+export async function writeEngineScore(
+  env: Env,
+  score: {
+    engineKey: string;
+    feedKey: string;
+    scoredAt: string;
+    scoreValue: number;
+    confidence: number | null;
+    flags: string[];
+    runKey?: string | null;
+  }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    INSERT INTO scores (
+      engine_key,
+      feed_key,
+      scored_at,
+      score_value,
+      confidence,
+      flags_json,
+      run_key
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(
+      score.engineKey,
+      score.feedKey,
+      score.scoredAt,
+      score.scoreValue,
+      score.confidence,
+      JSON.stringify(score.flags),
+      score.runKey ?? null
+    )
+    .run();
+}
+
+export async function getLatestEngineScore(
+  env: Env,
+  engineKey: string,
+  feedKey: string
+): Promise<{
+  engine_key: string;
+  feed_key: string;
+  scored_at: string;
+  score_value: number;
+  confidence: number | null;
+  flags_json: string | null;
+} | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT engine_key, feed_key, scored_at, score_value, confidence, flags_json
+    FROM scores
+    WHERE engine_key = ? AND feed_key = ?
+    ORDER BY scored_at DESC
+    LIMIT 1
+    `
+  )
+    .bind(engineKey, feedKey)
+    .first<{
+      engine_key: string;
+      feed_key: string;
+      scored_at: string;
+      score_value: number;
+      confidence: number | null;
+      flags_json: string | null;
+    }>();
+  return row ?? null;
+}
+
+export async function updateRuleByKey(
+  env: Env,
+  engineKey: string,
+  ruleKey: string,
+  updates: { weight?: number; predicateJson?: string; isActive?: boolean }
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    UPDATE rules
+    SET
+      weight = COALESCE(?, weight),
+      predicate_json = COALESCE(?, predicate_json),
+      is_active = COALESCE(?, is_active)
+    WHERE engine_key = ? AND rule_key = ?
+    `
+  )
+    .bind(
+      updates.weight ?? null,
+      updates.predicateJson ?? null,
+      typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
+      engineKey,
+      ruleKey
+    )
+    .run();
 }
 
 export async function createRule(
@@ -337,36 +579,10 @@ export async function createRule(
     .run();
 }
 
-export async function updateRuleByKey(
-  env: Env,
-  engineKey: string,
-  ruleKey: string,
-  updates: { weight?: number; predicateJson?: string; isActive?: boolean }
-): Promise<void> {
-  await env.DB.prepare(
-    `
-    UPDATE rules
-    SET
-      weight = COALESCE(?, weight),
-      predicate_json = COALESCE(?, predicate_json),
-      is_active = COALESCE(?, is_active)
-    WHERE engine_key = ? AND rule_key = ?
-    `
-  )
-    .bind(
-      updates.weight ?? null,
-      updates.predicateJson ?? null,
-      typeof updates.isActive === "boolean" ? (updates.isActive ? 1 : 0) : null,
-      engineKey,
-      ruleKey
-    )
-    .run();
-}
-
 export async function getRecentSnapshotsForRescore(
   env: Env,
   limit: number
-): Promise<Array<{ generated_at: string; mismatch_score: number; subscores_json?: string | null }>> {
+): Promise<Array<{ generated_at: string; mismatch_score: number; subscores_json: string }>> {
   const result = await env.DB.prepare(
     `
     SELECT generated_at, mismatch_score, subscores_json
@@ -376,7 +592,111 @@ export async function getRecentSnapshotsForRescore(
     `
   )
     .bind(limit)
-    .all<{ generated_at: string; mismatch_score: number; subscores_json?: string | null }>();
+    .all<{ generated_at: string; mismatch_score: number; subscores_json: string }>();
+  return result.results;
+}
+
+// Gate management functions for Phase 6A pre-deploy enforcement
+
+export interface PreDeployGate {
+  id: number;
+  flag_name: string;
+  gate_name: string;
+  status: "PENDING" | "SIGNED_OFF" | "EXPIRED";
+  signed_off_by: string | null;
+  signed_off_at: string | null;
+  expires_at: string | null;
+  notes: string | null;
+  last_validated_at: string | null;
+  validation_result: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getGateStatus(env: Env, flagName: string): Promise<PreDeployGate[]> {
+  const now = new Date().toISOString();
+
+  // First update expired gates
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'EXPIRED', updated_at = ?
+    WHERE flag_name = ? AND status = 'SIGNED_OFF' AND expires_at IS NOT NULL AND expires_at < ?
+    `
+  )
+    .bind(now, flagName, now)
+    .run();
+
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      id, flag_name, gate_name, status, signed_off_by, signed_off_at,
+      expires_at, notes, last_validated_at, validation_result, created_at, updated_at
+    FROM pre_deploy_gates
+    WHERE flag_name = ?
+    ORDER BY gate_name
+    `
+  )
+    .bind(flagName)
+    .all<PreDeployGate>();
+
+  return result.results;
+}
+
+export async function canFlipFlag(env: Env, flagName: string): Promise<boolean> {
+  const gates = await getGateStatus(env, flagName);
+  return gates.every(g => g.status === "SIGNED_OFF");
+}
+
+export async function signOffGate(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  signedOffBy: string,
+  notes?: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days from now
+
+  // Update the gate
+  await env.DB.prepare(
+    `
+    UPDATE pre_deploy_gates
+    SET status = 'SIGNED_OFF', signed_off_by = ?, signed_off_at = ?, expires_at = ?, notes = ?, updated_at = ?
+    WHERE flag_name = ? AND gate_name = ?
+    `
+  )
+    .bind(signedOffBy, now, expiresAt, notes ?? null, now, flagName, gateName)
+    .run();
+
+  // Record in history
+  await env.DB.prepare(
+    `
+    INSERT INTO gate_sign_off_history (flag_name, gate_name, signed_off_by, signed_off_at, expires_at, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    `
+  )
+    .bind(flagName, gateName, signedOffBy, now, expiresAt, notes ?? null, now)
+    .run();
+}
+
+export async function getGateSignOffHistory(
+  env: Env,
+  flagName: string,
+  gateName: string,
+  limit: number = 10
+): Promise<Array<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>> {
+  const result = await env.DB.prepare(
+    `
+    SELECT signed_off_by, signed_off_at, expires_at, notes
+    FROM gate_sign_off_history
+    WHERE flag_name = ? AND gate_name = ?
+    ORDER BY signed_off_at DESC
+    LIMIT ?
+    `
+  )
+    .bind(flagName, gateName, limit)
+    .all<{ signed_off_by: string; signed_off_at: string; expires_at: string; notes: string | null }>();
 
   return result.results;
 }

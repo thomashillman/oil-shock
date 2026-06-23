@@ -3,69 +3,122 @@ import {
   finishRun,
   getLatestSeriesValue,
   startRun,
-  writeRunEvidence,
-  writeSnapshot
+  listActiveRules,
+  writeEngineScore
 } from "../db/client";
-import { evaluateFreshness } from "../core/freshness/evaluate";
-import { computeSnapshot } from "../core/scoring/compute";
+import { evaluateRules } from "../core/rules/engine";
+import { runEnergyRuleEngineV2 } from "../core/rules/energy-v2";
+import { runActionManagerForEngine } from "../core/actions/action-manager";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 
-function safeValue(value: number | null): number {
+export function safeValue(value: number | null): number {
   if (value === null || Number.isNaN(value)) {
     return 0;
   }
   return Math.max(0, Math.min(1, value));
 }
 
+export async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
+  let wtiBrentSpread, dieselWtiCrack, curveSlope;
+  const componentErrors: string[] = [];
+  let legacyScoreSucceeded = true;
+
+  // Phase 1: Collect data with per-component error tracking
+  try {
+    wtiBrentSpread = await getLatestSeriesValue(env, "energy_spread.wti_brent_spread");
+    dieselWtiCrack = await getLatestSeriesValue(env, "energy_spread.diesel_wti_crack");
+    curveSlope = await getLatestSeriesValue(env, "price_signal.curve_slope");
+  } catch (error) {
+    componentErrors.push("collector");
+    log("error", "Energy collector failed", { runKey, error: String(error) });
+    // Continue with graceful degradation: missing data will cause early return
+  }
+
+  if (!wtiBrentSpread || !dieselWtiCrack) {
+    // No data available: graceful degradation complete
+    if (componentErrors.length > 0) {
+      log("warn", "Energy scoring aborted: insufficient data after collector failure", { runKey, missingFeeds: ["wti_brent_spread", "diesel_wti_crack"] });
+    }
+    return;
+  }
+
+  // Phase 2: Keep legacy Energy score write behaviour.
+  try {
+    const physicalStress = safeValue(wtiBrentSpread.value);
+    const marketResponse = safeValue(dieselWtiCrack.value);
+    const priceSignal = safeValue(curveSlope?.value ?? 0);
+    const rules = await listActiveRules(env, "energy");
+    const ruleEvaluation = evaluateRules(rules, {
+      physicalStress,
+      priceSignal,
+      marketResponse
+    });
+
+    const baseScore = safeValue((physicalStress + marketResponse) / 2);
+    const scoreValue = safeValue(baseScore + ruleEvaluation.totalAdjustment);
+    const flags = curveSlope ? [] : ["missing_price_confirmation"];
+
+    // Add degradation flags if collector had errors
+    if (componentErrors.includes("collector")) {
+      flags.push("degraded_collector");
+    }
+
+    await writeEngineScore(env, {
+      engineKey: "energy",
+      feedKey: "energy.state",
+      scoredAt: nowIso,
+      scoreValue,
+      confidence: flags.length > 0 ? 0.6 : 0.8,
+      flags,
+      runKey
+    });
+
+    if (componentErrors.length > 0) {
+      log("warn", "Energy scoring completed with degraded components", { runKey, degradedComponents: componentErrors });
+    }
+  } catch (error) {
+    componentErrors.push("scorer");
+    legacyScoreSucceeded = false;
+    log("error", "Energy scorer failed", { runKey, error: String(error), componentErrors });
+    // Graceful degradation: don't re-throw, continue with stale data available for fallback
+  }
+
+  if (!legacyScoreSucceeded) {
+    return;
+  }
+
+  // Phase 3: Rule Engine v2 bridge lifecycle (fails closed on persistence errors).
+  const ruleEngineResult = await runEnergyRuleEngineV2(env, {
+    runKey,
+    releaseKey: nowIso.slice(0, 10),
+    evaluatedAt: nowIso
+  });
+
+  // Phase 4: Action Manager logging bridge (logging-only, fail-closed on persistence errors).
+  if (!ruleEngineResult.results.some((result) => Boolean(result.triggerEvent))) {
+    return;
+  }
+
+  await runActionManagerForEngine(env, {
+    engineKey: "energy",
+    nowIso
+  });
+}
+
 export async function runScore(env: Env, now = new Date()): Promise<void> {
   const runKey = `score-${now.getTime()}`;
+  const nowIso = now.toISOString();
   await startRun(env, runKey, "score");
   log("info", "Starting scoring run", { runKey });
 
   try {
-    const physical = await getLatestSeriesValue(env, "physical.inventory_draw");
-    const utilization = await getLatestSeriesValue(env, "physical.utilization");
-    const recognition = await getLatestSeriesValue(env, "recognition.curve_signal");
-    const transmission = await getLatestSeriesValue(env, "transmission.crack_signal");
-    const transmissionFilings = await getLatestSeriesValue(env, "transmission.impairment_mentions");
-
-    const physicalPressure = safeValue(
-      ((physical?.value ?? 0) + (utilization?.value ?? 0)) / (utilization ? 2 : 1)
-    );
-    const recognitionValue = safeValue(recognition?.value ?? 0);
-    const transmissionValue = safeValue(
-      ((transmission?.value ?? 0) + (transmissionFilings?.value ?? 0)) / (transmissionFilings ? 2 : 1)
-    );
-
-    const freshness = evaluateFreshness({
-      physicalObservedAt: physical?.observedAt ?? null,
-      recognitionObservedAt: recognition?.observedAt ?? null,
-      transmissionObservedAt: transmission?.observedAt ?? null
-    });
-
-    const { snapshot, evidence } = computeSnapshot({
-      nowIso: now.toISOString(),
-      physicalPressure,
-      recognition: recognitionValue,
-      transmission: transmissionValue,
-      physicalObservedAt: physical?.observedAt ?? null,
-      recognitionObservedAt: recognition?.observedAt ?? null,
-      transmissionObservedAt: transmission?.observedAt ?? null,
-      freshness
-    });
-
-    await writeSnapshot(env, snapshot, runKey);
-    await writeRunEvidence(env, runKey, evidence);
+    // Oil Shock scoring retired. Run active Macro Signals engines.
+    await runEnergyScore(env, nowIso, runKey);
     await finishRun(env, runKey, "success", {
-      mismatchScore: snapshot.mismatchScore,
-      actionabilityState: snapshot.actionabilityState
+      message: "Macro Signals engines scored"
     });
-    log("info", "Scoring run completed", {
-      runKey,
-      mismatchScore: snapshot.mismatchScore,
-      actionabilityState: snapshot.actionabilityState
-    });
+    log("info", "Scoring run completed", { runKey });
   } catch (error) {
     const appError = toAppError(error);
     await finishRun(env, runKey, "failed", {

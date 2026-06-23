@@ -1,7 +1,21 @@
+// Worker Naming Scheme:
+// - env.preview targets: energy-dislocation-engine-preview-preview (canonical preview)
+// - env.production targets: energy-dislocation-engine-production (canonical production)
+// Root deployment (no env flag) is non-canonical; CI/scripts should use explicit environments.
 {
-  "name": "energy-dislocation-engine",
+  "name": "energy-dislocation-engine-preview",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-04-16",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true
+    },
+    "traces": {
+      "enabled": true
+    }
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -11,23 +25,29 @@
   ],
   "vars": {
     "APP_ENV": "local",
-    "PRODUCTION_ORIGIN": ""
+    "PRODUCTION_ORIGIN": "",
+    "ENABLE_MACRO_SIGNALS": "false",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
   },
   "env": {
     "preview": {
+      "name": "energy-dislocation-engine-preview-preview",
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "energy_dislocation",
-          "database_id": "9db64b68-6ffc-4be2-a2c6-667691a5801f"
+          "database_id": "f9e3848e-20e6-43f0-8b0f-4fb652572d16"
         }
       ],
       "vars": {
         "APP_ENV": "preview",
-        "PRODUCTION_ORIGIN": ""
+        "PRODUCTION_ORIGIN": "",
+        "ENABLE_MACRO_SIGNALS": "false",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     },
     "production": {
+      "name": "energy-dislocation-engine-production",
       "d1_databases": [
         {
           "binding": "DB",
@@ -37,7 +57,9 @@
       ],
       "vars": {
         "APP_ENV": "production",
-        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app"
+        "PRODUCTION_ORIGIN": "https://oil-shock-web.vercel.app",
+        "ENABLE_MACRO_SIGNALS": "false",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otlp-gateway-prod-gb-south-1.grafana.net/otlp"
       }
     }
   }
