@@ -26,7 +26,7 @@ class FakePreparedStatement {
   }
 }
 
-type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger";
+type TableName = "series_points" | "runs" | "run_evidence" | "signal_snapshots" | "impairment_ledger" | "rules";
 
 export class FakeD1Database {
   private readonly tables: Record<TableName, Row[]> = {
@@ -34,7 +34,8 @@ export class FakeD1Database {
     runs: [],
     run_evidence: [],
     signal_snapshots: [],
-    impairment_ledger: []
+    impairment_ledger: [],
+    rules: []
   };
 
   private nextId = 1;
@@ -82,7 +83,14 @@ export class FakeD1Database {
         actionability_state: params[2],
         coverage_confidence: params[3],
         source_freshness_json: params[4],
-        evidence_ids_json: params[5]
+        evidence_ids_json: params[5],
+        dislocation_state_json: params[6],
+        state_rationale: params[7],
+        subscores_json: params[8],
+        clocks_json: params[9],
+        ledger_impact_json: params[10],
+        guardrail_flags_json: params[11],
+        run_key: params[12]
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -93,7 +101,22 @@ export class FakeD1Database {
         evidence_group: params[2],
         observed_at: params[3],
         contribution: params[4],
-        details_json: params[5]
+        evidence_classification: params[5],
+        coverage_quality: params[6],
+        evidence_group_label: params[7],
+        details_json: params[8]
+      });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into rules")) {
+      this.insert("rules", {
+        engine_key: params[0],
+        rule_key: params[1],
+        name: params[2],
+        predicate_json: params[3],
+        weight: params[4],
+        action: "adjust_mismatch",
+        is_active: params[5] ?? 1
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -120,6 +143,23 @@ export class FakeD1Database {
       }
       return { success: true, meta: { last_row_id: 0 } };
     }
+    if (normalized.startsWith("update rules")) {
+      const engineKey = String(params[3]);
+      const ruleKey = String(params[4]);
+      const row = this.tables.rules.find((item) => item.engine_key === engineKey && item.rule_key === ruleKey);
+      if (row) {
+        if (params[0] !== null && params[0] !== undefined) {
+          row.weight = params[0];
+        }
+        if (params[1] !== null && params[1] !== undefined) {
+          row.predicate_json = params[1];
+        }
+        if (params[2] !== null && params[2] !== undefined) {
+          row.is_active = params[2];
+        }
+      }
+      return { success: true, meta: { last_row_id: 0 } };
+    }
     return { success: true, meta: { last_row_id: 0 } };
   }
 
@@ -137,6 +177,13 @@ export class FakeD1Database {
         String(b.generated_at).localeCompare(String(a.generated_at))
       )[0];
       return (row as T) ?? null;
+    }
+    if (normalized.includes("from rules")) {
+      const engineKey = params[0];
+      const rows = this.tables.rules
+        .filter((item) => item.engine_key === engineKey && Number(item.is_active ?? 0) === 1)
+        .sort((a, b) => Number(a.id) - Number(b.id));
+      return (rows[0] as T) ?? null;
     }
     if (normalized.includes("from runs") && normalized.includes("run_type = 'score'")) {
       const row = [...this.tables.runs]
@@ -161,6 +208,20 @@ export class FakeD1Database {
       const rows = this.tables.impairment_ledger
         .filter((item) => item.retired_at === null && String(item.review_due_at) <= limit)
         .sort((a, b) => String(a.review_due_at).localeCompare(String(b.review_due_at)));
+      return { results: rows as T[] };
+    }
+    if (normalized.includes("from signal_snapshots")) {
+      const limit = Number(params[0] ?? 0);
+      const rows = [...this.tables.signal_snapshots]
+        .sort((a, b) => String(b.generated_at).localeCompare(String(a.generated_at)))
+        .slice(0, Number.isFinite(limit) && limit > 0 ? limit : this.tables.signal_snapshots.length);
+      return { results: rows as T[] };
+    }
+    if (normalized.includes("from rules")) {
+      const engineKey = params[0];
+      const rows = this.tables.rules
+        .filter((item) => item.engine_key === engineKey && Number(item.is_active ?? 0) === 1)
+        .sort((a, b) => Number(a.id) - Number(b.id));
       return { results: rows as T[] };
     }
     return { results: [] };

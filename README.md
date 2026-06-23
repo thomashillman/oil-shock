@@ -43,9 +43,15 @@ Core flow:
 ## API Surface
 
 - `GET /api/state`
+- `GET /api/state/history`
 - `GET /api/evidence`
 - `GET /api/coverage`
 - `GET /api/ledger/review`
+- `GET /api/admin/rules`
+- `POST /api/admin/rules`
+- `POST /api/admin/rules/dry-run`
+- `POST /api/admin/backfill/rescore`
+- `GET /api/admin/guardrails/failures`
 - `POST /api/ledger`
 - `PATCH /api/ledger/:id`
 - `POST /api/admin/run-poc` (manual cycle trigger)

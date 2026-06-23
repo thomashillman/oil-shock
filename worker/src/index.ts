@@ -5,9 +5,18 @@ import { withCors } from "./lib/cors";
 import { toAppError } from "./lib/errors";
 import { json } from "./lib/http";
 import { log } from "./lib/logging";
+import { handleGuardrailFailures } from "./routes/admin-guardrails";
+import {
+  handleBackfillRescore,
+  handleCreateRule,
+  handleListRules,
+  handleRulesDryRun,
+  handleUpdateRule
+} from "./routes/admin-rules";
 import { handleGetCoverage } from "./routes/coverage";
 import { handleGetEvidence } from "./routes/evidence";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
+import { handleGetStateHistory } from "./routes/history";
 import { handleGetState } from "./routes/state";
 
 interface HealthPayload {
@@ -17,7 +26,7 @@ interface HealthPayload {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
       return withCors(new Response(null, { status: 204 }), request, env);
     }
@@ -40,6 +49,10 @@ export default {
         response = await handleGetState(env);
         return withCors(response, request, env);
       }
+      if (request.method === "GET" && pathname === "/api/state/history") {
+        response = await handleGetStateHistory(request, env);
+        return withCors(response, request, env);
+      }
       if (request.method === "GET" && pathname === "/api/evidence") {
         response = await handleGetEvidence(env);
         return withCors(response, request, env);
@@ -50,6 +63,31 @@ export default {
       }
       if (request.method === "GET" && pathname === "/api/ledger/review") {
         response = await handleGetLedgerReview(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/rules") {
+        response = await handleListRules(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/rules") {
+        response = await handleCreateRule(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/rules/dry-run") {
+        response = await handleRulesDryRun(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "POST" && pathname === "/api/admin/backfill/rescore") {
+        response = await handleBackfillRescore(request, env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "GET" && pathname === "/api/admin/guardrails/failures") {
+        response = await handleGuardrailFailures(env);
+        return withCors(response, request, env);
+      }
+      if (request.method === "PATCH" && pathname.startsWith("/api/admin/rules/")) {
+        const ruleKey = pathname.split("/").at(-1) ?? "";
+        response = await handleUpdateRule(request, env, ruleKey);
         return withCors(response, request, env);
       }
       if (request.method === "POST" && pathname === "/api/ledger") {
@@ -64,7 +102,7 @@ export default {
       if (request.method === "POST" && pathname === "/api/admin/run-poc") {
         await runCollection(env);
         await runScore(env);
-        response = json({ ok: true });
+        response = json({ ok: true, triggered: true });
         return withCors(response, request, env);
       }
 

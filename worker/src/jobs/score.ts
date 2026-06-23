@@ -55,7 +55,7 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
       freshness
     });
 
-    await writeSnapshot(env, snapshot);
+    await writeSnapshot(env, snapshot, runKey);
     await writeRunEvidence(env, runKey, evidence);
     await finishRun(env, runKey, "success", {
       mismatchScore: snapshot.mismatchScore,

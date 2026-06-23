@@ -8,5 +8,6 @@ export const initSchemaTables = [
   "signal_snapshots",
   "runs",
   "run_evidence",
-  "config_thresholds"
+  "config_thresholds",
+  "rules"
 ] as const;
