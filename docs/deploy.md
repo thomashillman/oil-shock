@@ -7,6 +7,9 @@
 - Config: `wrangler.jsonc`
 - Local migration:
   - `corepack pnpm db:migrate:local`
+  - If the local D1 state has stale schema from a prior run, reset it first:
+    `corepack pnpm db:migrate:local:reset`
+- The live dashboard contract now expects snapshot history, rules management, and guardrail failure routes from the Worker.
 - Deploy:
   - Preview: `wrangler deploy --env preview --config wrangler.jsonc`
   - Production: `wrangler deploy --env production --config wrangler.jsonc`
@@ -26,6 +29,7 @@
 
 - `APP_ENV`: `local` | `preview` | `production`
 - `PRODUCTION_ORIGIN`: production frontend origin used in CORS checks
+- `ENABLE_MACRO_SIGNALS`: feature flag (`false` by default) that selects runtime mode. Today, `true` selects `macro-signals` mode but still executes the current Oil Shock pipeline until a dedicated Macro Signals runtime is implemented.
 - Additional upstream keys should be configured as Worker secrets.
 
 ### Frontend (Vercel)
