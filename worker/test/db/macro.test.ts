@@ -286,21 +286,31 @@ class MockD1Database {
           }) as T[]
       };
     }
-    if (normalized.includes("from observations") && normalized.includes("order by observed_at desc")) {
+    if (normalized.includes("partition by series_key") && normalized.includes("order by observed_at desc")) {
       const engineKey = params[0];
       const limit = Number(params[1]);
-      return {
-        results: this.observations
-          .filter((row) => row.engine_key === engineKey)
-          .sort((a, b) => {
-            const observed = String(b.observed_at).localeCompare(String(a.observed_at));
-            if (observed !== 0) return observed;
-            const asOf = String(b.as_of_date).localeCompare(String(a.as_of_date));
-            if (asOf !== 0) return asOf;
-            return String(a.series_key).localeCompare(String(b.series_key));
-          })
-          .slice(0, limit) as T[]
-      };
+      const seen = new Set<string>();
+      const deduped: Row[] = [];
+      const sorted = this.observations
+        .filter((row) => row.engine_key === engineKey)
+        .sort((a, b) => {
+          const observed = String(b.observed_at).localeCompare(String(a.observed_at));
+          if (observed !== 0) return observed;
+          return String(b.as_of_date).localeCompare(String(a.as_of_date));
+        });
+      for (const row of sorted) {
+        const key = String(row.series_key);
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(row);
+        }
+      }
+      deduped.sort((a, b) => {
+        const asOf = String(b.as_of_date).localeCompare(String(a.as_of_date));
+        if (asOf !== 0) return asOf;
+        return String(a.series_key).localeCompare(String(b.series_key));
+      });
+      return { results: deduped.slice(0, limit) as T[] };
     }
     if (normalized.includes("from feed_registry") && normalized.includes("enabled = 1")) {
       const engineKey = params[0];
@@ -1030,6 +1040,46 @@ describe("macro db helpers", () => {
     expect(rows[0]?.engineKey).toBe("energy");
     expect(rows[0]?.observedAt).toBe("2026-04-28T00:00:00.000Z");
     expect(rows[0]?.unit).toBe("ratio");
+  });
+
+  it("listRuntimeObservations returns only the latest row per series_key, not one row per release", async () => {
+    const db = new MockD1Database();
+    const env = testEnv(db);
+    db.table("observations").push(
+      {
+        engine_key: "energy",
+        feed_key: "physical_stress.inventory_draw",
+        series_key: "physical_stress.inventory_draw",
+        release_key: "2026-06-12",
+        as_of_date: "2026-06-12",
+        observed_at: "2026-06-13T00:00:00.000Z",
+        value: 0.93
+      },
+      {
+        engine_key: "energy",
+        feed_key: "physical_stress.inventory_draw",
+        series_key: "physical_stress.inventory_draw",
+        release_key: "2026-06-19",
+        as_of_date: "2026-06-19",
+        observed_at: "2026-06-20T00:00:00.000Z",
+        value: 1.0
+      },
+      {
+        engine_key: "energy",
+        feed_key: "energy_spread.diesel_wti_crack",
+        series_key: "energy_spread.diesel_wti_crack",
+        release_key: "2026-06-15",
+        as_of_date: "2026-06-15",
+        observed_at: "2026-06-16T00:00:00.000Z",
+        value: 1.0
+      }
+    );
+
+    const rows = await listRuntimeObservations(env, "energy", 25);
+    expect(rows).toHaveLength(2);
+    const inventoryRow = rows.find((r) => r.seriesKey === "physical_stress.inventory_draw");
+    expect(inventoryRow?.value).toBe(1.0);
+    expect(inventoryRow?.asOfDate).toBe("2026-06-19");
   });
 
   it("listRuntimeRuleState parses JSON, filters by engine, orders deterministically, and respects limit", async () => {
