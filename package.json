@@ -16,6 +16,7 @@
     "dev:worker": "corepack pnpm --filter @oil-shock/worker dev",
     "dev:web": "corepack pnpm --filter @oil-shock/app dev",
     "db:migrate:local": "tsx scripts/apply-all-migrations.ts --local",
+    "db:migrate:local:reset": "tsx scripts/reset-local-d1-state.ts",
     "poc:run": "corepack pnpm db:migrate:local && corepack pnpm build",
     "backfill:eia-energy": "tsx scripts/backfill-eia-energy.ts",
     "backfill:eia-inventory": "tsx scripts/backfill-eia-inventory.ts",

@@ -88,6 +88,13 @@ Run local migration:
 corepack pnpm db:migrate:local
 ```
 
+If your local D1 state is stale or already contains an older schema, reset it
+first:
+
+```bash
+corepack pnpm db:migrate:local:reset
+```
+
 Run worker:
 
 ```bash

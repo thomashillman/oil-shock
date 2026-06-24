@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../../src/env";
+import worker from "../../src";
 import { writeSnapshot } from "../../src/db/client";
 import { handleGetState } from "../../src/routes/state";
 import type { StateSnapshot } from "../../src/types";
-import { createTestEnv } from "../helpers/fake-d1";
+import { createExecutionContext, createTestEnv } from "../helpers/fake-d1";
 
 const EXPECTED_SUBSCORE_KEYS = ["physicalStress", "priceSignal", "marketResponse"].sort();
 const EXPECTED_CLOCK_KEYS = ["shock", "dislocation", "transmission"].sort();
@@ -71,5 +72,24 @@ describe("GET /api/state response shape (subscore/freshness contract)", () => {
     const request = new Request("http://local/api/state");
     const response = await handleGetState(request, env);
     expect(response.status).toBe(404);
+  });
+
+  it("routes the /api/state request object through the Worker entrypoint", async () => {
+    const env = createTestEnv() as unknown as Env;
+    await writeSnapshot(env, sampleSnapshot());
+
+    const response = await worker.fetch(
+      new Request("http://local/api/state?version=legacy"),
+      env,
+      createExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Deprecation")).toBe("true");
+    expect(response.headers.get("Sunset")).toBe("Sun, 30 Jun 2026 00:00:00 GMT");
+
+    const body = (await response.json()) as { generatedAt: string; dislocationState: string };
+    expect(body.generatedAt).toBe(sampleSnapshot().generatedAt);
+    expect(body.dislocationState).toBe("mild_divergence");
   });
 });
