@@ -1,0 +1,5 @@
+{
+  "buildCommand": "corepack pnpm --filter @oil-shock/app build",
+  "outputDirectory": "app/dist",
+  "installCommand": "corepack enable && corepack pnpm install"
+}
