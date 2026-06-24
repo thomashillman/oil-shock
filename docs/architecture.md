@@ -167,26 +167,84 @@ In broad terms:
 
 Manual ledger entries can push the score up or down after the base score is computed. Default behaviour is additive and bounded, and stale or retired ledger entries should not affect active scoring.
 
+## Registry Tables
+
+Two feed registry tables exist with distinct purposes. Do not conflate them.
+
+### `api_feed_registry` (legacy API health monitoring)
+
+Lives in `db/migrations/0015_api_health_tracking.sql` and `0016_add_diesel_crack_feed.sql`.
+Read by `getFeedRegistry()` in `worker/src/lib/api-instrumentation.ts` and by the
+`/api/admin/api-health` endpoint.
+
+Purpose: track per-request health metrics for every `instrumentedFetch()` call and surface
+feed status for operational monitoring.
+
+**Active feeds** (have collectors, record to `api_health_metrics`):
+
+| feed_name | Collector | Series written |
+|---|---|---|
+| `eia_wti` | `collectors/energy.ts` | `energy_spread.wti_brent_spread` (input) |
+| `eia_brent` | `collectors/energy.ts` | `energy_spread.wti_brent_spread` (input) |
+| `eia_diesel_wti_crack` | `collectors/energy.ts` | `energy_spread.diesel_wti_crack` |
+
+**Disabled aspirational feeds** (no collectors exist; disabled in migration `0020`):
+
+| feed_name | Provider | Notes |
+|---|---|---|
+| `eia_inventory` | EIA | No collector; re-enable when implemented |
+| `eia_refinery` | EIA | No collector; re-enable when implemented |
+| `eia_futures_curve` | EIA | Maps to `price_signal.curve_slope` used in scoring; see known gap below |
+| `enia_pipeline` | ENTSOG | No collector; requires separate API credentials |
+| `gie_storage` | GIE | No collector; requires separate API credentials |
+| `sec_impairment` | SEC EDGAR | No collector; requires separate API credentials |
+
+**Known gap — `price_signal.curve_slope`**: Energy scoring (`worker/src/jobs/score.ts`) reads
+this series from `series_points`. It is never written because the `eia_futures_curve` collector
+has not been implemented. Scoring degrades gracefully: confidence drops to 0.6 and the
+`missing_price_confirmation` flag is set. Implementing this collector requires confirming EIA
+NYMEX futures series IDs and a slope normalisation formula. Do not re-enable `eia_futures_curve`
+in `api_feed_registry` until the collector is wired into `runCollection()`.
+
+### `feed_registry` (Macro Signals engine registry)
+
+Lives in `db/migrations/0017_macro_engine_core.sql`. Seeded by migrations `0018` (Energy) and
+`0019` (CPI, disabled). Read by `listEnabledFeedKeys()` and related functions in
+`worker/src/db/macro.ts`.
+
+Purpose: manage which engine/feed pairs are active for the Macro Signals bridge path —
+controls `observations`, `feed_checks`, and runtime engine listing.
+
+These two tables serve different subsystems and do not need to stay in sync.
+
 ## Data Sources and API Endpoints
 
 All collectors live in `worker/src/jobs/collectors/`. Each emitted point is namespaced under exactly one dimension: `price_signal.*`, `physical_stress.*`, or `market_response.*`.
 
-### EIA
+### EIA (active)
 
 - Base API: `https://api.eia.gov/v2/`
 - Auth: `EIA_API_KEY`
+- Currently active: WTI/Brent spot prices and diesel-WTI crack spread via `collectors/energy.ts`
 - Used for WTI spot, crude inventory draw, futures curve slope, refinery utilisation, and crack spread inputs
 - Stage 4 energy collector also uses EIA spot series for WTI/Brent spread and Gulf Coast ULSD-vs-WTI crack inputs (`energy_spread.*`). The diesel price is converted from dollars per gallon to dollars per barrel before subtracting WTI.
 - The scheduled Energy collector now also polls monthly refinery utilisation (`physical_stress.refinery_utilization`), normalizes it as stress with `1 - utilization / 100`, and dual-writes it to `observations`
 - The scheduled Energy collector now also polls weekly crude inventory (`physical_stress.inventory_draw`) and normalizes it as a 52-week inverse inventory position
 - The scheduled Energy collector now also polls the public EIA crude futures curve proxy (`price_signal.curve_slope`) using the front and fourth contracts exposed by the API, normalizing the spread as a 0-1 contango ratio
+- Uses a rolling 45-day window for spot series
 - Daily series use a rolling 60-day window
 - Weekly series use a rolling 26-week window
 - Monthly refinery utilisation uses a rolling upstream window large enough to catch the latest published month and prefers upstream `period` values for `observedAt`
 - Do not hardcode collection windows
 - Historical backfills for the live Energy bridge are available via `scripts/backfill-eia-energy.ts`, `scripts/backfill-eia-inventory.ts`, `scripts/backfill-eia-futures-curve.ts`, and `scripts/backfill-eia-refinery.ts`; they pull the upstream EIA series over a date range and dual-write the derived points into `series_points` and `observations`
 
-### ENTSOG and GIE AGSI+
+### EIA (aspirational — not yet implemented)
+
+- Crude inventory draw (`eia_inventory`), refinery utilisation (`eia_refinery`), and NYMEX
+  futures curve slope (`eia_futures_curve`) are registered in `api_feed_registry` but disabled
+- Weekly series should use a rolling 26-week window when implemented
+
+### ENTSOG and GIE AGSI+ (aspirational — not yet implemented)
 
 - ENTSOG: pipeline operational data for `physical_stress.eu_pipeline_flow`
 - GIE AGSI+: gas storage data for `physical_stress.eu_gas_storage`
@@ -195,9 +253,9 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 - Historical AGSI backfill uses the EU aggregate (`type=eu`) and treats `full` as storage fullness, then stores the inverse ratio as stress (`1 - full / 100`)
 - Missing values should remain missing rather than defaulting to synthetic neutral values
 
-### SEC EDGAR
+### SEC EDGAR (aspirational — not yet implemented)
 
-- Used for `market_response.sec_impairment`
+- Intended for `market_response.sec_impairment`
 - Requires a compliant `User-Agent`
 - Filing lag is real and can make low scores legitimate rather than erroneous
 - Prefer upstream `filingDate` for `observedAt`

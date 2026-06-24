@@ -279,7 +279,7 @@ describe("App", () => {
         if (url.includes("/api/state/history")) {
           return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
         }
-        if (url.includes("/api/state")) {
+        if (url.includes("/api/v1/energy/state")) {
           return Promise.resolve({
             ok: false,
             status: 403,
@@ -325,17 +325,17 @@ describe("App", () => {
         if (url.includes("/api/state/history")) {
           return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
         }
-        if (url.includes("/api/state")) {
+        if (url.includes("/api/v1/energy/state")) {
           return Promise.resolve({
             ok: false,
             status: 404,
-            json: async () => ({ error: "no_snapshot", message: "No snapshot is available yet." }),
+            json: async () => ({ error: "no_score", message: "No precomputed energy score is available yet." }),
           });
         }
         return Promise.resolve({
           ok: false,
           status: 404,
-          json: async () => ({ error: "no_snapshot", message: "No snapshot is available yet." }),
+          json: async () => ({ error: "no_score", message: "No precomputed energy score is available yet." }),
         });
       }),
     );

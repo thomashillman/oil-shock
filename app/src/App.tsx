@@ -124,10 +124,12 @@ function isExpectedRecalcNotReady(payload: unknown): boolean {
   const error = data.error;
   const message = data.message;
   return (
+    error === "no_score" ||
     error === "no_snapshot" ||
     error === "not_ready" ||
     (typeof error === "string" && error.includes("no_snapshot")) ||
-    (typeof message === "string" && message.toLowerCase().includes("no snapshot"))
+    (typeof message === "string" &&
+      (message.toLowerCase().includes("no snapshot") || message.toLowerCase().includes("no precomputed energy score")))
   );
 }
 
@@ -240,11 +242,11 @@ export function App() {
         return;
       }
       try {
-        const res = await fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" });
+        const res = await fetch(`${apiBaseUrl}/api/v1/energy/state`, { cache: "no-store" });
         if (!res.ok) {
           const payload = await res.json().catch(() => null);
           if (res.status === 404 && isExpectedRecalcNotReady(payload)) {
-            // Expected while the worker is still recomputing the snapshot.
+            // Expected while the worker is still recomputing the energy score.
           } else {
             setRecalculating(false);
             setRecalcError(`Recalculation failed (HTTP ${res.status}). Try again in a moment.`);
@@ -253,7 +255,7 @@ export function App() {
         }
         if (res.ok) {
           const raw = (await res.json()) as Record<string, unknown>;
-          const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;
+          const newGeneratedAt = (raw.scoredAt ?? raw.scored_at) as string | undefined;
           if (newGeneratedAt && newGeneratedAt !== prevGeneratedAt) {
             await fetchAll();
             await fetchHistory();
