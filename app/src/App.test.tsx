@@ -154,17 +154,18 @@ describe("App", () => {
   it("renders the energy shell while loading", () => {
     stubFetch();
     render(<App />);
-    expect(screen.getByRole("heading", { name: /live energy signal/i })).toBeInTheDocument();
-    expect(screen.getByText("Loading energy data…")).toBeInTheDocument();
+    expect(screen.getByText("Oil Shock")).toBeInTheDocument();
+    expect(screen.getByText("loading…")).toBeInTheDocument();
   });
 
   it("renders live energy state and runtime diagnostics", async () => {
     stubFetch();
     render(<App />);
 
-    await waitFor(() => expect(screen.queryByText("Loading energy data…")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("loading…")).not.toBeInTheDocument());
 
-    expect(screen.getByText("53%")).toBeInTheDocument();
+    // Score rendered as a number inside the gauge SVG (no % suffix on the digit itself)
+    expect(screen.getByText("53")).toBeInTheDocument();
     expect(screen.getByText("missing_price_confirmation")).toBeInTheDocument();
     expect(screen.getAllByText("Energy").length).toBeGreaterThan(0);
     expect(screen.getByText("energy.confirmation.spread_widening")).toBeInTheDocument();
@@ -209,15 +210,15 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetchMock);
     render(<App />);
 
-    await waitFor(() => expect(screen.queryByText("Loading energy data…")).not.toBeInTheDocument());
-    expect(screen.getByText("53%")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("loading…")).not.toBeInTheDocument());
+    expect(screen.getByText("53")).toBeInTheDocument();
 
     await act(async () => {
       refreshed = true;
       fireEvent.click(screen.getByRole("button", { name: /refresh energy data/i }));
     });
 
-    await waitFor(() => expect(screen.getByText("75%")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("75")).toBeInTheDocument());
     expect(screen.getByText("elevated_pressure")).toBeInTheDocument();
   });
 });

@@ -103,7 +103,6 @@ function normalizeEnergyState(payload: unknown): EnergyStatePayload | null {
   const data = payload as Record<string, unknown>;
   const scoredAt = typeof data.scoredAt === "string" ? data.scoredAt : "";
   if (!scoredAt) return null;
-
   return {
     engineKey: typeof data.engineKey === "string" ? data.engineKey : "energy",
     feedKey: typeof data.feedKey === "string" ? data.feedKey : "energy.state",
@@ -138,7 +137,6 @@ function normalizeRuntime(payload: unknown): EnergyRuntimePayload | null {
   const ruleState = Array.isArray(data.ruleState) ? data.ruleState : [];
   const triggerEvents = Array.isArray(data.triggerEvents) ? data.triggerEvents : [];
   const actions = Array.isArray(data.actions) ? data.actions : [];
-
   return {
     engineKey: typeof data.engineKey === "string" ? data.engineKey : "energy",
     feedHealth: feedHealth.filter((item): item is RuntimeFeedHealthItem => {
@@ -183,7 +181,10 @@ function normalizeRuntime(payload: unknown): EnergyRuntimePayload | null {
       if (!item || typeof item !== "object") return false;
       return typeof (item as Record<string, unknown>).engineKey === "string";
     }),
-    metadata: typeof data.metadata === "object" && data.metadata !== null ? (data.metadata as EnergyRuntimePayload["metadata"]) : undefined,
+    metadata:
+      typeof data.metadata === "object" && data.metadata !== null
+        ? (data.metadata as EnergyRuntimePayload["metadata"])
+        : undefined,
   };
 }
 
@@ -213,22 +214,135 @@ function confidenceLabel(confidence: number): string {
   return "low confidence";
 }
 
-function isoOrFallback(value?: string): string {
-  return value ?? new Date().toISOString();
+// Design tokens
+const T = {
+  crude: "#12100E",
+  bitumen: "#1E1A16",
+  wellhead: "#EDE8DC",
+  flare: "#E8691A",
+  gauge: "#3FA882",
+  watch: "#F59E0B",
+  paraffin: "#7A6E64",
+  border: "#2A2520",
+  display: "'Barlow Condensed', system-ui, sans-serif",
+  body: "'IBM Plex Sans', system-ui, sans-serif",
+  mono: "'IBM Plex Mono', monospace",
+} as const;
+
+function accentForStatus(status: string): string {
+  if (status === "elevated") return T.flare;
+  if (status === "watch") return T.watch;
+  return T.gauge;
 }
 
-function SummaryPill({
+// Signature element: pressure-gauge arc
+function GaugeMeter({ score, status }: { score: number; status: string }) {
+  const cx = 64, cy = 62, r = 46, sw = 8;
+  // Arc from 150° to 390° SVG-space (7 o'clock → 5 o'clock via 12), 240° sweep
+  const startDeg = 150;
+  const sweep = 240;
+
+  function pt(deg: number) {
+    const rad = (deg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  const s = pt(startDeg);
+  const e = pt(startDeg + sweep);
+  const trackPath = `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+
+  const clamped = Math.max(0, Math.min(1, score));
+  const scoreSweep = clamped * sweep;
+  const se = pt(startDeg + scoreSweep);
+  const largeArc = scoreSweep > 180 ? 1 : 0;
+  const scorePath =
+    clamped > 0.005
+      ? `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 1 ${se.x.toFixed(2)} ${se.y.toFixed(2)}`
+      : null;
+
+  const accent = accentForStatus(status);
+  const pct = Math.round(clamped * 100);
+
+  return (
+    <svg
+      viewBox="0 0 128 108"
+      width="152"
+      height="128"
+      aria-label={`Stress score ${pct}%`}
+      style={{ flexShrink: 0 }}
+    >
+      <path
+        d={trackPath}
+        fill="none"
+        stroke="rgba(237,232,220,0.07)"
+        strokeWidth={sw}
+        strokeLinecap="round"
+      />
+      {scorePath && (
+        <path
+          d={scorePath}
+          fill="none"
+          stroke={accent}
+          strokeWidth={sw}
+          strokeLinecap="round"
+        />
+      )}
+      {/* Threshold ticks at 33% and 66% */}
+      {[0.33, 0.66].map((t) => {
+        const deg = startDeg + t * sweep;
+        const rad = (deg * Math.PI) / 180;
+        const inner = { x: cx + (r - 7) * Math.cos(rad), y: cy + (r - 7) * Math.sin(rad) };
+        const outer = { x: cx + (r + 7) * Math.cos(rad), y: cy + (r + 7) * Math.sin(rad) };
+        return (
+          <line
+            key={t}
+            x1={inner.x}
+            y1={inner.y}
+            x2={outer.x}
+            y2={outer.y}
+            stroke="rgba(237,232,220,0.2)"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+      <text
+        x={cx}
+        y={cy - 4}
+        textAnchor="middle"
+        fill={accent}
+        fontSize={28}
+        fontWeight={700}
+        fontFamily="'Barlow Condensed', sans-serif"
+      >
+        {pct}
+      </text>
+      <text
+        x={cx}
+        y={cy + 12}
+        textAnchor="middle"
+        fill={T.paraffin}
+        fontSize={9}
+        fontFamily="'IBM Plex Mono', monospace"
+        letterSpacing="1.5"
+      >
+        STRESS %
+      </text>
+    </svg>
+  );
+}
+
+function Badge({
   label,
   tone = "neutral",
 }: {
   label: string;
-  tone?: "neutral" | "good" | "warn" | "bad";
+  tone?: "ok" | "warn" | "bad" | "neutral";
 }) {
-  const palette = {
-    neutral: { background: "rgba(255,255,255,0.12)", color: "#e5eefb" },
-    good: { background: "rgba(16,185,129,0.18)", color: "#a7f3d0" },
-    warn: { background: "rgba(245,158,11,0.18)", color: "#fde68a" },
-    bad: { background: "rgba(239,68,68,0.18)", color: "#fecaca" },
+  const style = {
+    ok: { background: "rgba(63,168,130,0.14)", color: T.gauge },
+    warn: { background: "rgba(245,158,11,0.14)", color: T.watch },
+    bad: { background: "rgba(232,105,26,0.14)", color: T.flare },
+    neutral: { background: "rgba(237,232,220,0.07)", color: T.paraffin },
   }[tone];
 
   return (
@@ -236,15 +350,14 @@ function SummaryPill({
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 6,
-        borderRadius: 999,
-        padding: "5px 10px",
-        background: palette.background,
-        color: palette.color,
-        fontSize: 11,
-        fontWeight: 700,
-        letterSpacing: "0.03em",
+        padding: "3px 8px",
+        borderRadius: 4,
+        fontSize: 10,
+        fontWeight: 600,
+        fontFamily: T.mono,
+        letterSpacing: "0.06em",
         textTransform: "uppercase",
+        ...style,
       }}
     >
       {label}
@@ -252,7 +365,7 @@ function SummaryPill({
   );
 }
 
-function SectionCard({
+function Panel({
   title,
   subtitle,
   children,
@@ -264,19 +377,56 @@ function SectionCard({
   return (
     <section
       style={{
-        background: "#fff",
-        border: "1px solid #e5e7eb",
-        borderRadius: 20,
-        padding: 20,
-        boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
+        background: T.bitumen,
+        borderRadius: 10,
+        border: `1px solid ${T.border}`,
+        overflow: "hidden",
       }}
     >
-      <div style={{ marginBottom: 14 }}>
-        <h2 style={{ fontSize: 14, margin: 0, color: "#0f172a" }}>{title}</h2>
-        {subtitle && <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>{subtitle}</p>}
+      <div
+        style={{
+          padding: "13px 18px 11px",
+          borderBottom: `1px solid ${T.border}`,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: T.display,
+            fontWeight: 600,
+            fontSize: 13,
+            letterSpacing: "0.07em",
+            textTransform: "uppercase",
+            color: T.wellhead,
+          }}
+        >
+          {title}
+        </div>
+        {subtitle && (
+          <div style={{ marginTop: 2, fontSize: 11, color: T.paraffin }}>
+            {subtitle}
+          </div>
+        )}
       </div>
-      {children}
+      <div style={{ padding: "14px 18px" }}>{children}</div>
     </section>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "baseline",
+        gap: 12,
+        padding: "7px 0",
+        borderBottom: `1px solid rgba(42,37,32,0.9)`,
+      }}
+    >
+      <span style={{ fontSize: 11, color: T.paraffin }}>{label}</span>
+      <span style={{ fontSize: 11, fontFamily: T.mono, color: T.wellhead }}>{value}</span>
+    </div>
   );
 }
 
@@ -308,11 +458,15 @@ export function App() {
           setEnergyState(normalized);
         } else {
           setEnergyState(null);
-          setStateError(`Energy state payload is missing required fields from ${apiBaseUrl}/api/v1/energy/state`);
+          setStateError(
+            `Energy state payload is missing required fields from ${apiBaseUrl}/api/v1/energy/state`,
+          );
         }
       } else {
         setEnergyState(null);
-        setStateError((payload as { message?: string } | null)?.message ?? "Failed to load energy state");
+        setStateError(
+          (payload as { message?: string } | null)?.message ?? "Failed to load energy state",
+        );
       }
     } else {
       setEnergyState(null);
@@ -336,7 +490,9 @@ export function App() {
         setRuntime(normalizeRuntime(payload));
       } else {
         setRuntime(null);
-        setRuntimeError((payload as { message?: string } | null)?.message ?? "Failed to load energy runtime");
+        setRuntimeError(
+          (payload as { message?: string } | null)?.message ?? "Failed to load energy runtime",
+        );
       }
     } else {
       setRuntime(null);
@@ -352,12 +508,11 @@ export function App() {
     const intervalId = setInterval(() => {
       void loadOverview();
     }, REFRESH_MS);
-
     return () => clearInterval(intervalId);
   }, [loadOverview]);
 
   const selectedEngine = useMemo(
-    () => engines.find((engine) => engine.engineKey === "energy") ?? engines[0] ?? null,
+    () => engines.find((e) => e.engineKey === "energy") ?? engines[0] ?? null,
     [engines],
   );
 
@@ -378,7 +533,9 @@ export function App() {
   const scoreValue = energyState?.scoreValue ?? 0;
   const confidence = energyState?.confidence ?? 0;
   const scoreStatus = statusLabel(scoreValue);
-  const confidenceTone = confidence >= 0.8 ? "good" : confidence >= 0.55 ? "warn" : "bad";
+  const scoreAccent = accentForStatus(scoreStatus);
+  const confidenceTone =
+    confidence >= 0.8 ? ("ok" as const) : confidence >= 0.55 ? ("warn" as const) : ("bad" as const);
   const runtimeFeedHealth = runtime?.feedHealth ?? [];
   const runtimeObservations = runtime?.observations ?? [];
   const runtimeRuleState = runtime?.ruleState ?? [];
@@ -389,50 +546,70 @@ export function App() {
     <div
       style={{
         minHeight: "100dvh",
-        background:
-          "radial-gradient(circle at top left, rgba(59,130,246,0.2), transparent 28%), radial-gradient(circle at top right, rgba(16,185,129,0.16), transparent 24%), linear-gradient(180deg, #0f172a 0, #111827 280px, #eef2f7 280px, #eef2f7 100%)",
-        color: "#0f172a",
+        background: T.crude,
+        color: T.wellhead,
+        fontFamily: T.body,
       }}
     >
+      {/* Header */}
       <header
         style={{
-          maxWidth: 1180,
-          margin: "0 auto",
-          padding: "28px 20px 18px",
-          color: "#fff",
+          borderBottom: `1px solid ${T.border}`,
+          padding: "0 24px",
+          height: 52,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 20, alignItems: "start" }}>
-          <div style={{ maxWidth: 680 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", opacity: 0.72 }}>
-              Energy engine
-            </p>
-            <h1 style={{ margin: 0, fontSize: 28, lineHeight: 1.05, letterSpacing: "-0.04em" }}>
-              Live Energy signal, runtime health, and feed status in one view.
-            </h1>
-            <p style={{ margin: "12px 0 0", maxWidth: 640, fontSize: 14, lineHeight: 1.6, color: "rgba(255,255,255,0.78)" }}>
-              This frontend now reads the current Energy API directly. The main score comes from
-              <code style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}> /api/v1/energy/state</code>,
-              with runtime diagnostics from
-              <code style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12 }}> /api/engines/energy/runtime</code>.
-            </p>
-          </div>
-
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <span
+            style={{
+              fontFamily: T.display,
+              fontWeight: 700,
+              fontSize: 17,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              color: T.wellhead,
+            }}
+          >
+            Oil Shock
+          </span>
+          <span className="r-hide-mobile" style={{ width: 1, height: 16, background: T.border, display: "block" }} />
+          <span
+            className="r-hide-mobile"
+            style={{
+              fontSize: 11,
+              color: T.paraffin,
+              fontFamily: T.mono,
+              letterSpacing: "0.04em",
+            }}
+          >
+            Energy dislocation monitor
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {energyState && (
+            <span className="r-hide-mobile" style={{ fontSize: 11, color: T.paraffin, fontFamily: T.mono }}>
+              scored {relativeAge(energyState.scoredAt)}
+            </span>
+          )}
           <button
             onClick={() => void loadOverview()}
             disabled={loading || refreshing}
             aria-label="Refresh energy data"
             style={{
-              border: "1px solid rgba(255,255,255,0.18)",
-              background: "rgba(255,255,255,0.08)",
-              color: "#fff",
-              borderRadius: 14,
-              padding: "10px 14px",
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: "pointer",
-              minWidth: 128,
-              boxShadow: "0 10px 24px rgba(15, 23, 42, 0.2)",
+              background: "transparent",
+              border: `1px solid ${T.border}`,
+              color: T.wellhead,
+              borderRadius: 6,
+              padding: "6px 14px",
+              fontSize: 12,
+              fontFamily: T.body,
+              fontWeight: 500,
+              cursor: loading || refreshing ? "default" : "pointer",
+              opacity: loading || refreshing ? 0.4 : 1,
+              transition: "border-color 0.15s ease, opacity 0.15s ease",
             }}
           >
             {refreshing ? "Refreshing…" : "Refresh"}
@@ -440,33 +617,38 @@ export function App() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1180, margin: "0 auto", padding: "0 20px 40px" }}>
+      <main className="r-main">
         {loading ? (
           <div
             style={{
-              background: "#fff",
-              border: "1px solid #e5e7eb",
-              borderRadius: 20,
-              padding: 24,
-              boxShadow: "0 16px 40px rgba(15, 23, 42, 0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: 220,
+              color: T.paraffin,
+              fontSize: 12,
+              fontFamily: T.mono,
+              letterSpacing: "0.06em",
             }}
           >
-            <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>Loading energy data…</p>
+            loading…
           </div>
         ) : (
           <>
-            {(stateError || runtimeError) && (
+            {/* Error banner */}
+            {(stateError ?? runtimeError) && (
               <div
                 role="alert"
                 style={{
-                  marginBottom: 16,
-                  padding: "12px 14px",
-                  borderRadius: 16,
-                  border: "1px solid #fecaca",
-                  background: "#fff1f2",
-                  color: "#991b1b",
-                  fontSize: 13,
-                  lineHeight: 1.5,
+                  marginBottom: 14,
+                  padding: "11px 16px",
+                  borderRadius: 8,
+                  border: `1px solid rgba(232,105,26,0.3)`,
+                  background: "rgba(232,105,26,0.06)",
+                  color: T.flare,
+                  fontSize: 12,
+                  fontFamily: T.mono,
+                  lineHeight: 1.6,
                 }}
               >
                 {stateError && <div>{stateError}</div>}
@@ -474,328 +656,491 @@ export function App() {
               </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: 16, alignItems: "stretch" }}>
-              <section
-                style={{
-                  borderRadius: 24,
-                  padding: 24,
-                  color: "#fff",
-                  background:
-                    "linear-gradient(135deg, rgba(15,23,42,0.98), rgba(30,41,59,0.94) 58%, rgba(14,116,144,0.92))",
-                  boxShadow: "0 24px 54px rgba(15, 23, 42, 0.22)",
-                }}
-              >
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
-                  <SummaryPill label={scoreStatus} tone={scoreStatus === "stable" ? "good" : "warn"} />
-                  <SummaryPill label={confidenceLabel(confidence)} tone={confidenceTone} />
-                  <SummaryPill label={selectedEngine?.displayName ?? "Energy"} tone="neutral" />
-                  {selectedEngine && <SummaryPill label={selectedEngine.status} tone="good" />}
+            {/* Hero */}
+            <div
+              className="r-hero"
+              style={{ background: T.bitumen, border: `1px solid ${T.border}` }}
+            >
+              <GaugeMeter score={scoreValue} status={scoreStatus} />
+
+              {/* State label + metadata */}
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div
+                  style={{
+                    fontFamily: T.mono,
+                    fontSize: 10,
+                    letterSpacing: "0.12em",
+                    color: T.paraffin,
+                    textTransform: "uppercase",
+                    marginBottom: 5,
+                  }}
+                >
+                  Energy dislocation
+                </div>
+                <div
+                  style={{
+                    fontFamily: T.display,
+                    fontWeight: 700,
+                    fontSize: 50,
+                    letterSpacing: "0.01em",
+                    lineHeight: 1,
+                    color: scoreAccent,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {scoreStatus === "elevated"
+                    ? "Elevated"
+                    : scoreStatus === "watch"
+                      ? "Watch"
+                      : "Stable"}
                 </div>
 
-                <div style={{ display: "flex", gap: 24, alignItems: "end", flexWrap: "wrap" }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.68)" }}>Current score</p>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                      <span style={{ fontSize: 64, fontWeight: 800, letterSpacing: "-0.06em", lineHeight: 1 }}>
-                        {percent(scoreValue)}
-                      </span>
-                      <span style={{ fontSize: 14, color: "rgba(255,255,255,0.72)" }}>normalized energy stress</span>
-                    </div>
-                  </div>
+                <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  <Badge label={confidenceLabel(confidence)} tone={confidenceTone} />
+                  {selectedEngine && (
+                    <Badge label={selectedEngine.status} tone="ok" />
+                  )}
+                  {(energyState?.flags ?? []).map((flag) => (
+                    <Badge key={flag} label={flag} tone="neutral" />
+                  ))}
+                </div>
 
-                  <div style={{ minWidth: 190 }}>
-                    <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.68)" }}>Confidence</p>
+                {/* Confidence track */}
+                <div style={{ marginTop: 16 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: 5,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: T.paraffin }}>Signal confidence</span>
+                    <span style={{ fontSize: 11, fontFamily: T.mono, color: T.wellhead }}>
+                      {percent(confidence)}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 3,
+                      background: "rgba(237,232,220,0.07)",
+                      borderRadius: 2,
+                      overflow: "hidden",
+                    }}
+                  >
                     <div
                       style={{
-                        marginTop: 8,
-                        height: 10,
-                        borderRadius: 999,
-                        background: "rgba(255,255,255,0.15)",
-                        overflow: "hidden",
+                        height: "100%",
+                        width: `${Math.round(confidence * 100)}%`,
+                        background:
+                          confidence >= 0.8 ? T.gauge : confidence >= 0.55 ? T.watch : T.flare,
+                        borderRadius: 2,
+                        transition: "width 0.4s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {energyState && (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      fontSize: 11,
+                      color: T.paraffin,
+                      fontFamily: T.mono,
+                    }}
+                  >
+                    {energyState.feedKey} · scored {relativeAge(energyState.scoredAt)}
+                  </div>
+                )}
+              </div>
+
+              {/* Engine column */}
+              <div className="r-engine-col">
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: T.paraffin,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontFamily: T.mono,
+                      marginBottom: 4,
+                    }}
+                  >
+                    Active engine
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: T.display,
+                      fontWeight: 600,
+                      fontSize: 20,
+                      color: T.wellhead,
+                    }}
+                  >
+                    {selectedEngine?.displayName ?? "Energy"}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: T.paraffin,
+                      fontFamily: T.mono,
+                      marginTop: 2,
+                    }}
+                  >
+                    {selectedEngine?.engineKey ?? "energy"}
+                  </div>
+                </div>
+
+                <div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: T.paraffin,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontFamily: T.mono,
+                      marginBottom: 5,
+                    }}
+                  >
+                    Feed health
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: T.display,
+                      fontWeight: 600,
+                      fontSize: 18,
+                      color:
+                        feedHealthSummary.critical > 0
+                          ? T.flare
+                          : feedHealthSummary.warning > 0
+                            ? T.watch
+                            : T.gauge,
+                    }}
+                  >
+                    {feedHealthSummary.healthy}/{feedHealthSummary.total} feeds
+                  </div>
+                  {(feedHealthSummary.warning > 0 || feedHealthSummary.critical > 0) && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: T.paraffin,
+                        fontFamily: T.mono,
+                        marginTop: 2,
                       }}
                     >
-                      <div
-                        style={{
-                          height: "100%",
-                          width: `${Math.round(confidence * 100)}%`,
-                          background: "linear-gradient(90deg, #22c55e, #f59e0b)",
-                          borderRadius: 999,
-                        }}
-                      />
+                      {feedHealthSummary.warning} warn · {feedHealthSummary.critical} degraded
                     </div>
-                    <p style={{ margin: "8px 0 0", fontSize: 12, color: "rgba(255,255,255,0.82)" }}>
-                      {percent(confidence)} confidence on {energyState?.feedKey ?? "energy.state"}
-                    </p>
-                  </div>
-                </div>
-
-                <p style={{ margin: "18px 0 0", fontSize: 13, color: "rgba(255,255,255,0.8)", lineHeight: 1.6 }}>
-                  Last scored {relativeAge(isoOrFallback(energyState?.scoredAt))}. The page now surfaces the live
-                  energy engine score instead of the legacy Oil Shock snapshot.
-                </p>
-
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
-                  {energyState?.flags.length ? (
-                    energyState.flags.map((flag) => (
-                      <span
-                        key={flag}
-                        style={{
-                          borderRadius: 999,
-                          padding: "6px 10px",
-                          background: "rgba(255,255,255,0.12)",
-                          color: "#e2e8f0",
-                          fontSize: 12,
-                          fontWeight: 600,
-                          fontFamily: '"JetBrains Mono", monospace',
-                        }}
-                      >
-                        {flag}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: 12, color: "rgba(255,255,255,0.72)" }}>No active score flags</span>
                   )}
                 </div>
-              </section>
 
-              <SectionCard title="Engine summary" subtitle="Current deployment and runtime chain">
-                <div style={{ display: "grid", gap: 12 }}>
+                <div>
                   <div
                     style={{
-                      padding: 14,
-                      borderRadius: 16,
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
+                      fontSize: 10,
+                      color: T.paraffin,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                      fontFamily: T.mono,
+                      marginBottom: 6,
                     }}
                   >
-                    <p style={{ margin: 0, fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Active engine
-                    </p>
-                    <p style={{ margin: "6px 0 0", fontSize: 18, fontWeight: 700, color: "#0f172a" }}>
-                      {selectedEngine?.displayName ?? "Energy"}
-                    </p>
-                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "#475569" }}>
-                      {selectedEngine?.engineKey ?? "energy"} • {selectedEngine?.status ?? "unknown"}
-                    </p>
+                    Runtime chain
                   </div>
-
-                  <div
-                    style={{
-                      padding: 14,
-                      borderRadius: 16,
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <p style={{ margin: 0, fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Runtime chain
-                    </p>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                      {(selectedEngine?.runtimeChain ?? []).map((step) => (
-                        <span
-                          key={step}
-                          style={{
-                            borderRadius: 999,
-                            padding: "5px 10px",
-                            background: "#e2e8f0",
-                            color: "#0f172a",
-                            fontSize: 12,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {step}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      padding: 14,
-                      borderRadius: 16,
-                      background: "#f8fafc",
-                      border: "1px solid #e2e8f0",
-                    }}
-                  >
-                    <p style={{ margin: 0, fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Data freshness
-                    </p>
-                    <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-                      {feedHealthSummary.healthy} healthy / {feedHealthSummary.total} feeds
-                    </p>
-                    <p style={{ margin: "4px 0 0", fontSize: 12, color: "#475569" }}>
-                      {feedHealthSummary.warning} warning, {feedHealthSummary.critical} degraded
-                    </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                    {(selectedEngine?.runtimeChain ?? []).map((step) => (
+                      <span
+                        key={step}
+                        style={{
+                          fontSize: 10,
+                          fontFamily: T.mono,
+                          color: T.paraffin,
+                          background: "rgba(237,232,220,0.05)",
+                          border: `1px solid ${T.border}`,
+                          borderRadius: 3,
+                          padding: "2px 6px",
+                        }}
+                      >
+                        {step}
+                      </span>
+                    ))}
+                    {!selectedEngine && (
+                      <span style={{ fontSize: 11, color: T.paraffin, fontFamily: T.mono }}>
+                        —
+                      </span>
+                    )}
                   </div>
                 </div>
-              </SectionCard>
+              </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 16 }}>
-              <SectionCard title="Feed health" subtitle="Latest registry checks for the energy feeds">
-                <div style={{ display: "grid", gap: 10 }}>
+            {/* Feed health + Observations */}
+            <div className="r-grid-2">
+              <Panel title="Feed health" subtitle="API registry checks">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {runtimeFeedHealth.map((feed) => {
+                    const tone =
+                      feed.status === "ok" && feed.enabled
+                        ? ("ok" as const)
+                        : feed.status === "warn"
+                          ? ("warn" as const)
+                          : ("bad" as const);
                     const latest = feed.latestCheck;
-                    const tone = feed.status === "ok" ? "good" : feed.status === "warn" ? "warn" : "bad";
                     return (
                       <article
                         key={feed.feedKey}
                         style={{
-                          border: "1px solid #e2e8f0",
-                          borderRadius: 16,
-                          padding: 14,
-                          background: "#fff",
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "rgba(237,232,220,0.025)",
+                          border: `1px solid ${T.border}`,
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start" }}>
-                          <div>
-                            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-                              {feed.displayName}
-                            </p>
-                            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
-                              {feed.feedKey} • {feed.enabled ? "enabled" : "disabled"}
-                            </p>
-                          </div>
-                          <SummaryPill label={feed.status} tone={tone} />
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 8,
+                          }}
+                        >
+                          <span style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
+                            {feed.displayName}
+                          </span>
+                          <Badge label={feed.status} tone={tone} />
                         </div>
-                        <p style={{ margin: "10px 0 0", fontSize: 12, color: "#334155" }}>
-                          {latest
-                            ? `${latest.step} · ${latest.result} · ${latest.checkedAt}${
-                                latest.latencyMs !== null ? ` · ${latest.latencyMs}ms` : ""
-                              }`
-                            : "No recent health check"}
-                        </p>
+                        <div
+                          style={{
+                            marginTop: 4,
+                            fontSize: 10,
+                            color: T.paraffin,
+                            fontFamily: T.mono,
+                          }}
+                        >
+                          {feed.feedKey} · {feed.enabled ? "enabled" : "disabled"}
+                        </div>
+                        {latest && (
+                          <div
+                            style={{
+                              marginTop: 3,
+                              fontSize: 10,
+                              color: T.paraffin,
+                              fontFamily: T.mono,
+                            }}
+                          >
+                            {latest.step} · {latest.result}
+                            {latest.latencyMs !== null ? ` · ${latest.latencyMs}ms` : ""}
+                          </div>
+                        )}
                       </article>
                     );
                   })}
                   {runtimeFeedHealth.length === 0 && (
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>No feed health rows available.</p>
+                    <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
+                      No feed health data.
+                    </span>
                   )}
                 </div>
-              </SectionCard>
+              </Panel>
 
-              <SectionCard title="Observations" subtitle="Latest normalized inputs driving the live score">
-                <div style={{ display: "grid", gap: 10 }}>
-                  {runtimeObservations.map((observation) => (
+              <Panel title="Observations" subtitle="Latest normalized inputs driving the score">
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {runtimeObservations.map((obs) => (
                     <article
-                      key={observation.seriesKey}
+                      key={obs.seriesKey}
                       style={{
-                        border: "1px solid #e2e8f0",
-                        borderRadius: 16,
-                        padding: 14,
-                        background: "#fff",
+                        padding: "10px 12px",
+                        borderRadius: 6,
+                        background: "rgba(237,232,220,0.025)",
+                        border: `1px solid ${T.border}`,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
                       }}
                     >
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-                        <div>
-                          <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-                            {observation.feedKey}
-                          </p>
-                          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
-                            {observation.seriesKey} • as of {observation.asOfDate}
-                          </p>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
+                          {obs.feedKey}
                         </div>
-                        <span style={{ fontSize: 20, fontWeight: 800, color: "#0f172a" }}>
-                          {percent(observation.value)}
-                        </span>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 10,
+                            color: T.paraffin,
+                            fontFamily: T.mono,
+                          }}
+                        >
+                          {obs.seriesKey} · {obs.asOfDate}
+                        </div>
                       </div>
-                      <p style={{ margin: "10px 0 0", fontSize: 12, color: "#334155" }}>
-                        Observed {observation.observedAt}
-                      </p>
+                      <div
+                        style={{
+                          fontFamily: T.display,
+                          fontWeight: 700,
+                          fontSize: 22,
+                          color: T.wellhead,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {percent(obs.value)}
+                      </div>
                     </article>
                   ))}
                   {runtimeObservations.length === 0 && (
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>No observations available.</p>
+                    <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
+                      No observations.
+                    </span>
                   )}
                 </div>
-              </SectionCard>
+              </Panel>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginTop: 16 }}>
-              <SectionCard title="Rule state" subtitle="Current Energy rule evaluation snapshots">
-                <div style={{ display: "grid", gap: 10 }}>
+            {/* Rule state · Trigger events · Actions */}
+            <div className="r-grid-3">
+              <Panel title="Rule state" subtitle="Energy rule snapshots">
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                   {runtimeRuleState.map((rule) => (
-                    <article key={`${rule.ruleKey}:${rule.stateKey}`} style={{ padding: 14, borderRadius: 16, background: "#fff", border: "1px solid #e2e8f0" }}>
-                      <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{rule.ruleKey}</p>
-                      <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
-                        {rule.state.status ?? "unknown"} • evaluated {relativeAge(isoOrFallback(rule.evaluatedAt))}
-                      </p>
-                      <p style={{ margin: "8px 0 0", fontSize: 12, color: "#334155" }}>
-                        spread: {percent(rule.state.spread ?? 0)} • crack: {percent(rule.state.crack ?? 0)}
-                      </p>
+                    <article
+                      key={`${rule.ruleKey}:${rule.stateKey}`}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 6,
+                        background: "rgba(237,232,220,0.025)",
+                        border: `1px solid ${T.border}`,
+                      }}
+                    >
+                      <div style={{ fontSize: 12, fontWeight: 500, color: T.wellhead }}>
+                        {rule.ruleKey}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 3,
+                          fontSize: 10,
+                          color: T.paraffin,
+                          fontFamily: T.mono,
+                        }}
+                      >
+                        {rule.state.status ?? "unknown"} · {relativeAge(rule.evaluatedAt)}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontSize: 10,
+                          color: T.paraffin,
+                          fontFamily: T.mono,
+                        }}
+                      >
+                        spread {percent(rule.state.spread ?? 0)} · crack{" "}
+                        {percent(rule.state.crack ?? 0)}
+                      </div>
                     </article>
                   ))}
                   {runtimeRuleState.length === 0 && (
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>No rule state rows available.</p>
+                    <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
+                      No rule state.
+                    </span>
                   )}
                 </div>
-              </SectionCard>
+              </Panel>
 
-              <SectionCard title="Trigger events" subtitle="Confirmed rule transitions and guardrail triggers">
-                <div style={{ display: "grid", gap: 10 }}>
-                  {runtimeTriggerEvents.length ? (
+              <Panel title="Trigger events" subtitle="Rule transitions">
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {runtimeTriggerEvents.length > 0 ? (
                     runtimeTriggerEvents.slice(0, 4).map((event, index) => (
-                      <article key={`${event.ruleKey ?? "trigger"}:${index}`} style={{ padding: 14, borderRadius: 16, background: "#fff", border: "1px solid #e2e8f0" }}>
-                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
-                          {event.ruleKey ?? "trigger event"}
-                        </p>
-                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
+                      <article
+                        key={`${String(event.ruleKey ?? "trigger")}:${index}`}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "rgba(237,232,220,0.025)",
+                          border: `1px solid ${T.border}`,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 500, color: T.wellhead }}>
+                          {String(event.ruleKey ?? "trigger event")}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 10,
+                            color: T.paraffin,
+                            fontFamily: T.mono,
+                          }}
+                        >
                           {Object.entries(event)
-                            .filter(([key]) => key !== "engineKey" && key !== "ruleKey")
+                            .filter(([k]) => k !== "engineKey" && k !== "ruleKey")
                             .slice(0, 3)
-                            .map(([key, value]) => `${key}: ${String(value)}`)
-                            .join(" • ")}
-                        </p>
+                            .map(([k, v]) => `${k}: ${String(v)}`)
+                            .join(" · ")}
+                        </div>
                       </article>
                     ))
                   ) : (
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>No trigger events recorded.</p>
+                    <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
+                      No trigger events.
+                    </span>
                   )}
                 </div>
-              </SectionCard>
+              </Panel>
 
-              <SectionCard title="Actions" subtitle="Logging-only action manager output">
-                <div style={{ display: "grid", gap: 10 }}>
-                  {runtimeActions.length ? (
+              <Panel title="Actions" subtitle="Action manager log">
+                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {runtimeActions.length > 0 ? (
                     runtimeActions.slice(0, 4).map((action, index) => (
-                      <article key={`${action.engineKey}:${index}`} style={{ padding: 14, borderRadius: 16, background: "#fff", border: "1px solid #e2e8f0" }}>
-                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#0f172a" }}>
+                      <article
+                        key={`${action.engineKey}:${index}`}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "rgba(237,232,220,0.025)",
+                          border: `1px solid ${T.border}`,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, fontWeight: 500, color: T.wellhead }}>
                           {action.engineKey}
-                        </p>
-                        <p style={{ margin: "4px 0 0", fontSize: 12, color: "#64748b" }}>
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 3,
+                            fontSize: 10,
+                            color: T.paraffin,
+                            fontFamily: T.mono,
+                          }}
+                        >
                           {Object.entries(action)
-                            .filter(([key]) => key !== "engineKey")
+                            .filter(([k]) => k !== "engineKey")
                             .slice(0, 3)
-                            .map(([key, value]) => `${key}: ${String(value)}`)
-                            .join(" • ")}
-                        </p>
+                            .map(([k, v]) => `${k}: ${String(v)}`)
+                            .join(" · ")}
+                        </div>
                       </article>
                     ))
                   ) : (
-                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>No action log entries recorded.</p>
+                    <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
+                      No action log entries.
+                    </span>
                   )}
                 </div>
-              </SectionCard>
+              </Panel>
             </div>
 
+            {/* Footer */}
             <div
               style={{
-                marginTop: 16,
-                padding: "0 4px",
-                color: "#64748b",
-                fontSize: 12,
+                marginTop: 24,
+                paddingTop: 14,
+                borderTop: `1px solid ${T.border}`,
                 display: "flex",
-                flexWrap: "wrap",
-                gap: 10,
                 justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: 12,
+                fontSize: 10,
+                color: T.paraffin,
+                fontFamily: T.mono,
               }}
             >
-              <span>
-                API base: <code style={{ fontFamily: '"JetBrains Mono", monospace' }}>{apiBaseUrl}</code>
-              </span>
-              <span>
-                Runtime snapshot: <code style={{ fontFamily: '"JetBrains Mono", monospace' }}>{runtime?.metadata?.generatedAt ?? "unknown"}</code>
-              </span>
+              <span>api: {apiBaseUrl}</span>
+              <span>snapshot: {runtime?.metadata?.generatedAt ?? "—"}</span>
             </div>
           </>
         )}
