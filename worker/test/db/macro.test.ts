@@ -511,6 +511,45 @@ describe("macro core migration", () => {
     expect(seededCount).toBe("6");
   });
 
+  skipIfNoSqlite3("0020 backfill migration deduplicates legacy series points before creating the unique index", () => {
+    const dbPath = createDbPath();
+    const initPath = resolve(process.cwd(), "../db/migrations/0001_init.sql");
+    const migrationPath = resolve(process.cwd(), "../db/migrations/0020_series_points_unique_backfill.sql");
+
+    applyMigrationFile(dbPath, initPath);
+
+    runSqlite(
+      dbPath,
+      `
+      INSERT INTO series_points (series_key, observed_at, value, unit, source_key)
+      VALUES
+        ('price_signal.curve_slope', '2024-04-05', 0.12, 'ratio', 'eia'),
+        ('price_signal.curve_slope', '2024-04-05', 0.34, 'ratio', 'eia'),
+        ('price_signal.curve_slope', '2024-04-06', 0.56, 'ratio', 'eia');
+      `
+    );
+
+    applyMigrationFile(dbPath, migrationPath);
+
+    const remainingRows = runSqlite(
+      dbPath,
+      `
+      SELECT id || '|' || value
+      FROM series_points
+      WHERE series_key = 'price_signal.curve_slope'
+      ORDER BY observed_at, id;
+      `
+    ).split("\n");
+
+    expect(remainingRows).toEqual(["2|0.34", "3|0.56"]);
+
+    const uniqueIndex = runSqlite(
+      dbPath,
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_series_points_unique_source_point';"
+    );
+    expect(uniqueIndex).toBe("idx_series_points_unique_source_point");
+  });
+
   skipIfNoSqlite3("trigger_events unique key prevents duplicates for same transition identity", () => {
     const dbPath = createDbPath();
     applyAllMigrations(dbPath);

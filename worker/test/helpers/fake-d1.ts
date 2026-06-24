@@ -89,6 +89,53 @@ export class FakeD1Database {
         weight: 0.03,
         action: "adjust_mismatch",
         is_active: 1
+      },
+      {
+        id: 2,
+        engine_key: "oil_shock",
+        rule_key: "oilshock.confirmation.spread_widening",
+        name: "Confirmation spread widening",
+        predicate_json: JSON.stringify({
+          type: "all",
+          predicates: [
+            { type: "threshold", metric: "physicalStress", operator: ">=", value: 0.6 },
+            { type: "threshold", metric: "priceSignal", operator: "<=", value: 0.45 }
+          ]
+        }),
+        weight: 0.05,
+        action: "adjust_mismatch",
+        is_active: 1
+      },
+      {
+        id: 3,
+        engine_key: "energy",
+        rule_key: "energy.confirmation.spread_widening",
+        name: "Energy spread widening",
+        predicate_json: JSON.stringify({
+          type: "all",
+          predicates: [
+            { type: "threshold", metric: "physicalStress", operator: ">=", value: 0.6 },
+            { type: "threshold", metric: "priceSignal", operator: "<=", value: 0.45 }
+          ]
+        }),
+        weight: 0.04,
+        action: "adjust_mismatch",
+        is_active: 1
+      },
+      {
+        id: 4,
+        engine_key: "macro_releases",
+        rule_key: "macro.inflation_surprise_high",
+        name: "Macro inflation surprise high",
+        predicate_json: JSON.stringify({
+          type: "threshold",
+          metric: "marketResponse",
+          operator: ">=",
+          value: 0.4
+        }),
+        weight: 0.06,
+        action: "adjust_mismatch",
+        is_active: 1
       }
     ],
     api_feed_registry: [
@@ -227,10 +274,10 @@ export class FakeD1Database {
         evidence_group: params[2],
         observed_at: params[3],
         contribution: params[4],
-        evidence_classification: params[5],
-        coverage_quality: params[6],
-        evidence_group_label: params[7],
-        details_json: params[8]
+        details_json: params[5],
+        evidence_classification: params[6],
+        coverage_quality: params[7],
+        evidence_group_label: params[8]
       });
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
@@ -258,12 +305,14 @@ export class FakeD1Database {
       return { success: true, meta: { last_row_id: 0 } };
     }
     if (normalized.startsWith("update rules")) {
-      const ruleKey = String(params[3]);
-      const row = this.tables.rules.find((item) => item.rule_key === ruleKey);
+      const engineKey = String(params[4]);
+      const ruleKey = String(params[5]);
+      const row = this.tables.rules.find((item) => item.engine_key === engineKey && item.rule_key === ruleKey);
       if (row) {
-        row.weight = params[0] ?? row.weight;
+        row.name = params[0] ?? row.name;
         row.predicate_json = params[1] ?? row.predicate_json;
-        row.is_active = params[2] ?? row.is_active;
+        row.weight = params[2] ?? row.weight;
+        row.is_active = params[3] ?? row.is_active;
       }
       return { success: true, meta: { last_row_id: 0 } };
     }
@@ -378,6 +427,12 @@ export class FakeD1Database {
         .sort((a, b) => String(b.observed_at).localeCompare(String(a.observed_at)))[0];
       return (row as T) ?? null;
     }
+    if (normalized.includes("from rules") && normalized.includes("where engine_key = ?") && normalized.includes("rule_key = ?")) {
+      const engineKey = params[0];
+      const ruleKey = params[1];
+      const row = this.tables.rules.find((item) => item.engine_key === engineKey && item.rule_key === ruleKey);
+      return (row as T) ?? null;
+    }
     if (normalized.includes("from signal_snapshots")) {
       const row = [...this.tables.signal_snapshots].sort((a, b) =>
         String(b.generated_at).localeCompare(String(a.generated_at))
@@ -437,11 +492,11 @@ export class FakeD1Database {
       return { results: this.tables.config_thresholds as T[] };
     }
     if (normalized.includes("from rules")) {
-      return {
-        results: this.tables.rules
-          .filter((row) => row.engine_key === params[0] && row.is_active === 1)
-          .sort((a, b) => Number(a.id) - Number(b.id)) as T[]
-      };
+      const engineKey = typeof params[0] === "string" ? params[0] : null;
+      const rows = this.tables.rules
+        .filter((row) => row.is_active === 1 && (engineKey ? row.engine_key === engineKey : true))
+        .sort((a, b) => Number(a.id) - Number(b.id)) as T[];
+      return { results: rows };
     }
     if (normalized.includes("from signal_snapshots")) {
       const limit = Number(params[0] ?? 50);

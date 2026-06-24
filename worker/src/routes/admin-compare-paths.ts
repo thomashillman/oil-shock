@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { isPhase1ParallelRunningEnabled } from "../lib/feature-flags";
 import { json } from "../lib/http";
 
 interface SnapshotVersion {
@@ -30,6 +31,16 @@ interface ComparePathsResponse {
 }
 
 export async function handleCompareScorePaths(env: Env): Promise<Response> {
+  if (!isPhase1ParallelRunningEnabled(env)) {
+    return json(
+      {
+        error: "not_available",
+        message: "Phase 1 parallel score comparison is not enabled."
+      },
+      { status: 404 }
+    );
+  }
+
   try {
     const observedAt = new Date().toISOString();
 

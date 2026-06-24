@@ -108,12 +108,13 @@ class MockD1Database {
   async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
 
-    if (normalized.includes("from rules") && normalized.includes("where engine_key = ?") && normalized.includes("is_active = 1")) {
+    if (normalized.includes("from rules")) {
       if (this.failRulesQuery) {
         throw new Error("legacy rule evaluation failed");
       }
-      const engineKey = params[0];
-      return { results: this.rules.filter((row) => row.engine_key === engineKey && row.is_active === 1) as T[] };
+      const engineKey = typeof params[0] === "string" ? params[0] : null;
+      const rows = this.rules.filter((row) => row.is_active === 1 && (engineKey ? row.engine_key === engineKey : true));
+      return { results: rows as T[] };
     }
 
     throw new Error(`Unhandled all query: ${query}`);

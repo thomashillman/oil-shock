@@ -70,9 +70,9 @@ export async function main(): Promise<void> {
   try {
     const output = runMigrations({ isLocal: process.argv.includes("--local") });
     process.stdout.write(output);
-    console.log("\n? Migration apply completed");
+    console.log("\nMigration apply completed");
   } catch (error) {
-    console.error("? Migration apply failed:");
+    console.error("Migration apply failed:");
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
