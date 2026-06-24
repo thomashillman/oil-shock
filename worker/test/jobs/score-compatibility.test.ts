@@ -13,6 +13,7 @@ describe("Oil Shock compatibility snapshot", () => {
       physicalStress: 0.7,
       priceSignal: 0.2,
       marketResponse: 0.6,
+      priceSignalWasMissing: false,
       physicalStressPoint: {
         seriesKey: "energy_spread.wti_brent_spread",
         observedAt: "2026-06-23T00:00:00.000Z",

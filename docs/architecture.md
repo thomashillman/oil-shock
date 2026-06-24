@@ -120,13 +120,53 @@ Current limitation:
 
 ## Scoring and state model
 
-The scoring system works across three dimensions:
+There are two distinct scores. Do not conflate them.
+
+1. **Live Energy score** — served by `GET /api/v1/energy/state`, written to the `scores` table by
+   `runEnergyScore` in `worker/src/jobs/score.ts`. This is what the live frontend reads. See
+   [Energy scoring model (live path)](#energy-scoring-model-live-path) below.
+2. **Oil Shock compatibility snapshot** — served by `GET /api/state`, written to
+   `signal_snapshots` by `worker/src/jobs/score-compatibility.ts` and
+   `worker/src/core/scoring/compute.ts`. This is the legacy recognition-gap model described in this
+   "Scoring and state model" section.
+
+### Energy scoring model (live path)
+
+Thesis: **physical energy stress is worsening faster than market pricing recognises.** The live
+score therefore measures the *unrecognised* portion of physical stress, separating three
+explicitly-defined dimensions:
+
+- `physicalStress` (← `energy_spread.wti_brent_spread`) — physical crude constraint.
+- `marketRecognition` (← `price_signal.curve_slope`, `null` when missing) — how much pricing already
+  reflects the stress.
+- `transmissionStress` (← `energy_spread.diesel_wti_crack`) — bounded downstream/product stress.
+
+```text
+hiddenMismatch = physicalStress * (1 - marketRecognition)   // physicalStress * 0.5 when recognition is missing
+
+scoreValue = clamp01(
+  hiddenMismatch
+  + transmissionStress * mismatch_market_response_weight
+  + ruleAdjustment
+)
+```
+
+A missing `marketRecognition` is treated as **unknown**: it adds the `missing_price_confirmation`
+flag and lowers confidence to `0.6`, and it is fed into the compatibility path as a neutral `0.5`
+(not `0`). It does **not** confirm the thesis. `transmissionStress` is bounded by
+`mismatch_market_response_weight` so it can never drive the score on its own. Full detail, scenario
+examples, the list of observations collected but not yet scored, and known semantic risks (futures
+curve sign, WTI–Brent absolute-value basis) are in [`scoring-model.md`](./scoring-model.md).
+
+### Oil Shock compatibility snapshot
+
+The legacy snapshot works across three dimensions:
 
 - `physicalStress`
 - `priceSignal`
 - `marketResponse`
 
-The main score is:
+The compatibility mismatch score is:
 
 ```text
 mismatchScore = clamp01(

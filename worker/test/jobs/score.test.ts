@@ -25,6 +25,29 @@ import { runScore } from "../../src/jobs/score";
 
 type Row = Record<string, unknown>;
 
+// Minimal threshold seed so loadThresholds() succeeds for the live Energy score path.
+const SEED_CONFIG_THRESHOLDS: Row[] = [
+  { key: "state_aligned_threshold_max", value: 0.3 },
+  { key: "state_mild_threshold_min", value: 0.3 },
+  { key: "state_mild_threshold_max", value: 0.5 },
+  { key: "state_persistent_threshold_min", value: 0.5 },
+  { key: "state_persistent_threshold_max", value: 0.75 },
+  { key: "state_deep_threshold_min", value: 0.75 },
+  { key: "shock_age_threshold_hours", value: 72 },
+  { key: "dislocation_persistence_threshold_hours", value: 72 },
+  { key: "ledger_adjustment_magnitude", value: 0.1 },
+  { key: "mismatch_market_response_weight", value: 0.15 },
+  { key: "confirmation_physical_stress_min", value: 0.6 },
+  { key: "confirmation_price_signal_max", value: 0.45 },
+  { key: "confirmation_market_response_min", value: 0.5 },
+  { key: "coverage_missing_penalty", value: 0.34 },
+  { key: "coverage_stale_penalty", value: 0.16 },
+  { key: "coverage_max_penalty", value: 1.0 },
+  { key: "state_deep_persistence_hours", value: 120 },
+  { key: "state_persistent_persistence_hours", value: 72 },
+  { key: "ledger_stale_threshold_days", value: 30 }
+];
+
 class MockPreparedStatement {
   private params: unknown[] = [];
 
@@ -108,6 +131,10 @@ class MockD1Database {
   async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
 
+    if (normalized.includes("from config_thresholds")) {
+      return { results: SEED_CONFIG_THRESHOLDS as T[] };
+    }
+
     if (normalized.includes("from rules")) {
       if (this.failRulesQuery) {
         throw new Error("legacy rule evaluation failed");
@@ -171,6 +198,23 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     expect(mockRunEnergyRuleEngineV2).toHaveBeenCalledTimes(1);
     expect(mockRunActionManagerForEngine).toHaveBeenCalledTimes(1);
     expect(mockWriteOilShockCompatibilitySnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags a missing price signal as provisional and lowers confidence", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.7, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 1.0, observed_at: "2026-04-28T00:00:00.000Z" }
+      // no price_signal.curve_slope point
+    );
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(db.scores).toHaveLength(1);
+    // hiddenMismatch = 0.7 * 0.5 = 0.35; transmission = 1.0 * 0.15 = 0.15; no rules => 0.50
+    expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.5, 5);
+    expect(JSON.parse(String(db.scores[0]?.flags_json))).toContain("missing_price_confirmation");
+    expect(db.scores[0]?.confidence).toBe(0.6);
   });
 
   it("does not invoke action manager when rule engine v2 reports no trigger events", async () => {
