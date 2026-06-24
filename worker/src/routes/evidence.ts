@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { getLatestRunEvidence, getLatestSnapshot } from "../db/client";
+import { getLatestSnapshot, getRunEvidenceBySnapshotRunKey } from "../db/client";
 import { json } from "../lib/http";
 
 export async function handleGetEvidence(env: Env): Promise<Response> {
@@ -14,9 +14,20 @@ export async function handleGetEvidence(env: Env): Promise<Response> {
     );
   }
 
-  const evidence = await getLatestRunEvidence(env);
+  const evidenceRows = await getRunEvidenceBySnapshotRunKey(env, snapshot.run_key);
+  const evidence = evidenceRows.map((row) => ({
+    evidenceKey: row.evidence_key,
+    evidenceGroup: row.evidence_group,
+    evidenceGroupLabel: row.evidence_group_label,
+    observedAt: row.observed_at,
+    contribution: row.contribution,
+    classification: row.evidence_classification,
+    coverage: row.coverage_quality,
+    details: JSON.parse(row.details_json)
+  }));
+
   return json({
-    generated_at: snapshot.generated_at,
+    generatedAt: snapshot.generated_at,
     evidence
   });
 }
