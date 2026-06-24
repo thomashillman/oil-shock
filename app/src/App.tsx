@@ -575,8 +575,9 @@ export function App() {
           >
             Oil Shock
           </span>
-          <span style={{ width: 1, height: 16, background: T.border, display: "block" }} />
+          <span className="r-hide-mobile" style={{ width: 1, height: 16, background: T.border, display: "block" }} />
           <span
+            className="r-hide-mobile"
             style={{
               fontSize: 11,
               color: T.paraffin,
@@ -589,7 +590,7 @@ export function App() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {energyState && (
-            <span style={{ fontSize: 11, color: T.paraffin, fontFamily: T.mono }}>
+            <span className="r-hide-mobile" style={{ fontSize: 11, color: T.paraffin, fontFamily: T.mono }}>
               scored {relativeAge(energyState.scoredAt)}
             </span>
           )}
@@ -616,7 +617,7 @@ export function App() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1200, margin: "0 auto", padding: "24px 24px 48px" }}>
+      <main className="r-main">
         {loading ? (
           <div
             style={{
@@ -657,17 +658,8 @@ export function App() {
 
             {/* Hero */}
             <div
-              style={{
-                background: T.bitumen,
-                borderRadius: 10,
-                border: `1px solid ${T.border}`,
-                padding: "28px 32px",
-                marginBottom: 12,
-                display: "flex",
-                gap: 36,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
+              className="r-hero"
+              style={{ background: T.bitumen, border: `1px solid ${T.border}` }}
             >
               <GaugeMeter score={scoreValue} status={scoreStatus} />
 
@@ -763,18 +755,7 @@ export function App() {
               </div>
 
               {/* Engine column */}
-              <div
-                style={{
-                  minWidth: 190,
-                  paddingLeft: 32,
-                  borderLeft: `1px solid ${T.border}`,
-                  alignSelf: "stretch",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  gap: 18,
-                }}
-              >
+              <div className="r-engine-col">
                 <div>
                   <div
                     style={{
@@ -893,9 +874,7 @@ export function App() {
             </div>
 
             {/* Feed health + Observations */}
-            <div
-              style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}
-            >
+            <div className="r-grid-2">
               <Panel title="Feed health" subtitle="API registry checks">
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {runtimeFeedHealth.map((feed) => {
@@ -1017,7 +996,7 @@ export function App() {
             </div>
 
             {/* Rule state · Trigger events · Actions */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="r-grid-3">
               <Panel title="Rule state" subtitle="Energy rule snapshots">
                 <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
                   {runtimeRuleState.map((rule) => (
