@@ -187,29 +187,23 @@ feed status for operational monitoring.
 | `eia_wti` | `collectors/energy.ts` | `energy_spread.wti_brent_spread` (input) |
 | `eia_brent` | `collectors/energy.ts` | `energy_spread.wti_brent_spread` (input) |
 | `eia_diesel_wti_crack` | `collectors/energy.ts` | `energy_spread.diesel_wti_crack` |
+| `eia_futures_curve` | `collectors/eia-futures-curve.ts` | `price_signal.curve_slope` |
+| `eia_refinery` | `collectors/eia-refinery.ts` | `physical_stress.refinery_utilization` |
+| `eia_inventory` | `collectors/eia-inventory.ts` | `physical_stress.inventory_draw` |
+| `gie_storage` | `collectors/gie.ts` | `physical_stress.eu_gas_storage` |
 
-**Disabled aspirational feeds** (no collectors exist; disabled in migration `0020`):
+**Disabled feeds** (no collectors exist; disabled in migration `0020`, not re-enabled):
 
 | feed_name | Provider | Notes |
 |---|---|---|
-| `eia_inventory` | EIA | No collector; re-enable when implemented |
-| `eia_refinery` | EIA | No collector; re-enable when implemented |
-| `eia_futures_curve` | EIA | Maps to `price_signal.curve_slope` used in scoring; see known gap below |
 | `enia_pipeline` | ENTSOG | No collector; requires separate API credentials |
-| `gie_storage` | GIE | No collector; requires separate API credentials |
 | `sec_impairment` | SEC EDGAR | No collector; requires separate API credentials |
-
-**Known gap — `price_signal.curve_slope`**: Energy scoring (`worker/src/jobs/score.ts`) reads
-this series from `series_points`. It is never written because the `eia_futures_curve` collector
-has not been implemented. Scoring degrades gracefully: confidence drops to 0.6 and the
-`missing_price_confirmation` flag is set. Implementing this collector requires confirming EIA
-NYMEX futures series IDs and a slope normalisation formula. Do not re-enable `eia_futures_curve`
-in `api_feed_registry` until the collector is wired into `runCollection()`.
 
 ### `feed_registry` (Macro Signals engine registry)
 
-Lives in `db/migrations/0017_macro_engine_core.sql`. Seeded by migrations `0018` (Energy) and
-`0019` (CPI, disabled). Read by `listEnabledFeedKeys()` and related functions in
+Lives in `db/migrations/0017_macro_engine_core.sql`. Seeded by migrations `0018` (Energy),
+`0019` (CPI, disabled), `0021` (GIE storage), `0022` (EIA refinery), and `0023` (EIA inventory
+and futures curve). Read by `listEnabledFeedKeys()` and related functions in
 `worker/src/db/macro.ts`.
 
 Purpose: manage which engine/feed pairs are active for the Macro Signals bridge path —
@@ -225,7 +219,7 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 
 - Base API: `https://api.eia.gov/v2/`
 - Auth: `EIA_API_KEY`
-- Currently active: WTI/Brent spot prices and diesel-WTI crack spread via `collectors/energy.ts`
+- Currently active: WTI/Brent spot prices, diesel-WTI crack spread, refinery utilisation, crude inventory draw, and futures curve slope
 - Used for WTI spot, crude inventory draw, futures curve slope, refinery utilisation, and crack spread inputs
 - Stage 4 energy collector also uses EIA spot series for WTI/Brent spread and Gulf Coast ULSD-vs-WTI crack inputs (`energy_spread.*`). The diesel price is converted from dollars per gallon to dollars per barrel before subtracting WTI.
 - The scheduled Energy collector now also polls monthly refinery utilisation (`physical_stress.refinery_utilization`), normalizes it as stress with `1 - utilization / 100`, and dual-writes it to `observations`
@@ -238,20 +232,17 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 - Do not hardcode collection windows
 - Historical backfills for the live Energy bridge are available via `scripts/backfill-eia-energy.ts`, `scripts/backfill-eia-inventory.ts`, `scripts/backfill-eia-futures-curve.ts`, and `scripts/backfill-eia-refinery.ts`; they pull the upstream EIA series over a date range and dual-write the derived points into `series_points` and `observations`
 
-### EIA (aspirational — not yet implemented)
+### ENTSOG (aspirational — not yet implemented)
 
-- Crude inventory draw (`eia_inventory`), refinery utilisation (`eia_refinery`), and NYMEX
-  futures curve slope (`eia_futures_curve`) are registered in `api_feed_registry` but disabled
-- Weekly series should use a rolling 26-week window when implemented
+- ENTSOG: pipeline operational data for `physical_stress.eu_pipeline_flow`; requires separate API credentials; no collector exists
 
-### ENTSOG and GIE AGSI+ (aspirational — not yet implemented)
+### GIE AGSI+ (active)
 
-- ENTSOG: pipeline operational data for `physical_stress.eu_pipeline_flow`
-- GIE AGSI+: gas storage data for `physical_stress.eu_gas_storage`
-- Prefer upstream timestamps such as `periodFrom` and `gasDayStart`
-- The scheduled Energy collector now polls AGSI EU storage daily and dual-writes the latest storage stress point for `physical_stress.eu_gas_storage`
-- Historical AGSI backfill uses the EU aggregate (`type=eu`) and treats `full` as storage fullness, then stores the inverse ratio as stress (`1 - full / 100`)
-- Missing values should remain missing rather than defaulting to synthetic neutral values
+- Base API: `https://agsi.gie.eu/api`
+- Collector: `collectors/gie.ts`; gated by `physical_stress.eu_gas_storage` in `feed_registry`
+- Polls EU aggregate storage daily and dual-writes `physical_stress.eu_gas_storage` as stress (`1 - full / 100`)
+- Prefer upstream timestamps such as `gasDayStart`; missing values remain missing rather than defaulting to synthetic neutral values
+- Historical backfill via `scripts/backfill-gie-storage.ts`
 
 ### SEC EDGAR (aspirational — not yet implemented)
 
