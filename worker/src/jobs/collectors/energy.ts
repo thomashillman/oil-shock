@@ -73,7 +73,7 @@ export async function collectEnergy(env: Env, nowIso: string): Promise<Normalize
   const [wti, brent, diesel] = await Promise.all([
     fetchLatestSeriesValue(env, "RWTC", "eia_wti"),
     fetchLatestSeriesValue(env, "RBRTE", "eia_brent"),
-    fetchLatestSeriesValue(env, "EER_EPD2F_PF4_RGC_DPG", "eia_diesel_wti_crack")
+    fetchLatestSeriesValue(env, "EER_EPD2DXL0_PF4_RGC_DPG", "eia_diesel_wti_crack")
   ]);
 
   if (!wti || !brent || !diesel) {
@@ -90,7 +90,7 @@ export async function collectEnergy(env: Env, nowIso: string): Promise<Normalize
     {
       seriesKey: "energy_spread.diesel_wti_crack",
       observedAt: diesel.observedAt || wti.observedAt || nowIso,
-      value: normalizeSpread(diesel.value - wti.value, 40),
+      value: normalizeSpread(diesel.value * 42 - wti.value, 40),
       unit: "index"
     }
   ];

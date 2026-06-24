@@ -1,4 +1,4 @@
-INSERT INTO config_thresholds (key, value) VALUES
+INSERT OR IGNORE INTO config_thresholds (key, value) VALUES
   ('mismatch_market_response_weight', 0.15),
   ('confirmation_physical_stress_min', 0.6),
   ('confirmation_price_signal_max', 0.45),

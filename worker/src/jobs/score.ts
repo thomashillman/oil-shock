@@ -11,6 +11,10 @@ import { runEnergyRuleEngineV2 } from "../core/rules/energy-v2";
 import { runActionManagerForEngine } from "../core/actions/action-manager";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
+import {
+  writeOilShockCompatibilitySnapshot,
+  type EnergyScoreInputs
+} from "./score-compatibility";
 
 export function safeValue(value: number | null): number {
   if (value === null || Number.isNaN(value)) {
@@ -19,7 +23,11 @@ export function safeValue(value: number | null): number {
   return Math.max(0, Math.min(1, value));
 }
 
-export async function runEnergyScore(env: Env, nowIso: string, runKey: string): Promise<void> {
+export async function runEnergyScore(
+  env: Env,
+  nowIso: string,
+  runKey: string
+): Promise<EnergyScoreInputs | null> {
   let wtiBrentSpread, dieselWtiCrack, curveSlope;
   const componentErrors: string[] = [];
   let legacyScoreSucceeded = true;
@@ -40,14 +48,23 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
     if (componentErrors.length > 0) {
       log("warn", "Energy scoring aborted: insufficient data after collector failure", { runKey, missingFeeds: ["wti_brent_spread", "diesel_wti_crack"] });
     }
-    return;
+    return null;
   }
 
+  let scoreInputs: EnergyScoreInputs | null = null;
   // Phase 2: Keep legacy Energy score write behaviour.
   try {
     const physicalStress = safeValue(wtiBrentSpread.value);
     const marketResponse = safeValue(dieselWtiCrack.value);
     const priceSignal = safeValue(curveSlope?.value ?? 0);
+    scoreInputs = {
+      physicalStress,
+      priceSignal,
+      marketResponse,
+      physicalStressPoint: wtiBrentSpread,
+      priceSignalPoint: curveSlope ?? null,
+      marketResponsePoint: dieselWtiCrack
+    };
     const rules = await listActiveRules(env, "energy");
     const ruleEvaluation = evaluateRules(rules, {
       physicalStress,
@@ -85,7 +102,7 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
   }
 
   if (!legacyScoreSucceeded) {
-    return;
+    return null;
   }
 
   // Phase 3: Rule Engine v2 bridge lifecycle (fails closed on persistence errors).
@@ -97,13 +114,14 @@ export async function runEnergyScore(env: Env, nowIso: string, runKey: string): 
 
   // Phase 4: Action Manager logging bridge (logging-only, fail-closed on persistence errors).
   if (!ruleEngineResult.results.some((result) => Boolean(result.triggerEvent))) {
-    return;
+    return scoreInputs;
   }
 
   await runActionManagerForEngine(env, {
     engineKey: "energy",
     nowIso
   });
+  return scoreInputs;
 }
 
 export async function runScore(env: Env, now = new Date()): Promise<void> {
@@ -113,10 +131,22 @@ export async function runScore(env: Env, now = new Date()): Promise<void> {
   log("info", "Starting scoring run", { runKey });
 
   try {
-    // Oil Shock scoring retired. Run active Macro Signals engines.
-    await runEnergyScore(env, nowIso, runKey);
+    const energyInputs = await runEnergyScore(env, nowIso, runKey);
+    let compatibilitySnapshot = null;
+    if (energyInputs) {
+      try {
+        compatibilitySnapshot = await writeOilShockCompatibilitySnapshot(env, now, runKey, energyInputs);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        log("error", "Oil Shock compatibility snapshot failed", {
+          runKey,
+          error: message
+        });
+      }
+    }
     await finishRun(env, runKey, "success", {
-      message: "Macro Signals engines scored"
+      message: "Macro Signals engines scored",
+      compatibilitySnapshotGeneratedAt: compatibilitySnapshot?.generatedAt ?? null
     });
     log("info", "Scoring run completed", { runKey });
   } catch (error) {

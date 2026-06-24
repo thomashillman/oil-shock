@@ -5,17 +5,23 @@ import { listEnabledFeedKeys, listRegisteredFeeds, upsertObservation, recordFeed
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
 import { collectEnergy } from "./collectors/energy";
+import { collectGieStorage, GIE_FEED_KEY } from "./collectors/gie";
+import { collectEiaRefinery, EIA_REFINERY_OBSERVATION_FEED_KEY } from "./collectors/eia-refinery";
+import { collectEiaInventory, EIA_INVENTORY_OBSERVATION_FEED_KEY } from "./collectors/eia-inventory";
+import { collectEiaFuturesCurve, EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY } from "./collectors/eia-futures-curve";
 import { collectCpi, type CpiObservationCandidate } from "./collectors/cpi";
 
-async function writeEnergyObservations(
+async function writeNormalizedObservations(
   env: Env,
+  engineKey: string,
   points: NormalizedPoint[],
   runKey: string,
-  nowIso: string
+  nowIso: string,
+  bridge: string
 ): Promise<void> {
   const [registeredFeeds, enabledFeedKeys] = await Promise.all([
-    listRegisteredFeeds(env, "energy"),
-    listEnabledFeedKeys(env, "energy")
+    listRegisteredFeeds(env, engineKey),
+    listEnabledFeedKeys(env, engineKey)
   ]);
   const enabledFeedKeySet = new Set(enabledFeedKeys);
   const filterByRegistry = registeredFeeds.length > 0;
@@ -26,10 +32,10 @@ async function writeEnergyObservations(
     if (filterByRegistry && !enabledFeedKeySet.has(feedKey)) {
       continue;
     }
-    const releaseKey = `energy:${point.seriesKey}:${point.observedAt}`;
+    const releaseKey = `${engineKey}:${point.seriesKey}:${point.observedAt}`;
 
     await upsertObservation(env, {
-      engineKey: "energy",
+      engineKey,
       feedKey,
       seriesKey: point.seriesKey,
       releaseKey,
@@ -41,12 +47,12 @@ async function writeEnergyObservations(
       runKey,
       metadata: {
         sourceKey: point.sourceKey,
-        bridge: "energy_series_points_dual_write_v1"
+        bridge
       }
     });
 
     await recordFeedCheck(env, {
-      engineKey: "energy",
+      engineKey,
       feedKey,
       runKey,
       step: "save_observation",
@@ -95,30 +101,77 @@ async function writeCpiObservations(
   }
 }
 
+type EnergyCollectorSpec = {
+  enabled: boolean;
+  label: string;
+  collect: () => Promise<NormalizedPoint[]>;
+};
+
+async function settleCollector(spec: EnergyCollectorSpec): Promise<NormalizedPoint[]> {
+  if (!spec.enabled) {
+    return [];
+  }
+
+  try {
+    return await spec.collect();
+  } catch (error) {
+    log("error", spec.label, { error: String(error) });
+    return [];
+  }
+}
+
 export async function runCollection(env: Env, now = new Date()): Promise<void> {
   const runKey = `collect-${now.getTime()}`;
   const nowIso = now.toISOString();
   await startRun(env, runKey, "collect");
   log("info", "Starting collection run", { runKey, nowIso });
   try {
-    const [energyResults, enabledCpiFeedKeys] = await Promise.all([
-      Promise.allSettled([collectEnergy(env, nowIso)]),
+    const [enabledEnergyFeedKeys, enabledCpiFeedKeys] = await Promise.all([
+      listEnabledFeedKeys(env, "energy"),
       listEnabledFeedKeys(env, "cpi")
     ]);
+    const [energyPoints, giePoints, refineryPoints, inventoryPoints, futuresCurvePoints] = await Promise.all([
+      settleCollector({ enabled: true, label: "Energy collector failed", collect: () => collectEnergy(env, nowIso) }),
+      settleCollector({
+        enabled: enabledEnergyFeedKeys.includes(GIE_FEED_KEY),
+        label: "GIE collector failed",
+        collect: () => collectGieStorage(env, nowIso)
+      }),
+      settleCollector({
+        enabled: enabledEnergyFeedKeys.includes(EIA_REFINERY_OBSERVATION_FEED_KEY),
+        label: "EIA refinery collector failed",
+        collect: () => collectEiaRefinery(env, nowIso)
+      }),
+      settleCollector({
+        enabled: enabledEnergyFeedKeys.includes(EIA_INVENTORY_OBSERVATION_FEED_KEY),
+        label: "EIA inventory collector failed",
+        collect: () => collectEiaInventory(env, nowIso)
+      }),
+      settleCollector({
+        enabled: enabledEnergyFeedKeys.includes(EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY),
+        label: "EIA futures curve collector failed",
+        collect: () => collectEiaFuturesCurve(env, nowIso)
+      })
+    ]);
 
-    const energyPoints: NormalizedPoint[] = [];
-    const points: NormalizedPoint[] = [];
-    for (const result of energyResults) {
-      if (result.status === "fulfilled") {
-        energyPoints.push(...result.value);
-        points.push(...result.value);
-      } else {
-        log("error", "Collector failed", { error: String(result.reason) });
-      }
-    }
+    const points = [...energyPoints, ...giePoints, ...refineryPoints, ...inventoryPoints, ...futuresCurvePoints];
 
     await writeSeriesPoints(env, points);
-    await writeEnergyObservations(env, energyPoints, runKey, nowIso);
+    const observationBatches = [
+      { points: energyPoints, bridge: "energy_series_points_dual_write_v1" },
+      { points: giePoints, bridge: "gie_storage_dual_write_v1" },
+      { points: refineryPoints, bridge: "eia_refinery_monthly_dual_write_v1" },
+      { points: inventoryPoints, bridge: "eia_inventory_weekly_dual_write_v1" },
+      { points: futuresCurvePoints, bridge: "eia_futures_curve_daily_dual_write_v1" }
+    ];
+
+    for (const batch of observationBatches) {
+      if (batch.points.length === 0) {
+        continue;
+      }
+
+      await writeNormalizedObservations(env, "energy", batch.points, runKey, nowIso, batch.bridge);
+    }
 
     if (enabledCpiFeedKeys.length > 0) {
       const enabledCpiFeedSet = new Set(enabledCpiFeedKeys);

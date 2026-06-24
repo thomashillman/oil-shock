@@ -7,6 +7,8 @@ This document captures the current sequencing and decision constraints for work 
 - **Macro Signals bridge slice (April 2026): Energy registry-backed feed execution + feed health route** — ✅ COMPLETE
   - Energy continues bridge dual-write: legacy `series_points` plus macro `observations`
   - Energy observation/feed-check bridge writes are now filtered by enabled `feed_registry` rows when Energy registry rows exist
+  - The live Energy bridge now also dual-writes monthly EIA refinery utilisation as `physical_stress.refinery_utilization`
+  - The live Energy bridge now also dual-writes weekly EIA crude inventory as `physical_stress.inventory_draw` and the public futures-curve proxy as `price_signal.curve_slope`
   - `/api/feed-health` now reports read-only feed health from `feed_registry` + latest `feed_checks`
   - Fallback remains in place: when no Energy registry rows exist, Energy observation writes still include all Energy points
   - CPI and macro release collection remain disabled

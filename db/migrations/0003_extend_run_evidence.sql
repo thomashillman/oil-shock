@@ -2,3 +2,4 @@
 -- Keep this migration as a no-op placeholder so the sequence remains stable
 -- for environments that already recorded it, without re-adding duplicate
 -- columns on fresh databases.
+SELECT 1;

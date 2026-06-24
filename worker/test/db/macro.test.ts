@@ -497,14 +497,18 @@ describe("macro core migration", () => {
     ).split("\n");
     expect(seededRows).toEqual([
       "energy:energy_spread.diesel_wti_crack",
-      "energy:energy_spread.wti_brent_spread"
+      "energy:energy_spread.wti_brent_spread",
+      "energy:physical_stress.eu_gas_storage",
+      "energy:physical_stress.inventory_draw",
+      "energy:physical_stress.refinery_utilization",
+      "energy:price_signal.curve_slope"
     ]);
 
     const seededCount = runSqlite(
       dbPath,
-      "SELECT COUNT(*) FROM feed_registry WHERE engine_key = 'energy' AND feed_key IN ('energy_spread.wti_brent_spread', 'energy_spread.diesel_wti_crack');"
+      "SELECT COUNT(*) FROM feed_registry WHERE engine_key = 'energy' AND feed_key IN ('energy_spread.wti_brent_spread', 'energy_spread.diesel_wti_crack', 'physical_stress.eu_gas_storage', 'physical_stress.inventory_draw', 'physical_stress.refinery_utilization', 'price_signal.curve_slope');"
     );
-    expect(seededCount).toBe("2");
+    expect(seededCount).toBe("6");
   });
 
   skipIfNoSqlite3("trigger_events unique key prevents duplicates for same transition identity", () => {

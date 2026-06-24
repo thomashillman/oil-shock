@@ -95,8 +95,8 @@ Key tables and responsibilities:
 
 The runtime remains bridge-shaped rather than full registry-driven orchestration:
 
-- Legacy collector writes to `series_points` still run and remain the source for existing Oil Shock scoring and snapshot routes.
-- Energy collection dual-writes matching points into `observations`.
+- Energy collection writes its normalized points to `series_points` and dual-writes them to `observations`.
+- Each successful Energy score also writes an Oil Shock compatibility snapshot and evidence rows so the existing `/api/state`, `/api/evidence`, and frontend contracts remain live during the bridge.
 - Energy observation/feed-check writes consult `feed_registry` enabled rows when Energy registry rows exist.
 - If `feed_registry` has no Energy rows, Energy observation writes fall back to writing all Energy points so local/dev environments without seed rows do not break.
 - `GET /api/feed-health` is read-only and returns feed health derived from Energy `feed_registry` rows plus each feed's latest `feed_checks` entry.
@@ -226,9 +226,17 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 - Base API: `https://api.eia.gov/v2/`
 - Auth: `EIA_API_KEY`
 - Currently active: WTI/Brent spot prices and diesel-WTI crack spread via `collectors/energy.ts`
+- Used for WTI spot, crude inventory draw, futures curve slope, refinery utilisation, and crack spread inputs
+- Stage 4 energy collector also uses EIA spot series for WTI/Brent spread and Gulf Coast ULSD-vs-WTI crack inputs (`energy_spread.*`). The diesel price is converted from dollars per gallon to dollars per barrel before subtracting WTI.
+- The scheduled Energy collector now also polls monthly refinery utilisation (`physical_stress.refinery_utilization`), normalizes it as stress with `1 - utilization / 100`, and dual-writes it to `observations`
+- The scheduled Energy collector now also polls weekly crude inventory (`physical_stress.inventory_draw`) and normalizes it as a 52-week inverse inventory position
+- The scheduled Energy collector now also polls the public EIA crude futures curve proxy (`price_signal.curve_slope`) using the front and fourth contracts exposed by the API, normalizing the spread as a 0-1 contango ratio
 - Uses a rolling 45-day window for spot series
+- Daily series use a rolling 60-day window
+- Weekly series use a rolling 26-week window
+- Monthly refinery utilisation uses a rolling upstream window large enough to catch the latest published month and prefers upstream `period` values for `observedAt`
 - Do not hardcode collection windows
-- Prefer upstream `period` values for `observedAt`
+- Historical backfills for the live Energy bridge are available via `scripts/backfill-eia-energy.ts`, `scripts/backfill-eia-inventory.ts`, `scripts/backfill-eia-futures-curve.ts`, and `scripts/backfill-eia-refinery.ts`; they pull the upstream EIA series over a date range and dual-write the derived points into `series_points` and `observations`
 
 ### EIA (aspirational — not yet implemented)
 
@@ -241,6 +249,8 @@ All collectors live in `worker/src/jobs/collectors/`. Each emitted point is name
 - ENTSOG: pipeline operational data for `physical_stress.eu_pipeline_flow`
 - GIE AGSI+: gas storage data for `physical_stress.eu_gas_storage`
 - Prefer upstream timestamps such as `periodFrom` and `gasDayStart`
+- The scheduled Energy collector now polls AGSI EU storage daily and dual-writes the latest storage stress point for `physical_stress.eu_gas_storage`
+- Historical AGSI backfill uses the EU aggregate (`type=eu`) and treats `full` as storage fullness, then stores the inverse ratio as stress (`1 - full / 100`)
 - Missing values should remain missing rather than defaulting to synthetic neutral values
 
 ### SEC EDGAR (aspirational — not yet implemented)

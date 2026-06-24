@@ -26,7 +26,7 @@ All collectors live in `worker/src/jobs/collectors/`. Every emitted point is nam
 | Source | Endpoint(s) | Auth | Subscore dimension |
 |---|---|---|---|
 | **EIA v2** — WTI spot (`RWTC`) | `https://api.eia.gov/v2/petroleum/pri/spt/data` | `EIA_API_KEY` | `price_signal.spot_wti` |
-| **EIA v2** — futures curve (`RCLC1`, `RCLC12`) | `https://api.eia.gov/v2/petroleum/pri/fut/data` | `EIA_API_KEY` | `price_signal.curve_slope` |
+| **EIA v2** — futures curve proxy (`RCLC1`, `RCLC4`) | `https://api.eia.gov/v2/petroleum/pri/fut/data` | `EIA_API_KEY` | `price_signal.curve_slope` |
 | **EIA v2** — US crude stocks (`WCESTUS1`) | `https://api.eia.gov/v2/petroleum/stoc/wstk/data` | `EIA_API_KEY` | `physical_stress.inventory_draw` |
 | **EIA v2** — refinery utilization | `https://api.eia.gov/v2/petroleum/pnp/unc/data` | `EIA_API_KEY` | `physical_stress.refinery_utilization` |
 | **EIA v2** — 3:2:1 crack spread (RBOB + ULSD + WTI) | `https://api.eia.gov/v2/petroleum/pri/spt/data` | `EIA_API_KEY` | `market_response.crack_spread` |
@@ -35,6 +35,8 @@ All collectors live in `worker/src/jobs/collectors/`. Every emitted point is nam
 | **SEC EDGAR** — 10-K / 10-Q / 8-K filings (5 sectors × 4–6 tickers) | `https://www.sec.gov/files/company_tickers.json`, `https://data.sec.gov/submissions/CIK*.json`, `https://www.sec.gov/Archives/edgar/data/*` | none (User-Agent required) | `market_response.sec_impairment` |
 
 See `docs/architecture.md#data-sources-and-api-endpoints` for series IDs, normalization formulas, rolling windows, and `observedAt` provenance for each feed.
+
+Note: EIA currently exposes the futures curve proxy series through the public API only through 2024-04-05, so the historical backfill can legitimately stop there until EIA republishes newer contract rows.
 
 ## Scoring at a Glance
 

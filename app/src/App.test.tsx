@@ -269,6 +269,98 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /recalculate/i }).textContent).toMatch(/^\s*↺\s*Recalculate\s*$/);
   });
 
+  it("surfaces a visible error when the recalc poll returns 403", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
+          return Promise.resolve({ ok: true, status: 202, json: async () => ({ ok: true, triggered: true }) });
+        }
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/v1/energy/state")) {
+          return Promise.resolve({
+            ok: false,
+            status: 403,
+            json: async () => ({ error: "forbidden", message: "Forbidden" }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 403,
+          json: async () => ({ error: "forbidden", message: "Forbidden" }),
+        });
+      }),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loadingâ€¦")).not.toBeInTheDocument());
+
+    const recalcButton = screen.getByRole("button", { name: /recalculate/i });
+    await act(async () => {
+      fireEvent.click(recalcButton);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+
+    await waitFor(() => expect(screen.getByText(/recalculation failed \(http 403\)/i)).toBeInTheDocument());
+    expect(screen.getByText(/recalculation failed \(http 403\)/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recalculate/i }).textContent).toMatch(/^\s*↺\s*Recalculate\s*$/);
+
+    vi.useRealTimers();
+  });
+
+  it("keeps polling until timeout when a fresh recalculation produces no snapshot", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url.includes("/api/admin/run-poc")) {
+          return Promise.resolve({ ok: true, status: 202, json: async () => ({ ok: true, triggered: true }) });
+        }
+        if (url.includes("/api/state/history")) {
+          return Promise.resolve({ ok: true, json: async () => ({ history: [] }) });
+        }
+        if (url.includes("/api/v1/energy/state")) {
+          return Promise.resolve({
+            ok: false,
+            status: 404,
+            json: async () => ({ error: "no_score", message: "No precomputed energy score is available yet." }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({ error: "no_score", message: "No precomputed energy score is available yet." }),
+        });
+      }),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    render(<App />);
+    await waitFor(() => expect(screen.queryByText("Loading…")).not.toBeInTheDocument());
+
+    const recalcButton = screen.getByRole("button", { name: /recalculate/i });
+    await act(async () => {
+      fireEvent.click(recalcButton);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(95_000);
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText(/timed out/i)).toBeInTheDocument(),
+    );
+
+    vi.useRealTimers();
+  });
+
   it("surfaces a timeout error when the new snapshot never arrives within the deadline", async () => {
     // POST succeeds. GET /api/state always returns the same generatedAt so the poll
     // loop never sees a "new" snapshot and the 90s deadline must trip.

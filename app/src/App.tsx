@@ -115,6 +115,24 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   return normalized;
 }
 
+function isExpectedRecalcNotReady(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const data = payload as Record<string, unknown>;
+  const error = data.error;
+  const message = data.message;
+  return (
+    error === "no_score" ||
+    error === "no_snapshot" ||
+    error === "not_ready" ||
+    (typeof error === "string" && error.includes("no_snapshot")) ||
+    (typeof message === "string" &&
+      (message.toLowerCase().includes("no snapshot") || message.toLowerCase().includes("no precomputed energy score")))
+  );
+}
+
 export function App() {
   const [stateData, setStateData] = useState<StateData | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceData | null>(null);
@@ -224,9 +242,17 @@ export function App() {
         return;
       }
       try {
-        // Poll the energy engine score endpoint — it reflects what runScore actually writes.
-        // /api/state reads signal_snapshots which is no longer updated by the scoring pipeline.
         const res = await fetch(`${apiBaseUrl}/api/v1/energy/state`, { cache: "no-store" });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null);
+          if (res.status === 404 && isExpectedRecalcNotReady(payload)) {
+            // Expected while the worker is still recomputing the energy score.
+          } else {
+            setRecalculating(false);
+            setRecalcError(`Recalculation failed (HTTP ${res.status}). Try again in a moment.`);
+            return;
+          }
+        }
         if (res.ok) {
           const raw = (await res.json()) as Record<string, unknown>;
           const newGeneratedAt = (raw.scoredAt ?? raw.scored_at) as string | undefined;
