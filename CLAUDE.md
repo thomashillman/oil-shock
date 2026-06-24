@@ -38,6 +38,24 @@ Today this repo is still a single-engine Oil Shock system. The current flow is:
 
 Do not assume target-state Macro Signals structures such as multi-engine tables, feed registries, rule engines, or engine-scoped endpoints already exist. If you introduce them, stage them deliberately and keep the existing Oil Shock path working unless the task explicitly says otherwise.
 
+## Landmines and Change Order
+
+- The refresh button is expected to kick off backend work first. If it only rereads state, it can look broken even when the UI renders fine.
+- `series_points` writes must be idempotent. Refresh and replay flows can legitimately revisit the same logical points.
+- `UNKNOWN` feed health usually means no `feed_checks` row was written. That is a worker/data issue before it is a frontend issue.
+- Branch-local assumptions go stale quickly. Re-check the current `main` implementation before porting a fix from an older branch.
+
+When a task spans backend and frontend changes, prefer this order:
+
+1. Change the backend behavior, schema, or route contract first.
+2. Add or update worker and database tests for that behavior.
+3. Update repo docs if the runtime contract or operator workflow changed.
+4. Update the frontend to consume the new behavior.
+5. Add or update frontend tests for the user-facing path.
+6. Deploy or verify the backend before treating the UI as fixed.
+
+If the backend and frontend must change together, keep them in one branch and verify the backend path directly before validating the browser experience.
+
 ## High-value paths
 
 - `worker/src/core/`: scoring, freshness, normalisation, ledger logic
