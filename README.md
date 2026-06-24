@@ -40,7 +40,28 @@ Note: EIA currently exposes the futures curve proxy series through the public AP
 
 ## Scoring at a Glance
 
-The scoring engine produces a `mismatchScore` and a `dislocationState` from three subscores:
+There are two scores. See [`docs/scoring-model.md`](docs/scoring-model.md) for the full model.
+
+**Live Energy score** (`GET /api/v1/energy/state`, written by `worker/src/jobs/score.ts`) scores the
+*unrecognised* portion of physical stress — the product thesis is that physical energy stress is
+worsening faster than market pricing recognises:
+
+```
+hiddenMismatch = physicalStress * (1 - marketRecognition)   // physicalStress * 0.5 when recognition is missing
+
+scoreValue = clamp01(
+  hiddenMismatch
+  + transmissionStress * mismatch_market_response_weight     // default 0.15
+  + ruleAdjustment
+)
+```
+
+A missing market-recognition signal is treated as unknown: it adds a `missing_price_confirmation`
+flag and lowers confidence; it does not confirm the thesis.
+
+**Oil Shock compatibility snapshot** (`GET /api/state`, written by
+`worker/src/jobs/score-compatibility.ts`) produces a `mismatchScore` and a `dislocationState` from
+three subscores:
 
 ```
 mismatchScore = clamp01(

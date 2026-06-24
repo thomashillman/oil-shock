@@ -25,6 +25,13 @@ export interface EnergyScoreInputs {
   physicalStress: number;
   priceSignal: number;
   marketResponse: number;
+  /**
+   * True when the live price/recognition signal was unavailable. In that case `priceSignal`
+   * carries a neutral 0.5 ("unknown") rather than 0, so the compatibility mismatch is not
+   * falsely confirmed by a missing feed. `priceSignalPoint` remains null so freshness and
+   * guardrails still flag the gap.
+   */
+  priceSignalWasMissing: boolean;
   physicalStressPoint: NormalizedPoint;
   priceSignalPoint: NormalizedPoint | null;
   marketResponsePoint: NormalizedPoint;

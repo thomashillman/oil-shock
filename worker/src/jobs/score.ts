@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import {
   finishRun,
   getLatestSeriesValue,
+  loadThresholds,
   startRun,
   listActiveRules,
   writeEngineScore
@@ -21,6 +22,65 @@ export function safeValue(value: number | null): number {
     return 0;
   }
   return Math.max(0, Math.min(1, value));
+}
+
+export interface EnergyDislocationScoreInputs {
+  /** Evidence the physical energy system is tightening (0-1). Currently the WTI-Brent spread. */
+  physicalStress: number;
+  /** Stress transmitting into downstream products/margins (0-1). Currently the diesel-WTI crack. */
+  transmissionStress: number;
+  /**
+   * How much current pricing already reflects the physical stress (0-1), or null when the
+   * price signal is unavailable. Currently proxied by the futures curve slope.
+   */
+  marketRecognition: number | null;
+  /** Bounded weight applied to the downstream transmission contribution. */
+  mismatchMarketResponseWeight: number;
+  /** Sum of rule-based adjustments to apply to the score. */
+  ruleAdjustment: number;
+}
+
+export interface EnergyDislocationScoreResult {
+  scoreValue: number;
+  flags: string[];
+  confidence: number;
+}
+
+/**
+ * Live Energy "hidden dislocation" score.
+ *
+ * The product thesis is that physical energy stress is worsening faster than market pricing
+ * recognises. We therefore score the UNRECOGNISED portion of physical stress rather than raw
+ * stress: high physical stress that the market already prices in (high recognition) is a weak
+ * signal, while high physical stress the market is ignoring (low recognition) is a strong one.
+ *
+ * Missing market recognition is treated as UNKNOWN, not as "the market is ignoring the shock"
+ * (which would be a false positive at recognition = 0) and not as "the market fully recognises
+ * the shock" (a false negative at recognition = 1). We split the difference at 0.5, flag the gap
+ * with `missing_price_confirmation`, and lower confidence so downstream consumers can see the
+ * score is provisional.
+ *
+ * Transmission stress (downstream products) only contributes a small, bounded amount so it can
+ * never push the score to a watch/actionable level on its own.
+ */
+export function computeEnergyDislocationScore(
+  inputs: EnergyDislocationScoreInputs
+): EnergyDislocationScoreResult {
+  const { physicalStress, transmissionStress, marketRecognition, mismatchMarketResponseWeight, ruleAdjustment } = inputs;
+
+  const hiddenMismatch =
+    marketRecognition === null
+      ? physicalStress * 0.5
+      : physicalStress * (1 - marketRecognition);
+
+  const scoreValue = safeValue(
+    hiddenMismatch + transmissionStress * mismatchMarketResponseWeight + ruleAdjustment
+  );
+
+  const flags = marketRecognition === null ? ["missing_price_confirmation"] : [];
+  const confidence = flags.length > 0 ? 0.6 : 0.8;
+
+  return { scoreValue, flags, confidence };
 }
 
 export async function runEnergyScore(
@@ -52,33 +112,52 @@ export async function runEnergyScore(
   }
 
   let scoreInputs: EnergyScoreInputs | null = null;
-  // Phase 2: Keep legacy Energy score write behaviour.
+  // Phase 2: Write the live Energy "hidden dislocation" score.
   try {
+    // physicalStress: physical crude constraint (WTI-Brent spread).
     const physicalStress = safeValue(wtiBrentSpread.value);
-    const marketResponse = safeValue(dieselWtiCrack.value);
-    const priceSignal = safeValue(curveSlope?.value ?? 0);
+    // transmissionStress: downstream product/margin stress (diesel-WTI crack). Secondary signal.
+    const transmissionStress = safeValue(dieselWtiCrack.value);
+    // marketRecognition: how much pricing already reflects the stress (futures curve slope), or
+    // null when the price feed is missing. Missing is treated as UNKNOWN, never as 0 or 1, so it
+    // can neither manufacture a false positive nor silently confirm full recognition.
+    const hasPriceSignal = Boolean(curveSlope);
+    const marketRecognition = hasPriceSignal ? safeValue(curveSlope?.value ?? null) : null;
+
     scoreInputs = {
       physicalStress,
-      priceSignal,
-      marketResponse,
+      // Pass a neutral 0.5 (unknown) into the compatibility path when recognition is missing
+      // rather than 0, which would falsely maximise the compatibility mismatch.
+      priceSignal: marketRecognition ?? 0.5,
+      marketResponse: transmissionStress,
+      priceSignalWasMissing: marketRecognition === null,
       physicalStressPoint: wtiBrentSpread,
       priceSignalPoint: curveSlope ?? null,
       marketResponsePoint: dieselWtiCrack
     };
+
+    const thresholds = await loadThresholds(env);
     const rules = await listActiveRules(env, "energy");
     const ruleEvaluation = evaluateRules(rules, {
       physicalStress,
-      priceSignal,
-      marketResponse
+      // Neutral 0.5 keeps a missing price signal from firing recognition-gap rules.
+      priceSignal: marketRecognition ?? 0.5,
+      marketResponse: transmissionStress
     });
 
-    const baseScore = safeValue((physicalStress + marketResponse) / 2);
-    const scoreValue = safeValue(baseScore + ruleEvaluation.totalAdjustment);
-    const flags = curveSlope ? [] : ["missing_price_confirmation"];
+    const { scoreValue, flags, confidence } = computeEnergyDislocationScore({
+      physicalStress,
+      transmissionStress,
+      marketRecognition,
+      mismatchMarketResponseWeight: thresholds.mismatchMarketResponseWeight,
+      ruleAdjustment: ruleEvaluation.totalAdjustment
+    });
 
-    // Add degradation flags if collector had errors
+    // Add degradation flags if collector had errors, and keep confidence conservative.
+    let effectiveConfidence = confidence;
     if (componentErrors.includes("collector")) {
       flags.push("degraded_collector");
+      effectiveConfidence = Math.min(effectiveConfidence, 0.6);
     }
 
     await writeEngineScore(env, {
@@ -86,7 +165,7 @@ export async function runEnergyScore(
       feedKey: "energy.state",
       scoredAt: nowIso,
       scoreValue,
-      confidence: flags.length > 0 ? 0.6 : 0.8,
+      confidence: effectiveConfidence,
       flags,
       runKey
     });
