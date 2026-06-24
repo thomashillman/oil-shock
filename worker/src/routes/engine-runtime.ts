@@ -46,6 +46,7 @@ export async function handleEnergyRuntime(env: Env): Promise<Response> {
       engineKey: feed.engineKey,
       feedKey: feed.feedKey,
       displayName: feed.displayName,
+      provider: feed.provider,
       enabled: feed.enabled,
       status: feed.status,
       latestCheck: feed.latestCheck
