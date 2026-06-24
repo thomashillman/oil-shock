@@ -1,0 +1,169 @@
+.layout {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem;
+  font-family: "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", serif;
+  color: #1c1e1f;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.2rem;
+  border-radius: 12px;
+  background: linear-gradient(130deg, #f7f2e6, #dfe7e3);
+  border: 1px solid #d2cbc1;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+  letter-spacing: 0.01em;
+}
+
+.hero p {
+  margin: 0.5rem 0 0;
+  color: #3f4345;
+}
+
+.state-badge {
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid #959d9c;
+  background: #f7f8f8;
+  white-space: nowrap;
+}
+
+.state-actionable {
+  background: #f4ece2;
+  border-color: #b96d2d;
+  color: #7a3d0f;
+}
+
+.state-watch {
+  background: #f3f0d8;
+  border-color: #9a8a17;
+  color: #5e5206;
+}
+
+.state-none,
+.state-no-snapshot {
+  background: #e7eef0;
+  border-color: #63808f;
+  color: #234454;
+}
+
+.toolbar {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tabs button,
+.actions button {
+  border: 1px solid #aaa89e;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+.tabs button.active {
+  background: #2e3a42;
+  color: #ffffff;
+  border-color: #2e3a42;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.panel {
+  margin-top: 1rem;
+  border: 1px solid #d6d0c6;
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: #fffdfa;
+}
+
+.panel.warning {
+  border-color: #bb9565;
+  background: #fff6eb;
+}
+
+.panel h2,
+.panel h3 {
+  margin-top: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.grid article {
+  border: 1px solid #d4cec5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.metric {
+  font-size: 1.6rem;
+  margin: 0.2rem 0 0;
+  font-weight: 700;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.45rem;
+  border-bottom: 1px solid #e3ddd4;
+  vertical-align: top;
+  font-size: 0.95rem;
+}
+
+th {
+  background: #f4efe6;
+}
+
+.footer {
+  margin-top: 1rem;
+  color: #4b4e50;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 700px) {
+  .layout {
+    padding: 0.8rem;
+  }
+
+  .hero {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,63 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #12100E;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* Layout classes — inline styles can't use media queries */
+.r-main { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
+
+.r-hero {
+  border-radius: 10px;
+  padding: 28px 32px;
+  margin-bottom: 12px;
+  display: flex;
+  gap: 36px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.r-engine-col {
+  min-width: 190px;
+  padding-left: 32px;
+  border-left: 1px solid #2A2520;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+}
+
+.r-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.r-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+@media (max-width: 639px) {
+  .r-main { padding: 14px 16px 40px; }
+
+  .r-hero { padding: 20px 18px; gap: 24px; }
+
+  .r-grid-2,
+  .r-grid-3 { grid-template-columns: 1fr; }
+
+  /* Engine column loses left border and becomes a full-width row on wrap */
+  .r-engine-col {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid #2A2520;
+    padding-top: 18px;
+    align-self: auto;
+    min-width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Secondary header chrome hidden on small screens */
+  .r-hide-mobile { display: none !important; }
+}

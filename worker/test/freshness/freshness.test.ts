@@ -4,14 +4,14 @@ import { evaluateFreshness } from "../../src/core/freshness/evaluate";
 describe("evaluateFreshness", () => {
   it("marks missing values correctly", () => {
     const output = evaluateFreshness({
-      physicalObservedAt: null,
-      recognitionObservedAt: null,
-      transmissionObservedAt: null
+      physicalStressObservedAt: null,
+      priceSignalObservedAt: null,
+      marketResponseObservedAt: null
     });
     expect(output).toEqual({
-      physical: "missing",
-      recognition: "missing",
-      transmission: "missing"
+      physicalStress: "missing",
+      priceSignal: "missing",
+      marketResponse: "missing"
     });
   });
 
@@ -22,15 +22,15 @@ describe("evaluateFreshness", () => {
 
     const old = new Date("2026-03-01T00:00:00.000Z").toISOString();
     const output = evaluateFreshness({
-      physicalObservedAt: old,
-      recognitionObservedAt: old,
-      transmissionObservedAt: old
+      physicalStressObservedAt: old,
+      priceSignalObservedAt: old,
+      marketResponseObservedAt: old
     });
 
     expect(output).toEqual({
-      physical: "stale",
-      recognition: "stale",
-      transmission: "stale"
+      physicalStress: "stale",
+      priceSignal: "stale",
+      marketResponse: "stale"
     });
     vi.useRealTimers();
   });
