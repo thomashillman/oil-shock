@@ -69,6 +69,104 @@ export const GROUP_META: Record<string, { label: string; description: string }> 
   },
 };
 
+/**
+ * Presentation metadata for the Observations panel.
+ *
+ * The runtime API supplies the structural facts per observation (displayName,
+ * provider, unit, dimension). The editorial copy below — what each category
+ * measures and what a *high* reading indicates — does not live in the data
+ * layer, so it is defined here alongside the other UI label tables.
+ *
+ * All observation values are normalized 0–1 (rendered 0–100%) where a higher
+ * reading means more physical/market stress contributing to the score.
+ */
+export type ObservationDimension =
+  | "physical_stress"
+  | "energy_spread"
+  | "price_signal"
+  | "other";
+
+export const OBSERVATION_CATEGORY_META: Record<
+  ObservationDimension,
+  { label: string; description: string; order: number }
+> = {
+  physical_stress: {
+    label: "Physical Stress",
+    description: "Actual supply conditions — refinery runs, crude draws, EU gas storage.",
+    order: 0,
+  },
+  energy_spread: {
+    label: "Energy Spreads",
+    description: "Crude and product spreads — where pricing stress shows up first.",
+    order: 1,
+  },
+  price_signal: {
+    label: "Price Signal",
+    description: "Futures-curve shape — how the market is positioned.",
+    order: 2,
+  },
+  other: {
+    label: "Other Signals",
+    description: "Additional normalized inputs.",
+    order: 3,
+  },
+};
+
+export function categoryMeta(dimension: string): {
+  label: string;
+  description: string;
+  order: number;
+} {
+  return (
+    OBSERVATION_CATEGORY_META[dimension as ObservationDimension] ??
+    OBSERVATION_CATEGORY_META.other
+  );
+}
+
+// Per-series "what a high reading indicates". Keyed by seriesKey.
+export const OBSERVATION_METRIC_META: Record<string, { meaning: string }> = {
+  "physical_stress.refinery_utilization": {
+    meaning: "High = refineries running below normal, tightening product supply.",
+  },
+  "physical_stress.inventory_draw": {
+    meaning: "High = crude inventories drawing down faster than usual.",
+  },
+  "physical_stress.eu_gas_storage": {
+    meaning: "High = EU gas storage under stress (low fill or rapid draw).",
+  },
+  "energy_spread.wti_brent_spread": {
+    meaning: "High = WTI–Brent spread widening, a sign of regional crude dislocation.",
+  },
+  "energy_spread.diesel_wti_crack": {
+    meaning: "High = diesel crack spread widening, refining stress feeding through.",
+  },
+  "price_signal.curve_slope": {
+    meaning: "High = futures curve shape consistent with tighter expected supply.",
+  },
+};
+
+export function metricMeaning(seriesKey: string): string {
+  return (
+    OBSERVATION_METRIC_META[seriesKey]?.meaning ??
+    "Higher readings indicate more stress contributing to the score."
+  );
+}
+
+export type ObservationLevel = "calm" | "elevated" | "high";
+
+// Same 0.33 / 0.66 breakpoints used by the score gauge and statusLabel().
+export function observationLevel(value: number): ObservationLevel {
+  if (value >= 0.66) return "high";
+  if (value >= 0.33) return "elevated";
+  return "calm";
+}
+
+export const OBSERVATION_LEVEL_LABEL: Record<ObservationLevel, string> = {
+  calm: "Calm",
+  elevated: "Elevated",
+  high: "High stress",
+};
+
 export const EVIDENCE_KEY_LABEL: Record<string, string> = {
   "physical-pressure": "Physical Supply Pressure",
   "recognition-gap": "Market Recognition Gap",

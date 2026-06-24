@@ -35,6 +35,7 @@ export interface FeedRegistryRow {
   engineKey: string;
   feedKey: string;
   displayName: string | null;
+  provider: string | null;
   enabled: boolean;
 }
 
@@ -62,6 +63,7 @@ export interface ObservationRow {
   asOfDate: string;
   observedAt: string;
   value: number;
+  unit: string | null;
 }
 
 export interface RuleStateRow {
@@ -352,7 +354,7 @@ export async function recordFeedCheck(env: Env, input: FeedCheckInput): Promise<
 export async function listRegisteredFeeds(env: Env, engineKey: string): Promise<FeedRegistryRow[]> {
   const result = await env.DB.prepare(
     `
-    SELECT engine_key, feed_key, display_name, enabled
+    SELECT engine_key, feed_key, display_name, provider, enabled
     FROM feed_registry
     WHERE engine_key = ?
     ORDER BY feed_key
@@ -363,6 +365,7 @@ export async function listRegisteredFeeds(env: Env, engineKey: string): Promise<
       engine_key: string;
       feed_key: string;
       display_name: string | null;
+      provider: string | null;
       enabled: number;
     }>();
 
@@ -370,6 +373,7 @@ export async function listRegisteredFeeds(env: Env, engineKey: string): Promise<
     engineKey: row.engine_key,
     feedKey: row.feed_key,
     displayName: row.display_name,
+    provider: row.provider ?? null,
     enabled: row.enabled === 1
   }));
 }
@@ -545,7 +549,8 @@ export async function listRuntimeObservations(env: Env, engineKey: string, limit
       release_key,
       as_of_date,
       observed_at,
-      value
+      value,
+      unit
     FROM observations
     WHERE engine_key = ?
     ORDER BY observed_at DESC, as_of_date DESC, series_key ASC
@@ -561,6 +566,7 @@ export async function listRuntimeObservations(env: Env, engineKey: string, limit
       as_of_date: string;
       observed_at: string;
       value: number;
+      unit: string | null;
     }>();
 
   return result.results.map((row) => ({
@@ -570,7 +576,8 @@ export async function listRuntimeObservations(env: Env, engineKey: string, limit
     releaseKey: row.release_key,
     asOfDate: row.as_of_date,
     observedAt: row.observed_at,
-    value: row.value
+    value: row.value,
+    unit: row.unit ?? null
   }));
 }
 

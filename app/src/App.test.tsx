@@ -75,6 +75,10 @@ const mockRuntime = {
       asOfDate: "2026-06-15",
       observedAt: "2026-06-15",
       value: 1,
+      unit: "ratio",
+      displayName: "Diesel-WTI Crack Spread",
+      provider: "EIA",
+      dimension: "energy_spread",
     },
     {
       engineKey: "energy",
@@ -84,6 +88,10 @@ const mockRuntime = {
       asOfDate: "2026-06-15",
       observedAt: "2026-06-15",
       value: 0.01933333333333375,
+      unit: "ratio",
+      displayName: "WTI-Brent Spread",
+      provider: "EIA",
+      dimension: "energy_spread",
     },
   ],
   ruleState: [
@@ -169,10 +177,19 @@ describe("App", () => {
     expect(screen.getByText("missing_price_confirmation")).toBeInTheDocument();
     expect(screen.getAllByText("Energy").length).toBeGreaterThan(0);
     expect(screen.getByText("energy.confirmation.spread_widening")).toBeInTheDocument();
-    expect(screen.getByText("Diesel-WTI Crack Spread")).toBeInTheDocument();
-    expect(screen.getByText("WTI-Brent Spread")).toBeInTheDocument();
+    // Display names now appear in both the Feed Health panel and the Observations panel.
+    expect(screen.getAllByText("Diesel-WTI Crack Spread").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("WTI-Brent Spread").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("100%")).toBeInTheDocument();
     expect(screen.getByText("2%")).toBeInTheDocument();
+
+    // Observations panel groups by category and explains each reading.
+    expect(screen.getByText("Energy Spreads")).toBeInTheDocument();
+    expect(screen.getByText("High stress")).toBeInTheDocument();
+    expect(screen.getByText("Calm")).toBeInTheDocument();
+    expect(
+      screen.getByText("High = diesel crack spread widening, refining stress feeding through."),
+    ).toBeInTheDocument();
   });
 
   it("surfaces a visible error when the energy state request fails", async () => {

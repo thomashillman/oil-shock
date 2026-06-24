@@ -1011,7 +1011,8 @@ describe("macro db helpers", () => {
         release_key: "2026-04-28",
         as_of_date: "2026-04-28",
         observed_at: "2026-04-28T00:00:00.000Z",
-        value: 0.8
+        value: 0.8,
+        unit: "ratio"
       },
       {
         engine_key: "cpi",
@@ -1028,6 +1029,7 @@ describe("macro db helpers", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.engineKey).toBe("energy");
     expect(rows[0]?.observedAt).toBe("2026-04-28T00:00:00.000Z");
+    expect(rows[0]?.unit).toBe("ratio");
   });
 
   it("listRuntimeRuleState parses JSON, filters by engine, orders deterministically, and respects limit", async () => {

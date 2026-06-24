@@ -7,6 +7,7 @@ import {
 } from "../db/macro";
 import type { Env } from "../env";
 import { json } from "../lib/http";
+import { categoryForFeedKey } from "../lib/observation-category";
 
 const ENERGY_ENGINE_KEY = "energy";
 const RUNTIME_LIMIT = 25;
@@ -33,6 +34,12 @@ export async function handleEnergyRuntime(env: Env): Promise<Response> {
     listRuntimeActions(env, ENERGY_ENGINE_KEY, RUNTIME_LIMIT)
   ]);
 
+  // Reuse the feed registry data already loaded for feedHealth to attach
+  // human-friendly display names and providers to each observation, plus a
+  // category derived from the feed key. This keeps the read query simple (no
+  // SQL join) while giving the frontend the structural facts it needs.
+  const feedMeta = new Map(feedHealth.map((feed) => [feed.feedKey, feed]));
+
   return json({
     engineKey: ENERGY_ENGINE_KEY,
     feedHealth: feedHealth.map((feed) => ({
@@ -52,7 +59,15 @@ export async function handleEnergyRuntime(env: Env): Promise<Response> {
           }
         : null
     })),
-    observations,
+    observations: observations.map((obs) => {
+      const meta = feedMeta.get(obs.feedKey);
+      return {
+        ...obs,
+        displayName: meta?.displayName ?? obs.feedKey,
+        provider: meta?.provider ?? null,
+        dimension: categoryForFeedKey(obs.feedKey)
+      };
+    }),
     ruleState,
     triggerEvents,
     actions,

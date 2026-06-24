@@ -161,14 +161,14 @@ describe("engine runtime routes", () => {
   it("GET /api/engines/energy/runtime returns stable runtime shape with newest-first rows", async () => {
     const db = new MockD1Database(
       [
-        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", display_name: "WTI-Brent", enabled: 1 }
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", display_name: "WTI-Brent Spread", provider: "EIA", enabled: 1 }
       ],
       [
         { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", checked_at: "2026-04-27T12:00:00.000Z", step: "save", result: "success", status: "ok", error_message: null, latency_ms: 42 }
       ],
       [
-        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", series_key: "energy_spread.wti_brent_spread", release_key: "2026-04-27", as_of_date: "2026-04-27", observed_at: "2026-04-27T00:00:00.000Z", value: 0.4 },
-        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", series_key: "energy_spread.wti_brent_spread", release_key: "2026-04-28", as_of_date: "2026-04-28", observed_at: "2026-04-28T00:00:00.000Z", value: 0.8 }
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", series_key: "energy_spread.wti_brent_spread", release_key: "2026-04-27", as_of_date: "2026-04-27", observed_at: "2026-04-27T00:00:00.000Z", value: 0.4, unit: "ratio" },
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", series_key: "energy_spread.wti_brent_spread", release_key: "2026-04-28", as_of_date: "2026-04-28", observed_at: "2026-04-28T00:00:00.000Z", value: 0.8, unit: "ratio" }
       ],
       [
         { engine_key: "energy", rule_key: "energy.confirmation.spread_widening", state_key: "current", release_key: "2026-04-28", state_json: '{"status":"active"}', evaluated_at: "2026-04-28T00:00:00.000Z" }
@@ -190,7 +190,13 @@ describe("engine runtime routes", () => {
     const body = (await response.json()) as {
       engineKey: string;
       feedHealth: unknown[];
-      observations: Array<{ observedAt: string }>;
+      observations: Array<{
+        observedAt: string;
+        displayName: string;
+        provider: string | null;
+        unit: string | null;
+        dimension: string;
+      }>;
       ruleState: unknown[];
       triggerEvents: Array<{ triggeredAt: string }>;
       actions: Array<{ decidedAt: string; details: Record<string, unknown> | null }>;
@@ -200,6 +206,10 @@ describe("engine runtime routes", () => {
     expect(body.engineKey).toBe("energy");
     expect(body.feedHealth).toHaveLength(1);
     expect(body.observations[0]?.observedAt).toBe("2026-04-28T00:00:00.000Z");
+    expect(body.observations[0]?.displayName).toBe("WTI-Brent Spread");
+    expect(body.observations[0]?.provider).toBe("EIA");
+    expect(body.observations[0]?.unit).toBe("ratio");
+    expect(body.observations[0]?.dimension).toBe("energy_spread");
     expect(body.ruleState).toHaveLength(1);
     expect(body.triggerEvents[0]?.triggeredAt).toBe("2026-04-28T00:00:00.000Z");
     expect(body.actions[0]?.decidedAt).toBe("2026-04-28T00:01:00.000Z");

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiBaseUrl } from "./config";
 import { runPocCycle } from "./api";
+import {
+  categoryMeta,
+  metricMeaning,
+  observationLevel,
+  OBSERVATION_LEVEL_LABEL,
+  type ObservationLevel,
+} from "./labels";
 
 const REFRESH_MS = 60_000;
 
@@ -44,6 +51,10 @@ interface RuntimeObservationItem {
   asOfDate: string;
   observedAt: string;
   value: number;
+  unit: string | null;
+  displayName: string;
+  provider: string | null;
+  dimension: string;
 }
 
 interface RuntimeRuleStateItem {
@@ -233,6 +244,14 @@ const T = {
 function accentForStatus(status: string): string {
   if (status === "elevated") return T.flare;
   if (status === "watch") return T.watch;
+  return T.gauge;
+}
+
+// Intensity colour for an observation level, reusing the gauge palette:
+// calm (green) → elevated (amber) → high stress (orange-red).
+function colorForLevel(level: ObservationLevel): string {
+  if (level === "high") return T.flare;
+  if (level === "elevated") return T.watch;
   return T.gauge;
 }
 
@@ -555,6 +574,18 @@ export function App() {
     confidence >= 0.8 ? ("ok" as const) : confidence >= 0.55 ? ("warn" as const) : ("bad" as const);
   const runtimeFeedHealth = runtime?.feedHealth ?? [];
   const runtimeObservations = runtime?.observations ?? [];
+  const observationGroups = useMemo(() => {
+    const byDimension = new Map<string, RuntimeObservationItem[]>();
+    for (const obs of runtimeObservations) {
+      const dimension = obs.dimension ?? "other";
+      const bucket = byDimension.get(dimension);
+      if (bucket) bucket.push(obs);
+      else byDimension.set(dimension, [obs]);
+    }
+    return Array.from(byDimension.entries())
+      .map(([dimension, items]) => ({ dimension, meta: categoryMeta(dimension), items }))
+      .sort((a, b) => a.meta.order - b.meta.order);
+  }, [runtimeObservations]);
   const runtimeRuleState = runtime?.ruleState ?? [];
   const runtimeTriggerEvents = runtime?.triggerEvents ?? [];
   const runtimeActions = runtime?.actions ?? [];
@@ -960,48 +991,124 @@ export function App() {
               </Panel>
 
               <Panel title="Observations" subtitle="Latest normalized inputs driving the score">
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {runtimeObservations.map((obs) => (
-                    <article
-                      key={obs.seriesKey}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 6,
-                        background: "rgba(237,232,220,0.025)",
-                        border: `1px solid ${T.border}`,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
-                          {obs.feedKey}
-                        </div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: T.paraffin,
+                    marginBottom: 12,
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Each reading is normalized to 0–100%.{" "}
+                  <span style={{ color: T.wellhead }}>Higher = more stress</span> contributing
+                  to the score.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {observationGroups.map((group) => (
+                    <section key={group.dimension}>
+                      <div style={{ marginBottom: 8 }}>
                         <div
                           style={{
-                            marginTop: 3,
-                            fontSize: 10,
-                            color: T.paraffin,
-                            fontFamily: T.mono,
+                            fontFamily: T.display,
+                            fontSize: 14,
+                            fontWeight: 600,
+                            letterSpacing: 0.3,
+                            textTransform: "uppercase",
+                            color: T.wellhead,
                           }}
                         >
-                          {obs.seriesKey} · {obs.asOfDate}
+                          {group.meta.label}
+                        </div>
+                        <div style={{ marginTop: 2, fontSize: 11, color: T.paraffin, lineHeight: 1.4 }}>
+                          {group.meta.description}
                         </div>
                       </div>
-                      <div
-                        style={{
-                          fontFamily: T.display,
-                          fontWeight: 700,
-                          fontSize: 22,
-                          color: T.wellhead,
-                          flexShrink: 0,
-                        }}
-                      >
-                        {percent(obs.value)}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {group.items.map((obs) => {
+                          const level = observationLevel(obs.value);
+                          const levelLabel = OBSERVATION_LEVEL_LABEL[level];
+                          const accent = colorForLevel(level);
+                          const fillPct = Math.max(0, Math.min(1, obs.value)) * 100;
+                          const displayName = obs.displayName || obs.feedKey;
+                          return (
+                            <article
+                              key={obs.seriesKey}
+                              aria-label={`${displayName}: ${percent(obs.value)}, ${levelLabel}`}
+                              style={{
+                                padding: "10px 12px",
+                                borderRadius: 6,
+                                background: "rgba(237,232,220,0.025)",
+                                border: `1px solid ${T.border}`,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 7,
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "baseline",
+                                  gap: 12,
+                                }}
+                              >
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
+                                    {displayName}
+                                  </div>
+                                  <div style={{ marginTop: 2, fontSize: 11, color: accent, fontWeight: 500 }}>
+                                    {levelLabel}
+                                  </div>
+                                </div>
+                                <div
+                                  style={{
+                                    fontFamily: T.display,
+                                    fontWeight: 700,
+                                    fontSize: 22,
+                                    color: accent,
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {percent(obs.value)}
+                                </div>
+                              </div>
+                              <div
+                                aria-hidden="true"
+                                style={{
+                                  height: 5,
+                                  borderRadius: 3,
+                                  background: "rgba(237,232,220,0.07)",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: `${fillPct}%`,
+                                    height: "100%",
+                                    borderRadius: 3,
+                                    background: accent,
+                                    transition: "width 240ms ease",
+                                  }}
+                                />
+                              </div>
+                              <div style={{ fontSize: 11, color: T.paraffin, lineHeight: 1.4 }}>
+                                {metricMeaning(obs.seriesKey)}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: T.paraffin,
+                                  fontFamily: T.mono,
+                                }}
+                              >
+                                {obs.seriesKey}
+                                {obs.provider ? ` · ${obs.provider}` : ""} · as of {obs.asOfDate}
+                              </div>
+                            </article>
+                          );
+                        })}
                       </div>
-                    </article>
+                    </section>
                   ))}
                   {runtimeObservations.length === 0 && (
                     <span style={{ fontSize: 12, color: T.paraffin, fontFamily: T.mono }}>
