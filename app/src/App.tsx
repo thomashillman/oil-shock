@@ -31,6 +31,7 @@ interface RuntimeFeedHealthItem {
   engineKey: string;
   feedKey: string;
   displayName: string;
+  provider: string | null;
   enabled: boolean;
   status: string;
   latestCheck: null | {
@@ -951,9 +952,28 @@ export function App() {
                             gap: 8,
                           }}
                         >
-                          <span style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
-                            {feed.displayName}
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {feed.provider && (
+                              <span style={{
+                                fontSize: 9,
+                                fontWeight: 600,
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                                color: "#93B5C6",
+                                background: "rgba(147,181,198,0.1)",
+                                border: "1px solid rgba(147,181,198,0.18)",
+                                borderRadius: 3,
+                                padding: "1px 5px",
+                                fontFamily: T.mono,
+                                flexShrink: 0,
+                              }}>
+                                {feed.provider}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 13, fontWeight: 500, color: T.wellhead }}>
+                              {feed.displayName}
+                            </span>
+                          </div>
                           <Badge label={feed.status} tone={tone} />
                         </div>
                         <div
