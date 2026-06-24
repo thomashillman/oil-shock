@@ -24,10 +24,13 @@ describe("collectEnergy", () => {
     mockInstrumentedFetch
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "65.0" }], total: 1 } })
       .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "69.5" }], total: 1 } })
-      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "95.0" }], total: 1 } });
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "2.0" }], total: 1 } });
 
     const points = await collectEnergy(env, "2026-04-23T00:00:00.000Z");
     expect(mockInstrumentedFetch).toHaveBeenCalledTimes(3);
+    expect(String(mockInstrumentedFetch.mock.calls[2]?.[1])).toContain(
+      "EER_EPD2DXL0_PF4_RGC_DPG"
+    );
     expect(points.map((point) => point.seriesKey).sort()).toEqual([
       "energy_spread.diesel_wti_crack",
       "energy_spread.wti_brent_spread"
@@ -38,6 +41,8 @@ describe("collectEnergy", () => {
       expect(point.value).toBeGreaterThanOrEqual(0);
       expect(point.value).toBeLessThanOrEqual(1);
     }
+    expect(points.find((point) => point.seriesKey === "energy_spread.diesel_wti_crack")?.value)
+      .toBeCloseTo(0.475);
   });
 
   it("returns no points when one side of a spread is unavailable", async () => {

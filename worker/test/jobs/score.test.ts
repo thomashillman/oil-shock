@@ -7,12 +7,18 @@ const { mockRunEnergyRuleEngineV2 } = vi.hoisted(() => ({
 const { mockRunActionManagerForEngine } = vi.hoisted(() => ({
   mockRunActionManagerForEngine: vi.fn<(_: Env, __: { engineKey: string; nowIso: string }) => Promise<unknown>>()
 }));
+const { mockWriteOilShockCompatibilitySnapshot } = vi.hoisted(() => ({
+  mockWriteOilShockCompatibilitySnapshot: vi.fn()
+}));
 
 vi.mock("../../src/core/rules/energy-v2", () => ({
   runEnergyRuleEngineV2: mockRunEnergyRuleEngineV2
 }));
 vi.mock("../../src/core/actions/action-manager", () => ({
   runActionManagerForEngine: mockRunActionManagerForEngine
+}));
+vi.mock("../../src/jobs/score-compatibility", () => ({
+  writeOilShockCompatibilitySnapshot: mockWriteOilShockCompatibilitySnapshot
 }));
 
 import { runScore } from "../../src/jobs/score";
@@ -144,6 +150,9 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
       ignoredCount: 0,
       errorCount: 0
     });
+    mockWriteOilShockCompatibilitySnapshot.mockReset().mockImplementation(
+      async (_env: Env, now: Date) => ({ generatedAt: now.toISOString() })
+    );
   });
 
   it("preserves legacy score write behavior while invoking Energy rule engine v2", async () => {
@@ -160,6 +169,7 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     expect(db.scores[0]?.engine_key).toBe("energy");
     expect(mockRunEnergyRuleEngineV2).toHaveBeenCalledTimes(1);
     expect(mockRunActionManagerForEngine).toHaveBeenCalledTimes(1);
+    expect(mockWriteOilShockCompatibilitySnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("does not invoke action manager when rule engine v2 reports no trigger events", async () => {
@@ -173,6 +183,29 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
 
     expect(mockRunActionManagerForEngine).not.toHaveBeenCalled();
+    expect(mockWriteOilShockCompatibilitySnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the score run successful when the compatibility snapshot write fails", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.7, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.6, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "price_signal.curve_slope", value: 0.2, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+
+    mockWriteOilShockCompatibilitySnapshot.mockRejectedValueOnce(new Error("compatibility snapshot write failed"));
+
+    await expect(runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"))).resolves.toBeUndefined();
+
+    expect(db.runs[0]?.status).toBe("success");
+    expect(JSON.parse(String(db.runs[0]?.details_json))).toMatchObject({
+      message: "Macro Signals engines scored",
+      compatibilitySnapshotGeneratedAt: null
+    });
+    expect(mockRunEnergyRuleEngineV2).toHaveBeenCalledTimes(1);
+    expect(mockRunActionManagerForEngine).toHaveBeenCalledTimes(1);
+    expect(mockWriteOilShockCompatibilitySnapshot).toHaveBeenCalledTimes(1);
   });
 
   it("fails the scoring run when rule engine v2 persistence fails", async () => {
@@ -203,6 +236,7 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     expect(db.scores).toHaveLength(0);
     expect(mockRunEnergyRuleEngineV2).not.toHaveBeenCalled();
     expect(mockRunActionManagerForEngine).not.toHaveBeenCalled();
+    expect(mockWriteOilShockCompatibilitySnapshot).not.toHaveBeenCalled();
   });
 
   it("fails closed when action manager persistence fails", async () => {

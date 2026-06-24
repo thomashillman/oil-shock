@@ -115,6 +115,22 @@ function normalizeStatePayload(payload: unknown): StateData | null {
   return normalized;
 }
 
+function isExpectedRecalcNotReady(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const data = payload as Record<string, unknown>;
+  const error = data.error;
+  const message = data.message;
+  return (
+    error === "no_snapshot" ||
+    error === "not_ready" ||
+    (typeof error === "string" && error.includes("no_snapshot")) ||
+    (typeof message === "string" && message.toLowerCase().includes("no snapshot"))
+  );
+}
+
 export function App() {
   const [stateData, setStateData] = useState<StateData | null>(null);
   const [evidenceData, setEvidenceData] = useState<EvidenceData | null>(null);
@@ -225,6 +241,16 @@ export function App() {
       }
       try {
         const res = await fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null);
+          if (res.status === 404 && isExpectedRecalcNotReady(payload)) {
+            // Expected while the worker is still recomputing the snapshot.
+          } else {
+            setRecalculating(false);
+            setRecalcError(`Recalculation failed (HTTP ${res.status}). Try again in a moment.`);
+            return;
+          }
+        }
         if (res.ok) {
           const raw = (await res.json()) as Record<string, unknown>;
           const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;

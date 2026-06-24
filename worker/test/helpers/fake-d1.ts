@@ -111,11 +111,38 @@ export class FakeD1Database {
         error_rate_threshold_pct: 5
       },
       {
+        feed_name: "eia_inventory",
+        provider: "EIA",
+        display_name: "EIA US Crude Inventory",
+        enabled: 1,
+        freshness_window_hours: 48,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      },
+      {
+        feed_name: "eia_futures_curve",
+        provider: "EIA",
+        display_name: "EIA Futures Curve",
+        enabled: 1,
+        freshness_window_hours: 24,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      },
+      {
         feed_name: "eia_diesel_wti_crack",
         provider: "EIA",
         display_name: "EIA Diesel/WTI Crack",
         enabled: 1,
         freshness_window_hours: 24,
+        timeout_threshold_ms: 30000,
+        error_rate_threshold_pct: 5
+      },
+      {
+        feed_name: "eia_refinery",
+        provider: "EIA",
+        display_name: "EIA Refinery Utilization",
+        enabled: 1,
+        freshness_window_hours: 48,
         timeout_threshold_ms: 30000,
         error_rate_threshold_pct: 5
       }

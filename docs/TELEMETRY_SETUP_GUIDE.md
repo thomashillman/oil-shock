@@ -50,7 +50,7 @@ import { instrumentedFetch } from "../../lib/api-instrumentation";
 const [wti, brent, diesel] = await Promise.all([
   fetchLatestSeriesValue(env, "RWTC", "eia_wti"),
   fetchLatestSeriesValue(env, "RBRTE", "eia_brent"),
-  fetchLatestSeriesValue(env, "EER_EPD2F_PF4_RGC_DPG", "eia_diesel_wti_crack")
+  fetchLatestSeriesValue(env, "EER_EPD2DXL0_PF4_RGC_DPG", "eia_diesel_wti_crack")
 ]);
 
 // Within fetchLatestSeriesValue:

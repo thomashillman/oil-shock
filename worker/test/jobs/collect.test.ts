@@ -2,14 +2,46 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../../src/env";
 import type { NormalizedPoint } from "../../src/types";
 import type { CpiObservationCandidate } from "../../src/jobs/collectors/cpi";
+import type { NormalizedPoint as GiePoint } from "../../src/types";
 
-const { mockCollectEnergy, mockCollectCpi } = vi.hoisted(() => ({
+const {
+  mockCollectEnergy,
+  mockCollectGie,
+  mockCollectRefinery,
+  mockCollectInventory,
+  mockCollectFuturesCurve,
+  mockCollectCpi
+} = vi.hoisted(() => ({
   mockCollectEnergy: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>(),
+  mockCollectGie: vi.fn<(_: Env, __: string) => Promise<GiePoint[]>>(),
+  mockCollectRefinery: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>(),
+  mockCollectInventory: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>(),
+  mockCollectFuturesCurve: vi.fn<(_: Env, __: string) => Promise<NormalizedPoint[]>>(),
   mockCollectCpi: vi.fn<(_: Env, __: string) => Promise<CpiObservationCandidate[]>>()
 }));
 
 vi.mock("../../src/jobs/collectors/energy", () => ({
   collectEnergy: mockCollectEnergy
+}));
+
+vi.mock("../../src/jobs/collectors/gie", () => ({
+  collectGieStorage: mockCollectGie,
+  GIE_FEED_KEY: "physical_stress.eu_gas_storage"
+}));
+
+vi.mock("../../src/jobs/collectors/eia-refinery", () => ({
+  collectEiaRefinery: mockCollectRefinery,
+  EIA_REFINERY_OBSERVATION_FEED_KEY: "physical_stress.refinery_utilization"
+}));
+
+vi.mock("../../src/jobs/collectors/eia-inventory", () => ({
+  collectEiaInventory: mockCollectInventory,
+  EIA_INVENTORY_OBSERVATION_FEED_KEY: "physical_stress.inventory_draw"
+}));
+
+vi.mock("../../src/jobs/collectors/eia-futures-curve", () => ({
+  collectEiaFuturesCurve: mockCollectFuturesCurve,
+  EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY: "price_signal.curve_slope"
 }));
 
 vi.mock("../../src/jobs/collectors/cpi", () => ({
@@ -252,6 +284,42 @@ const CPI_OBSERVATION: CpiObservationCandidate = {
 describe("runCollection energy dual-write", () => {
   beforeEach(() => {
     mockCollectEnergy.mockReset().mockResolvedValue(ENERGY_POINTS);
+    mockCollectGie.mockReset().mockResolvedValue([
+      {
+        seriesKey: "physical_stress.eu_gas_storage",
+        observedAt: "2026-04-24",
+        value: 0.35,
+        unit: "ratio",
+        sourceKey: "gie"
+      }
+    ]);
+    mockCollectRefinery.mockReset().mockResolvedValue([
+      {
+        seriesKey: "physical_stress.refinery_utilization",
+        observedAt: "2026-04",
+        value: 0.11,
+        unit: "ratio",
+        sourceKey: "eia"
+      }
+    ]);
+    mockCollectInventory.mockReset().mockResolvedValue([
+      {
+        seriesKey: "physical_stress.inventory_draw",
+        observedAt: "2026-04-24",
+        value: 0.37,
+        unit: "ratio",
+        sourceKey: "eia"
+      }
+    ]);
+    mockCollectFuturesCurve.mockReset().mockResolvedValue([
+      {
+        seriesKey: "price_signal.curve_slope",
+        observedAt: "2024-04-05",
+        value: 0.53,
+        unit: "ratio",
+        sourceKey: "eia"
+      }
+    ]);
     mockCollectCpi.mockReset().mockResolvedValue([CPI_OBSERVATION]);
   });
 
@@ -383,6 +451,194 @@ describe("runCollection energy dual-write", () => {
 
     const checks = await db.prepare("SELECT * FROM feed_checks").all<Row>();
     expect(checks.results).toHaveLength(2);
+  });
+
+  it("writes GIE observations and feed checks when the GIE feed is enabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.eu_gas_storage", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectGie).toHaveBeenCalledTimes(1);
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const gieObservations = observations.filter((row) => row.feed_key === "physical_stress.eu_gas_storage");
+    expect(gieObservations).toHaveLength(1);
+    expect(gieObservations[0]).toMatchObject({
+      engine_key: "energy",
+      series_key: "physical_stress.eu_gas_storage",
+      observed_at: "2026-04-24",
+      value: 0.35
+    });
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const gieChecks = checks.filter((row) => row.feed_key === "physical_stress.eu_gas_storage");
+    expect(gieChecks).toHaveLength(1);
+    expect(gieChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "success",
+      status: "ok"
+    });
+  });
+
+  it("writes EIA refinery observations and feed checks when the feed is enabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.refinery_utilization", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectRefinery).toHaveBeenCalledTimes(1);
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const refineryObservations = observations.filter((row) => row.feed_key === "physical_stress.refinery_utilization");
+    expect(refineryObservations).toHaveLength(1);
+    expect(refineryObservations[0]).toMatchObject({
+      engine_key: "energy",
+      series_key: "physical_stress.refinery_utilization",
+      observed_at: "2026-04",
+      value: 0.11
+    });
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const refineryChecks = checks.filter((row) => row.feed_key === "physical_stress.refinery_utilization");
+    expect(refineryChecks).toHaveLength(1);
+    expect(refineryChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "success",
+      status: "ok"
+    });
+  });
+
+  it("writes EIA inventory observations and feed checks when the feed is enabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.inventory_draw", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectInventory).toHaveBeenCalledTimes(1);
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const inventoryObservations = observations.filter((row) => row.feed_key === "physical_stress.inventory_draw");
+    expect(inventoryObservations).toHaveLength(1);
+    expect(inventoryObservations[0]).toMatchObject({
+      engine_key: "energy",
+      series_key: "physical_stress.inventory_draw",
+      observed_at: "2026-04-24",
+      value: 0.37
+    });
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const inventoryChecks = checks.filter((row) => row.feed_key === "physical_stress.inventory_draw");
+    expect(inventoryChecks).toHaveLength(1);
+    expect(inventoryChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "success",
+      status: "ok"
+    });
+  });
+
+  it("writes EIA futures curve observations and feed checks when the feed is enabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "price_signal.curve_slope", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectFuturesCurve).toHaveBeenCalledTimes(1);
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const futuresObservations = observations.filter((row) => row.feed_key === "price_signal.curve_slope");
+    expect(futuresObservations).toHaveLength(1);
+    expect(futuresObservations[0]).toMatchObject({
+      engine_key: "energy",
+      series_key: "price_signal.curve_slope",
+      observed_at: "2024-04-05",
+      value: 0.53
+    });
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const futuresChecks = checks.filter((row) => row.feed_key === "price_signal.curve_slope");
+    expect(futuresChecks).toHaveLength(1);
+    expect(futuresChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "success",
+      status: "ok"
+    });
+  });
+
+  it("skips GIE collection when the feed is disabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.eu_gas_storage", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectGie).not.toHaveBeenCalled();
+  });
+
+  it("skips EIA refinery collection when the feed is disabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.refinery_utilization", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectRefinery).not.toHaveBeenCalled();
+  });
+
+  it("skips EIA inventory collection when the feed is disabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.inventory_draw", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectInventory).not.toHaveBeenCalled();
+  });
+
+  it("skips EIA futures curve collection when the feed is disabled", async () => {
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "price_signal.curve_slope", enabled: 0 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    expect(mockCollectFuturesCurve).not.toHaveBeenCalled();
   });
 
   it("does not write CPI observations or success feed checks when CPI feed is disabled", async () => {
