@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { AppError } from "../lib/errors";
 import { isRulePredicate, type RuleDefinition, type RulePredicate } from "../core/rules/engine";
 import type { NormalizedPoint, ScoreEvidence, ScoringThresholds, StateSnapshot } from "../types";
 
@@ -118,28 +119,6 @@ export interface EngineScoreInput {
   runKey?: string | null;
 }
 
-const DEFAULT_THRESHOLDS: ScoringThresholds = {
-  stateAlignedMax: 0.3,
-  stateMildMin: 0.3,
-  stateMildMax: 0.5,
-  statePersistentMin: 0.5,
-  statePersistentMax: 0.75,
-  stateDeepMin: 0.75,
-  shockAgeThresholdHours: 72,
-  dislocationPersistenceHours: 72,
-  ledgerAdjustmentMagnitude: 0.1,
-  mismatchMarketResponseWeight: 0.15,
-  confirmationPhysicalStressMin: 0.6,
-  confirmationPriceSignalMax: 0.45,
-  confirmationMarketResponseMin: 0.5,
-  coverageMissingPenalty: 0.34,
-  coverageStalePenalty: 0.16,
-  coverageMaxPenalty: 1.0,
-  stateDeepPersistenceHours: 120,
-  statePersistentPersistenceHours: 72,
-  ledgerStaleThresholdDays: 30
-};
-
 function parseJsonOrNull<T>(value: string | null): T | null {
   if (!value) {
     return null;
@@ -173,13 +152,27 @@ function mapRuleRow(row: {
   };
 }
 
-function mapSnapshotRow(row: SnapshotRow) {
-  return row;
-}
-
-function thresholdValue(rows: Map<string, number>, key: keyof ScoringThresholds): number {
-  return rows.get(key) ?? DEFAULT_THRESHOLDS[key];
-}
+const THRESHOLD_KEY_MAP: Array<[keyof ScoringThresholds, string]> = [
+  ["stateAlignedMax", "state_aligned_threshold_max"],
+  ["stateMildMin", "state_mild_threshold_min"],
+  ["stateMildMax", "state_mild_threshold_max"],
+  ["statePersistentMin", "state_persistent_threshold_min"],
+  ["statePersistentMax", "state_persistent_threshold_max"],
+  ["stateDeepMin", "state_deep_threshold_min"],
+  ["shockAgeThresholdHours", "shock_age_threshold_hours"],
+  ["dislocationPersistenceHours", "dislocation_persistence_threshold_hours"],
+  ["ledgerAdjustmentMagnitude", "ledger_adjustment_magnitude"],
+  ["mismatchMarketResponseWeight", "mismatch_market_response_weight"],
+  ["confirmationPhysicalStressMin", "confirmation_physical_stress_min"],
+  ["confirmationPriceSignalMax", "confirmation_price_signal_max"],
+  ["confirmationMarketResponseMin", "confirmation_market_response_min"],
+  ["coverageMissingPenalty", "coverage_missing_penalty"],
+  ["coverageStalePenalty", "coverage_stale_penalty"],
+  ["coverageMaxPenalty", "coverage_max_penalty"],
+  ["stateDeepPersistenceHours", "state_deep_persistence_hours"],
+  ["statePersistentPersistenceHours", "state_persistent_persistence_hours"],
+  ["ledgerStaleThresholdDays", "ledger_stale_threshold_days"]
+];
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
   for (const point of points) {
@@ -282,7 +275,7 @@ export async function writeSnapshot(env: Env, snapshot: StateSnapshot, runKey?: 
       snapshot.coverageConfidence,
       JSON.stringify(snapshot.sourceFreshness),
       JSON.stringify(snapshot.evidenceIds),
-      JSON.stringify({ state: snapshot.dislocationState }),
+      JSON.stringify(snapshot.dislocationState),
       snapshot.stateRationale,
       JSON.stringify(snapshot.subscores),
       JSON.stringify(snapshot.clocks),
@@ -358,10 +351,29 @@ export async function getLatestRunEvidence(env: Env): Promise<RunEvidenceRow[]> 
   return getRunEvidenceBySnapshotRunKey(env, run.run_key);
 }
 
+async function getLatestScoreRunKey(env: Env): Promise<string | null> {
+  const run = await env.DB.prepare(
+    `
+    SELECT run_key
+    FROM runs
+    WHERE run_type = 'score'
+    ORDER BY started_at DESC
+    LIMIT 1
+    `
+  ).first<{ run_key: string }>();
+
+  return run?.run_key ?? null;
+}
+
 export async function getRunEvidenceBySnapshotRunKey(
   env: Env,
-  runKey: string
+  runKey: string | null
 ): Promise<RunEvidenceRow[]> {
+  const effectiveRunKey = runKey ?? (await getLatestScoreRunKey(env));
+  if (!effectiveRunKey) {
+    return [];
+  }
+
   const result = await env.DB.prepare(
     `
     SELECT
@@ -378,7 +390,7 @@ export async function getRunEvidenceBySnapshotRunKey(
     ORDER BY observed_at DESC, evidence_key ASC
     `
   )
-    .bind(runKey)
+    .bind(effectiveRunKey)
     .all<{
       evidence_key: string;
       evidence_group: string;
@@ -660,27 +672,21 @@ export async function loadThresholds(env: Env): Promise<ScoringThresholds> {
     rows.set(row.key, Number(row.value));
   }
 
-  return {
-    stateAlignedMax: thresholdValue(rows, "stateAlignedMax"),
-    stateMildMin: thresholdValue(rows, "stateMildMin"),
-    stateMildMax: thresholdValue(rows, "stateMildMax"),
-    statePersistentMin: thresholdValue(rows, "statePersistentMin"),
-    statePersistentMax: thresholdValue(rows, "statePersistentMax"),
-    stateDeepMin: thresholdValue(rows, "stateDeepMin"),
-    shockAgeThresholdHours: thresholdValue(rows, "shockAgeThresholdHours"),
-    dislocationPersistenceHours: thresholdValue(rows, "dislocationPersistenceHours"),
-    ledgerAdjustmentMagnitude: thresholdValue(rows, "ledgerAdjustmentMagnitude"),
-    mismatchMarketResponseWeight: thresholdValue(rows, "mismatchMarketResponseWeight"),
-    confirmationPhysicalStressMin: thresholdValue(rows, "confirmationPhysicalStressMin"),
-    confirmationPriceSignalMax: thresholdValue(rows, "confirmationPriceSignalMax"),
-    confirmationMarketResponseMin: thresholdValue(rows, "confirmationMarketResponseMin"),
-    coverageMissingPenalty: thresholdValue(rows, "coverageMissingPenalty"),
-    coverageStalePenalty: thresholdValue(rows, "coverageStalePenalty"),
-    coverageMaxPenalty: thresholdValue(rows, "coverageMaxPenalty"),
-    stateDeepPersistenceHours: thresholdValue(rows, "stateDeepPersistenceHours"),
-    statePersistentPersistenceHours: thresholdValue(rows, "statePersistentPersistenceHours"),
-    ledgerStaleThresholdDays: thresholdValue(rows, "ledgerStaleThresholdDays")
-  };
+  const thresholds = {} as ScoringThresholds;
+  for (const [propertyKey, rowKey] of THRESHOLD_KEY_MAP) {
+    if (!rows.has(rowKey)) {
+      throw new AppError(`Missing required threshold: ${rowKey}`, 500, "MISSING_THRESHOLD");
+    }
+
+    const value = rows.get(rowKey);
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new AppError(`Invalid threshold value for ${rowKey}`, 500, "INVALID_THRESHOLD");
+    }
+
+    thresholds[propertyKey] = value;
+  }
+
+  return thresholds;
 }
 
 export async function getLatestStateChangeEvent(env: Env): Promise<StateChangeEventRow | null> {

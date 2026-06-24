@@ -24,17 +24,12 @@ import { handleGetValidationStatus } from "./routes/admin-validation";
 import { handleGetCoverage } from "./routes/coverage";
 import { handleGetEvidence } from "./routes/evidence";
 import { handleGetFeedHealth } from "./routes/feed-health";
+import { handleGetHealth } from "./routes/health";
 import { handleEngineList, handleEnergyRuntime, handleRuntimeMethodNotAllowed, handleUnknownRuntimeEngine } from "./routes/engine-runtime";
 import { handleGetEnergyState } from "./routes/engine-state";
 import { handleGetStateHistory } from "./routes/history";
 import { handleCreateLedger, handleGetLedgerReview, handlePatchLedger } from "./routes/ledger";
 import { handleGetState } from "./routes/state";
-
-interface HealthPayload {
-  ok: boolean;
-  service: string;
-  env: Env["APP_ENV"];
-}
 
 function isAuthorizedAdminRequest(request: Request, env: Env): boolean {
   const token = env.ADMIN_API_BEARER_TOKEN;
@@ -71,21 +66,16 @@ function denyUnauthorized(request: Request, env: Env): Response | null {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method === "OPTIONS") {
-      return withCors(new Response(null, { status: 204 }), request, env);
-    }
+      if (request.method === "OPTIONS") {
+        return withCors(new Response(null, { status: 204 }), request, env);
+      }
 
-    const { pathname } = new URL(request.url);
+      const { pathname } = new URL(request.url);
     let response: Response;
 
     try {
       if (pathname === "/health") {
-        const payload: HealthPayload = {
-          ok: true,
-          service: "oil-shock-worker",
-          env: env.APP_ENV
-        };
-        response = json(payload);
+        response = await handleGetHealth(env);
         return withCors(response, request, env);
       }
 
