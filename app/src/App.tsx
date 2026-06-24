@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { apiBaseUrl } from "./config";
+import { runPocCycle } from "./api";
 
 const REFRESH_MS = 60_000;
 
@@ -503,6 +504,22 @@ export function App() {
     setRefreshing(false);
   }, []);
 
+  const refreshOverview = useCallback(async () => {
+    setRefreshing(true);
+    let refreshError: string | null = null;
+    try {
+      await runPocCycle();
+    } catch (error) {
+      refreshError = error instanceof Error ? error.message : "Failed to refresh energy data";
+    }
+
+    await loadOverview();
+
+    if (refreshError) {
+      setStateError(refreshError);
+    }
+  }, [loadOverview]);
+
   useEffect(() => {
     void loadOverview();
     const intervalId = setInterval(() => {
@@ -595,7 +612,7 @@ export function App() {
             </span>
           )}
           <button
-            onClick={() => void loadOverview()}
+            onClick={() => void refreshOverview()}
             disabled={loading || refreshing}
             aria-label="Refresh energy data"
             style={{

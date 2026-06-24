@@ -187,6 +187,10 @@ describe("App", () => {
   it("refreshes the live energy state on demand", async () => {
     let refreshed = false;
     const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.includes("/api/admin/run-poc")) {
+        refreshed = true;
+        return Promise.resolve({ ok: true, json: async () => ({ ok: true }) });
+      }
       if (url.includes("/api/v1/energy/state")) {
         return Promise.resolve({
           ok: true,
@@ -214,10 +218,15 @@ describe("App", () => {
     expect(screen.getByText("53")).toBeInTheDocument();
 
     await act(async () => {
-      refreshed = true;
       fireEvent.click(screen.getByRole("button", { name: /refresh energy data/i }));
     });
 
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/admin/run-poc"),
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
     await waitFor(() => expect(screen.getByText("75")).toBeInTheDocument());
     expect(screen.getByText("elevated_pressure")).toBeInTheDocument();
   });
