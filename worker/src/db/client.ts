@@ -180,6 +180,10 @@ export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Pr
       `
       INSERT INTO series_points (series_key, observed_at, value, unit, source_key)
       VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(series_key, observed_at, source_key)
+      DO UPDATE SET
+        value = excluded.value,
+        unit = excluded.unit
       `
     )
       .bind(point.seriesKey, point.observedAt, point.value, point.unit, point.sourceKey)

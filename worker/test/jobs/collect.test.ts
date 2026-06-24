@@ -118,14 +118,26 @@ class MockD1Database {
     }
 
     if (normalized.includes("insert into series_points")) {
-      this.seriesPoints.push({
-        id: this.nextId++,
-        series_key: params[0],
-        observed_at: params[1],
-        value: params[2],
-        unit: params[3],
-        source_key: params[4]
-      });
+      const existing = this.seriesPoints.find(
+        (row) =>
+          row.series_key === params[0] &&
+          row.observed_at === params[1] &&
+          row.source_key === params[4]
+      );
+
+      if (existing) {
+        existing.value = params[2];
+        existing.unit = params[3];
+      } else {
+        this.seriesPoints.push({
+          id: this.nextId++,
+          series_key: params[0],
+          observed_at: params[1],
+          value: params[2],
+          unit: params[3],
+          source_key: params[4]
+        });
+      }
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
 
@@ -368,6 +380,9 @@ describe("runCollection energy dual-write", () => {
 
     const rows = await db.prepare("SELECT * FROM observations").all<Row>();
     expect(rows.results).toHaveLength(2);
+
+    const legacyRows = await db.prepare("SELECT * FROM series_points").all<Row>();
+    expect(legacyRows.results).toHaveLength(2);
   });
 
   it("appends feed_checks for successful Energy observation writes", async () => {
