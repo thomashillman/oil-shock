@@ -103,7 +103,7 @@ The runtime remains bridge-shaped rather than full registry-driven orchestration
 - `GET /api/engines` lists active runtime-read engines (currently Energy only).
 - `GET /api/engines/energy/runtime` is a read-only runtime inspection endpoint that returns the Energy runtime chain state for:
   - latest feed health (`feed_registry` + `feed_checks`)
-  - latest `observations` rows
+  - latest `observations` rows; each row carries its stored fields (`feedKey`, `seriesKey`, `asOfDate`, `observedAt`, `value`, `unit`) plus presentation-friendly enrichment merged in by the route from the already-loaded `feed_registry` data: `displayName` (falls back to `feedKey`), `provider`, and `dimension` (the signal category — `physical_stress`, `energy_spread`, `price_signal`, or `other` — derived from the feed-key prefix via `categoryForFeedKey`). The enrichment is read-only presentation metadata and does not change scoring inputs.
   - current `rule_state` rows
   - recent `trigger_events`
   - recent `action_log` decisions including guardrail rationale in `details`
