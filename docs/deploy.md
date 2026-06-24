@@ -7,6 +7,8 @@
 - Config: `wrangler.jsonc`
 - Local migration:
   - `corepack pnpm db:migrate:local`
+  - If the local D1 state has stale schema from a prior run, reset it first:
+    `corepack pnpm db:migrate:local:reset`
 - The live dashboard contract now expects snapshot history, rules management, and guardrail failure routes from the Worker.
 - Deploy:
   - Preview: `wrangler deploy --env preview --config wrangler.jsonc`

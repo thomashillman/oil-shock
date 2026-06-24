@@ -1,66 +1,78 @@
 #!/usr/bin/env tsx
-/**
- * Apply all migrations to local D1 database in order.
- * Usage: tsx scripts/apply-all-migrations.ts [--local]
- */
 
-import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
+import { execSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-const isLocal = process.argv.includes("--local");
-const flag = isLocal ? "--local" : "--remote";
-const rootDir = path.resolve(path.dirname(__filename), "..");
+export interface MigrationRunOptions {
+  isLocal: boolean;
+  exec?: typeof execSync;
+  rootDir?: string;
+}
 
-const migrationsDir = path.join(rootDir, "db", "migrations");
-const migrations = fs.readdirSync(migrationsDir)
-  .filter((f) => f.endsWith(".sql"))
-  .sort();
+export function buildMigrationCommand(isLocal: boolean): string {
+  const flag = isLocal ? "--local" : "--remote";
+  return [
+    "corepack",
+    "pnpm",
+    "exec",
+    "wrangler",
+    "d1",
+    "migrations",
+    "apply",
+    "energy_dislocation",
+    flag,
+    "--config",
+    "../wrangler.jsonc"
+  ].join(" ");
+}
 
-console.log(`Applying ${migrations.length} migrations ${flag}...`);
+export function runMigrations(options: MigrationRunOptions): string {
+  const rootDir = options.rootDir ?? path.resolve(path.dirname(__filename), "..");
+  const flag = options.isLocal ? "--local" : "--remote";
+  const migrationsDir = path.join(rootDir, "db", "migrations");
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
 
-for (const migration of migrations) {
-  const filePath = path.join(migrationsDir, migration);
-  const relPath = path.relative(rootDir, filePath);
-  console.log(`\nApplying ${migration}...`);
+  console.log(`Applying pending migrations with ${flag}...`);
+  console.log(`Found ${migrationFiles.length} migration files in ${path.relative(rootDir, migrationsDir)}.`);
 
+  const command = buildMigrationCommand(options.isLocal);
+  const exec = options.exec ?? execSync;
   try {
-    // Run from worker directory where wrangler is installed
-    const cmd = [
-      "corepack",
-      "pnpm",
-      "exec",
-      "wrangler",
-      "d1",
-      "execute",
-      "energy_dislocation",
-      flag,
-      "--file",
-      `../${relPath}`,
-      "--config",
-      "../wrangler.jsonc"
-    ].join(" ");
-
-    const output = execSync(cmd, {
+    return exec(command, {
       stdio: "pipe",
       encoding: "utf-8",
       cwd: path.join(rootDir, "worker")
     });
-
-    if (output.includes("success") && output.includes("true")) {
-      console.log(`✓ ${migration} applied successfully`);
-    } else if (output.includes("ERROR") || output.includes("error")) {
-      console.error(`✗ ${migration} failed:`);
-      console.error(output);
-      process.exit(1);
-    } else {
-      console.log(`✓ ${migration} applied`);
-    }
   } catch (error) {
-    console.error(`✗ Failed to apply ${migration}:`);
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      [
+        `Failed to apply ${options.isLocal ? "local" : "remote"} D1 migrations using ${command}.`,
+        `Scanned ${migrationFiles.length} migration file(s) from ${path.relative(rootDir, migrationsDir)}.`,
+        `Cause: ${cause}`,
+        'If the local database is stale or locked, stop the Worker dev server, run "corepack pnpm db:migrate:local:reset", and retry.'
+      ].join(" ")
+    );
+  }
+}
+
+export async function main(): Promise<void> {
+  try {
+    const output = runMigrations({ isLocal: process.argv.includes("--local") });
+    process.stdout.write(output);
+    console.log("\n? Migration apply completed");
+  } catch (error) {
+    console.error("? Migration apply failed:");
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }
 
-console.log("\n✓ All migrations applied successfully!");
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}

@@ -451,6 +451,7 @@ export class FakeD1Database {
         .map((row) => ({
           generated_at: row.generated_at,
           mismatch_score: row.mismatch_score,
+          dislocation_state_json: row.dislocation_state_json,
           subscores_json: row.subscores_json
         }));
       return { results: rows as T[] };
