@@ -107,6 +107,12 @@ type EnergyCollectorSpec = {
   collect: () => Promise<NormalizedPoint[]>;
 };
 
+type OptionalCollectorResult = EnergyCollectorSpec & {
+  feedKey: string;
+  points: NormalizedPoint[];
+  errorMessage: string | null;
+};
+
 async function settleCollector(spec: EnergyCollectorSpec): Promise<NormalizedPoint[]> {
   if (!spec.enabled) {
     return [];
@@ -120,6 +126,47 @@ async function settleCollector(spec: EnergyCollectorSpec): Promise<NormalizedPoi
   }
 }
 
+async function settleOptionalCollector(feedKey: string, spec: EnergyCollectorSpec): Promise<OptionalCollectorResult> {
+  if (!spec.enabled) {
+    return { ...spec, feedKey, points: [], errorMessage: null };
+  }
+
+  try {
+    return { ...spec, feedKey, points: await spec.collect(), errorMessage: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log("error", spec.label, { error: message });
+    return { ...spec, feedKey, points: [], errorMessage: message };
+  }
+}
+
+async function recordOptionalCollectorCheck(
+  env: Env,
+  runKey: string,
+  nowIso: string,
+  collector: OptionalCollectorResult,
+  bridge: string
+): Promise<void> {
+  if (!collector.enabled || collector.points.length > 0) {
+    return;
+  }
+
+  await recordFeedCheck(env, {
+    engineKey: "energy",
+    feedKey: collector.feedKey,
+    runKey,
+    step: "collect",
+    result: "error",
+    status: "error",
+    checkedAt: nowIso,
+    errorMessage: collector.errorMessage ?? "Collector returned no observations.",
+    details: {
+      bridge,
+      pointCount: 0
+    }
+  });
+}
+
 export async function runCollection(env: Env, now = new Date()): Promise<void> {
   const runKey = `collect-${now.getTime()}`;
   const nowIso = now.toISOString();
@@ -130,30 +177,34 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
       listEnabledFeedKeys(env, "energy"),
       listEnabledFeedKeys(env, "cpi")
     ]);
-    const [energyPoints, giePoints, refineryPoints, inventoryPoints, futuresCurvePoints] = await Promise.all([
+    const [energyPoints, gieCollector, refineryCollector, inventoryCollector, futuresCurveCollector] = await Promise.all([
       settleCollector({ enabled: true, label: "Energy collector failed", collect: () => collectEnergy(env, nowIso) }),
-      settleCollector({
+      settleOptionalCollector(GIE_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(GIE_FEED_KEY),
         label: "GIE collector failed",
         collect: () => collectGieStorage(env, nowIso)
       }),
-      settleCollector({
+      settleOptionalCollector(EIA_REFINERY_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_REFINERY_OBSERVATION_FEED_KEY),
         label: "EIA refinery collector failed",
         collect: () => collectEiaRefinery(env, nowIso)
       }),
-      settleCollector({
+      settleOptionalCollector(EIA_INVENTORY_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_INVENTORY_OBSERVATION_FEED_KEY),
         label: "EIA inventory collector failed",
         collect: () => collectEiaInventory(env, nowIso)
       }),
-      settleCollector({
+      settleOptionalCollector(EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY),
         label: "EIA futures curve collector failed",
         collect: () => collectEiaFuturesCurve(env, nowIso)
       })
     ]);
 
+    const giePoints = gieCollector.points;
+    const refineryPoints = refineryCollector.points;
+    const inventoryPoints = inventoryCollector.points;
+    const futuresCurvePoints = futuresCurveCollector.points;
     const points = [...energyPoints, ...giePoints, ...refineryPoints, ...inventoryPoints, ...futuresCurvePoints];
 
     await writeSeriesPoints(env, points);
@@ -172,6 +223,31 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
 
       await writeNormalizedObservations(env, "energy", batch.points, runKey, nowIso, batch.bridge);
     }
+
+    await Promise.all([
+      recordOptionalCollectorCheck(env, runKey, nowIso, gieCollector, "gie_storage_dual_write_v1"),
+      recordOptionalCollectorCheck(
+        env,
+        runKey,
+        nowIso,
+        refineryCollector,
+        "eia_refinery_monthly_dual_write_v1"
+      ),
+      recordOptionalCollectorCheck(
+        env,
+        runKey,
+        nowIso,
+        inventoryCollector,
+        "eia_inventory_weekly_dual_write_v1"
+      ),
+      recordOptionalCollectorCheck(
+        env,
+        runKey,
+        nowIso,
+        futuresCurveCollector,
+        "eia_futures_curve_daily_dual_write_v1"
+      )
+    ]);
 
     if (enabledCpiFeedKeys.length > 0) {
       const enabledCpiFeedSet = new Set(enabledCpiFeedKeys);

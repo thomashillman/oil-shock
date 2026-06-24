@@ -519,6 +519,33 @@ describe("runCollection energy dual-write", () => {
     });
   });
 
+  it("records an error feed check when GIE collection returns no observations", async () => {
+    mockCollectGie.mockResolvedValueOnce([]);
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.eu_gas_storage", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const gieObservations = observations.filter((row) => row.feed_key === "physical_stress.eu_gas_storage");
+    expect(gieObservations).toHaveLength(0);
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const gieChecks = checks.filter((row) => row.feed_key === "physical_stress.eu_gas_storage");
+    expect(gieChecks).toHaveLength(1);
+    expect(gieChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "error",
+      status: "error",
+      error_message: "Collector returned no observations."
+    });
+  });
+
   it("writes EIA inventory observations and feed checks when the feed is enabled", async () => {
     const db = new MockD1Database({
       feedRegistry: [
@@ -549,6 +576,33 @@ describe("runCollection energy dual-write", () => {
       engine_key: "energy",
       result: "success",
       status: "ok"
+    });
+  });
+
+  it("records an error feed check when refinery collection returns no observations", async () => {
+    mockCollectRefinery.mockResolvedValueOnce([]);
+    const db = new MockD1Database({
+      feedRegistry: [
+        { engine_key: "energy", feed_key: "energy_spread.wti_brent_spread", enabled: 1 },
+        { engine_key: "energy", feed_key: "energy_spread.diesel_wti_crack", enabled: 1 },
+        { engine_key: "energy", feed_key: "physical_stress.refinery_utilization", enabled: 1 }
+      ]
+    });
+
+    await runCollection(makeEnv(db), new Date("2026-04-27T00:00:00.000Z"));
+
+    const observations = (await db.prepare("SELECT * FROM observations").all<Row>()).results;
+    const refineryObservations = observations.filter((row) => row.feed_key === "physical_stress.refinery_utilization");
+    expect(refineryObservations).toHaveLength(0);
+
+    const checks = (await db.prepare("SELECT * FROM feed_checks").all<Row>()).results;
+    const refineryChecks = checks.filter((row) => row.feed_key === "physical_stress.refinery_utilization");
+    expect(refineryChecks).toHaveLength(1);
+    expect(refineryChecks[0]).toMatchObject({
+      engine_key: "energy",
+      result: "error",
+      status: "error",
+      error_message: "Collector returned no observations."
     });
   });
 
