@@ -12,6 +12,7 @@ This frontend is deployed on Vercel and consumes the Cloudflare Worker API.
 ## Configuration
 
 - `VITE_API_BASE_URL` points to the Worker API.
+- The frontend reads the live Energy score from `/api/v1/energy/state` and runtime diagnostics from `/api/engines/energy/runtime`.
 - Non-production builds fall back to `http://127.0.0.1:8787` for local development.
 - Production builds require `VITE_API_BASE_URL` at startup and throw an error if it is missing.
 
