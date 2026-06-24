@@ -28,17 +28,22 @@ export function buildMigrationCommand(isLocal: boolean): string {
   ].join(" ");
 }
 
+function formatRelativePath(rootDir: string, targetDir: string): string {
+  return path.relative(rootDir, targetDir).split(path.sep).join("/");
+}
+
 export function runMigrations(options: MigrationRunOptions): string {
   const rootDir = options.rootDir ?? path.resolve(path.dirname(__filename), "..");
   const flag = options.isLocal ? "--local" : "--remote";
   const migrationsDir = path.join(rootDir, "db", "migrations");
+  const relativeMigrationsDir = formatRelativePath(rootDir, migrationsDir);
   const migrationFiles = fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith(".sql"))
     .sort();
 
   console.log(`Applying pending migrations with ${flag}...`);
-  console.log(`Found ${migrationFiles.length} migration files in ${path.relative(rootDir, migrationsDir)}.`);
+  console.log(`Found ${migrationFiles.length} migration files in ${relativeMigrationsDir}.`);
 
   const command = buildMigrationCommand(options.isLocal);
   const exec = options.exec ?? execSync;
@@ -53,7 +58,7 @@ export function runMigrations(options: MigrationRunOptions): string {
     throw new Error(
       [
         `Failed to apply ${options.isLocal ? "local" : "remote"} D1 migrations using ${command}.`,
-        `Scanned ${migrationFiles.length} migration file(s) from ${path.relative(rootDir, migrationsDir)}.`,
+        `Scanned ${migrationFiles.length} migration file(s) from ${relativeMigrationsDir}.`,
         `Cause: ${cause}`,
         'If the local database is stale or locked, stop the Worker dev server, run "corepack pnpm db:migrate:local:reset", and retry.'
       ].join(" ")

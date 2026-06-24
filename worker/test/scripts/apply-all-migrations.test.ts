@@ -37,7 +37,7 @@ describe("apply-all-migrations", () => {
       }),
     );
     expect(logSpy).toHaveBeenCalledWith("Applying pending migrations with --local...");
-    expect(logSpy).toHaveBeenCalledWith("Found 2 migration files in db\\migrations.");
+    expect(logSpy).toHaveBeenCalledWith("Found 2 migration files in db/migrations.");
   });
 
   it("wraps wrangler failures with a recovery hint", () => {
