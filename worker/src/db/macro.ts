@@ -551,9 +551,25 @@ export async function listRuntimeObservations(env: Env, engineKey: string, limit
       observed_at,
       value,
       unit
-    FROM observations
-    WHERE engine_key = ?
-    ORDER BY observed_at DESC, as_of_date DESC, series_key ASC
+    FROM (
+      SELECT
+        engine_key,
+        feed_key,
+        series_key,
+        release_key,
+        as_of_date,
+        observed_at,
+        value,
+        unit,
+        ROW_NUMBER() OVER (
+          PARTITION BY series_key
+          ORDER BY observed_at DESC, as_of_date DESC
+        ) AS rn
+      FROM observations
+      WHERE engine_key = ?
+    )
+    WHERE rn = 1
+    ORDER BY as_of_date DESC, series_key ASC
     LIMIT ?
     `
   )
