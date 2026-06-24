@@ -224,10 +224,12 @@ export function App() {
         return;
       }
       try {
-        const res = await fetch(`${apiBaseUrl}/api/state`, { cache: "no-store" });
+        // Poll the energy engine score endpoint — it reflects what runScore actually writes.
+        // /api/state reads signal_snapshots which is no longer updated by the scoring pipeline.
+        const res = await fetch(`${apiBaseUrl}/api/v1/energy/state`, { cache: "no-store" });
         if (res.ok) {
           const raw = (await res.json()) as Record<string, unknown>;
-          const newGeneratedAt = (raw.generated_at ?? raw.generatedAt) as string | undefined;
+          const newGeneratedAt = (raw.scoredAt ?? raw.scored_at) as string | undefined;
           if (newGeneratedAt && newGeneratedAt !== prevGeneratedAt) {
             await fetchAll();
             await fetchHistory();
