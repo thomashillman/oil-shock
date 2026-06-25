@@ -37,14 +37,18 @@ describe("collectEiaRefinery", () => {
     expect(String(mockInstrumentedFetch.mock.calls[0]?.[1])).toContain("/petroleum/pnp/unc/data");
     expect(String(mockInstrumentedFetch.mock.calls[0]?.[1])).toContain("MOPUEUS2");
 
-    expect(points).toHaveLength(1);
-    expect(points[0]).toMatchObject({
-      seriesKey: "physical_stress.refinery_utilization",
+    const stressPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization");
+    expect(stressPoint).toMatchObject({
       observedAt: "2026-03",
       unit: "ratio",
       sourceKey: "eia"
     });
-    expect(points[0]?.value).toBeCloseTo(0.084);
+    expect(stressPoint?.value).toBeCloseTo(0.084);
+
+    // Derived seasonal-breach flag; only current-year history (excluded from the baseline) means
+    // there is no prior-year month norm to breach, so the flag is 0.
+    const breachPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization.seasonal_breach");
+    expect(breachPoint).toMatchObject({ observedAt: "2026-03", value: 0 });
   });
 });
 

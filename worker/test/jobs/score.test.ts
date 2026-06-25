@@ -45,7 +45,15 @@ const SEED_CONFIG_THRESHOLDS: Row[] = [
   { key: "coverage_max_penalty", value: 1.0 },
   { key: "state_deep_persistence_hours", value: 120 },
   { key: "state_persistent_persistence_hours", value: 72 },
-  { key: "ledger_stale_threshold_days", value: 30 }
+  { key: "ledger_stale_threshold_days", value: 30 },
+  { key: "wti_brent_floor_usd", value: 3.5 },
+  { key: "wti_brent_ceiling_usd", value: 15.0 },
+  { key: "wti_premium_discount", value: 0.5 },
+  { key: "diesel_crack_floor_usd", value: 10.0 },
+  { key: "diesel_crack_ceiling_usd", value: 40.0 },
+  { key: "physical_baseline_penalty_weight", value: 0.1 },
+  { key: "seasonal_baseline_years", value: 5.0 },
+  { key: "physical_rolling_weeks", value: 4.0 }
 ];
 
 class MockPreparedStatement {
@@ -211,10 +219,47 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
 
     expect(db.scores).toHaveLength(1);
-    // hiddenMismatch = 0.7 * 0.5 = 0.35; transmission = 1.0 * 0.15 = 0.15; no rules => 0.50
-    expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.5, 5);
+    // hiddenMismatch = 0.7^2 * 0.5 = 0.245; transmission = 1.0 * 0.15 = 0.15; no rules => 0.395
+    // (no seasonal-breach series present, so physical stress carries no baseline penalty)
+    expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.395, 5);
     expect(JSON.parse(String(db.scores[0]?.flags_json))).toContain("missing_price_confirmation");
     expect(db.scores[0]?.confidence).toBe(0.6);
+  });
+
+  it("adds a physical-stress penalty for each physical feed that breached its seasonal baseline", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.5, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.0, observed_at: "2026-04-28T00:00:00.000Z" },
+      // curve_slope = 1.0 (deep contango) inverts to marketRecognition = 0, so the score is the
+      // pure squared physical stress.
+      { series_key: "price_signal.curve_slope", value: 1.0, observed_at: "2026-04-28T00:00:00.000Z" },
+      // Two physical feeds breached their seasonal baseline; the third is absent (no penalty).
+      { series_key: "physical_stress.inventory_draw.seasonal_breach", value: 1, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "physical_stress.refinery_utilization.seasonal_breach", value: 1, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(db.scores).toHaveLength(1);
+    // physicalStress = clamp(0.5 + 0.1*2) = 0.7; marketRecognition = 1 - 1 = 0
+    // hiddenMismatch = 0.7^2 * (1 - 0) = 0.49; transmission = 0 => 0.49
+    expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.49, 5);
+  });
+
+  it("does not penalise physical stress when no seasonal-breach feeds are present", async () => {
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.5, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.0, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "price_signal.curve_slope", value: 1.0, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(db.scores).toHaveLength(1);
+    // physicalStress = 0.5 (no penalty); hiddenMismatch = 0.5^2 * 1 = 0.25 => 0.25
+    expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.25, 5);
   });
 
   it("does not invoke action manager when rule engine v2 reports no trigger events", async () => {

@@ -1,7 +1,14 @@
 import { normalizePoints } from "../../core/normalize";
+import { loadThresholds, writeSeasonalBaselines } from "../../db/client";
 import type { Env } from "../../env";
 import type { NormalizedPoint } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
+import {
+  computeSeasonalBaselines,
+  evaluateSeasonalBreach,
+  seasonalBreachSeriesKey,
+  type RawObservation
+} from "./seasonal-baseline";
 
 export const GIE_PROVIDER = "GIE";
 export const GIE_FEED_KEY = "physical_stress.eu_gas_storage";
@@ -153,13 +160,15 @@ export function parseGieStorageResponse(response: unknown): GieStorageObservatio
 }
 
 export async function collectGieStorage(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
-  const { startDate, endDate } = rollingWindow(45);
+  const thresholds = await loadThresholds(env);
+  // Pull enough daily history to build a 5-year seasonal baseline (plus a small buffer).
+  const { startDate, endDate } = rollingWindow(Math.ceil(thresholds.seasonalBaselineYears * 365) + 30);
   const url = new URL("https://agsi.gie.eu/api");
   url.searchParams.set("type", "eu");
   url.searchParams.set("from", startDate);
   url.searchParams.set("to", endDate);
   url.searchParams.set("page", "1");
-  url.searchParams.set("size", "300");
+  url.searchParams.set("size", "3000");
 
   const response = await instrumentedFetch<GieStorageResponse>(env, url.toString(), "gie_storage", GIE_PROVIDER, {
     timeout: 30000,
@@ -171,10 +180,26 @@ export async function collectGieStorage(env: Env, nowIso: string): Promise<Norma
     }
   });
 
-  const latestObservation = parseGieStorageResponse(response).at(-1);
+  const observations = parseGieStorageResponse(response);
+  const latestObservation = observations.at(-1);
   if (!latestObservation) {
     return [];
   }
+
+  // Storage fullness % is recoverable from the stored stress ratio (value = 1 - fullness/100).
+  // Compare the recent fill against its 5-year seasonal norm by ISO week; lower fill than the
+  // prior-years' seasonal average means tighter European supply -> a breach.
+  const rawHistory: RawObservation[] = observations.map((obs) => ({
+    observedAt: obs.observedAt,
+    value: (1 - obs.value) * 100
+  }));
+  const latestYear = Number(latestObservation.observedAt.slice(0, 4));
+  const baselines = computeSeasonalBaselines(rawHistory, "week", { excludeYear: latestYear });
+  await writeSeasonalBaselines(env, GIE_SERIES_KEY, baselines);
+  const breach = evaluateSeasonalBreach(rawHistory, baselines, {
+    granularity: "week",
+    rollingCount: Math.max(1, Math.round(thresholds.physicalRollingWeeks) * 7)
+  });
 
   const points = [
     {
@@ -182,6 +207,13 @@ export async function collectGieStorage(env: Env, nowIso: string): Promise<Norma
       observedAt: latestObservation.observedAt || nowIso,
       value: latestObservation.value,
       unit: latestObservation.unit,
+      sourceKey: "gie"
+    },
+    {
+      seriesKey: seasonalBreachSeriesKey(GIE_SERIES_KEY),
+      observedAt: latestObservation.observedAt || nowIso,
+      value: breach.breached ? 1 : 0,
+      unit: "index",
       sourceKey: "gie"
     }
   ];

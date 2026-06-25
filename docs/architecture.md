@@ -83,6 +83,7 @@ Key tables and responsibilities:
 - `runs`: collection and score run tracking
 - `state_change_events`: state transition history for clocks and dwell logic
 - `config_thresholds`: runtime scoring constants and gates
+- `seasonal_baselines`: per-period (ISO week / month) 5-year baselines for physical-supply feeds
 - `impairment_ledger`: manual score adjustments
 - `feed_registry`: macro feed metadata and enablement state (bridge currently wired for Energy feed keys only)
 - `feed_checks`: per-feed collection and save checks used for feed-health reporting
@@ -136,13 +137,16 @@ Thesis: **physical energy stress is worsening faster than market pricing recogni
 score therefore measures the *unrecognised* portion of physical stress, separating three
 explicitly-defined dimensions:
 
-- `physicalStress` (← `energy_spread.wti_brent_spread`) — physical crude constraint.
-- `marketRecognition` (← `price_signal.curve_slope`, `null` when missing) — how much pricing already
-  reflects the stress.
+- `physicalStress` (← `energy_spread.wti_brent_spread` + `physical_stress.*.seasonal_breach`) —
+  physical crude constraint: the anchored WTI-Brent basis plus a per-feed seasonal-baseline penalty.
+- `marketRecognition` (← `1 - price_signal.curve_slope`, `null` when missing) — how much pricing
+  already reflects the stress. Inverted so **backwardation raises** recognition.
 - `transmissionStress` (← `energy_spread.diesel_wti_crack`) — bounded downstream/product stress.
 
 ```text
-hiddenMismatch = physicalStress * (1 - marketRecognition)   // physicalStress * 0.5 when recognition is missing
+physicalStress = clamp01(basisStress + physical_baseline_penalty_weight * seasonalBreachCount)
+
+hiddenMismatch = physicalStress^2 * (1 - marketRecognition)   // physicalStress^2 * 0.5 when recognition is missing
 
 scoreValue = clamp01(
   hiddenMismatch
@@ -151,12 +155,20 @@ scoreValue = clamp01(
 )
 ```
 
+`physicalStress` enters the mismatch **quadratically** so risk accelerates toward genuine shortage.
+The WTI-Brent basis and diesel crack are normalised against USD/bbl anchors from `config_thresholds`
+(`wti_brent_floor_usd`/`wti_brent_ceiling_usd`, `diesel_crack_floor_usd`/`diesel_crack_ceiling_usd`),
+with a `wti_premium_discount` applied when WTI trades above Brent. Each physical-supply feed
+(`physical_stress.inventory_draw`, `refinery_utilization`, `eu_gas_storage`) that falls below its
+5-year seasonal baseline (persisted in the `seasonal_baselines` table) adds
+`physical_baseline_penalty_weight` to physical stress.
+
 A missing `marketRecognition` is treated as **unknown**: it adds the `missing_price_confirmation`
 flag and lowers confidence to `0.6`, and it is fed into the compatibility path as a neutral `0.5`
 (not `0`). It does **not** confirm the thesis. `transmissionStress` is bounded by
 `mismatch_market_response_weight` so it can never drive the score on its own. Full detail, scenario
-examples, the list of observations collected but not yet scored, and known semantic risks (futures
-curve sign, WTI–Brent absolute-value basis) are in [`scoring-model.md`](./scoring-model.md).
+examples, the seasonal-baseline mechanics, and known risks are in
+[`scoring-model.md`](./scoring-model.md).
 
 ### Oil Shock compatibility snapshot
 
@@ -321,11 +333,17 @@ Current seed groups are split across:
 
 - `db/migrations/0004_config_thresholds.sql`
 - `db/migrations/0006_promote_scoring_constants.sql`
+- `db/migrations/0008_complete_config_thresholds.sql`
+- `db/migrations/0025_energy_score_refactor_thresholds.sql` — Energy refactor constants:
+  `wti_brent_floor_usd`, `wti_brent_ceiling_usd`, `wti_premium_discount`, `diesel_crack_floor_usd`,
+  `diesel_crack_ceiling_usd`, `physical_baseline_penalty_weight`, `seasonal_baseline_years`,
+  `physical_rolling_weeks`.
 
 Important nuance:
 
-- The table is seeded with 20 rows across those migrations.
-- The runtime loader currently requires a subset of those seeded keys at startup.
+- The runtime loader (`loadThresholds`) requires every key in `THRESHOLD_KEY_MAP` at startup and
+  throws `MISSING_THRESHOLD` otherwise. Adding a key means seeding it via migration **and** updating
+  every `ScoringThresholds` fixture in the test suite.
 - Document row count and runtime-required keys separately to avoid false assumptions when debugging startup failures.
 
 ## Documentation maintenance

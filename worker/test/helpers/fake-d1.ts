@@ -60,7 +60,15 @@ const SEED_CONFIG_THRESHOLDS: Row[] = [
   { key: "coverage_max_penalty", value: 1.0 },
   { key: "state_deep_persistence_hours", value: 120 },
   { key: "state_persistent_persistence_hours", value: 72 },
-  { key: "ledger_stale_threshold_days", value: 30 }
+  { key: "ledger_stale_threshold_days", value: 30 },
+  { key: "wti_brent_floor_usd", value: 3.5 },
+  { key: "wti_brent_ceiling_usd", value: 15.0 },
+  { key: "wti_premium_discount", value: 0.5 },
+  { key: "diesel_crack_floor_usd", value: 10.0 },
+  { key: "diesel_crack_ceiling_usd", value: 40.0 },
+  { key: "physical_baseline_penalty_weight", value: 0.1 },
+  { key: "seasonal_baseline_years", value: 5.0 },
+  { key: "physical_rolling_weeks", value: 4.0 }
 ];
 
 export class FakeD1Database {

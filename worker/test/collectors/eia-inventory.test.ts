@@ -33,14 +33,19 @@ describe("collectEiaInventory", () => {
     const points = await collectEiaInventory(env, "2026-06-24T00:00:00.000Z");
     expect(mockInstrumentedFetch).toHaveBeenCalledTimes(1);
     expect(String(mockInstrumentedFetch.mock.calls[0]?.[1])).toContain("WCESTUS1");
-    expect(points).toHaveLength(1);
-    expect(points[0]).toMatchObject({
-      seriesKey: "physical_stress.inventory_draw",
+
+    const stressPoint = points.find((point) => point.seriesKey === "physical_stress.inventory_draw");
+    expect(stressPoint).toMatchObject({
       observedAt: "2026-06-12",
       unit: "ratio",
       sourceKey: "eia"
     });
-    expect(points[0]?.value).toBeCloseTo(1);
+    expect(stressPoint?.value).toBeCloseTo(1);
+
+    // A derived seasonal-breach flag is emitted alongside the stress point. With only current-year
+    // history (excluded from the baseline) there is no prior-year norm to breach, so the flag is 0.
+    const breachPoint = points.find((point) => point.seriesKey === "physical_stress.inventory_draw.seasonal_breach");
+    expect(breachPoint).toMatchObject({ observedAt: "2026-06-12", value: 0 });
   });
 });
 

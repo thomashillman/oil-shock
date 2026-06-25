@@ -171,7 +171,15 @@ const THRESHOLD_KEY_MAP: Array<[keyof ScoringThresholds, string]> = [
   ["coverageMaxPenalty", "coverage_max_penalty"],
   ["stateDeepPersistenceHours", "state_deep_persistence_hours"],
   ["statePersistentPersistenceHours", "state_persistent_persistence_hours"],
-  ["ledgerStaleThresholdDays", "ledger_stale_threshold_days"]
+  ["ledgerStaleThresholdDays", "ledger_stale_threshold_days"],
+  ["wtiBrentFloorUsd", "wti_brent_floor_usd"],
+  ["wtiBrentCeilingUsd", "wti_brent_ceiling_usd"],
+  ["wtiPremiumDiscount", "wti_premium_discount"],
+  ["dieselCrackFloorUsd", "diesel_crack_floor_usd"],
+  ["dieselCrackCeilingUsd", "diesel_crack_ceiling_usd"],
+  ["physicalBaselinePenaltyWeight", "physical_baseline_penalty_weight"],
+  ["seasonalBaselineYears", "seasonal_baseline_years"],
+  ["physicalRollingWeeks", "physical_rolling_weeks"]
 ];
 
 export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Promise<void> {
@@ -187,6 +195,36 @@ export async function writeSeriesPoints(env: Env, points: NormalizedPoint[]): Pr
       `
     )
       .bind(point.seriesKey, point.observedAt, point.value, point.unit, point.sourceKey)
+      .run();
+  }
+}
+
+export interface SeasonalBaselineRecord {
+  periodKey: string;
+  baselineValue: number;
+  sampleCount: number;
+}
+
+/** Idempotently upsert per-period seasonal baselines for a physical feed. */
+export async function writeSeasonalBaselines(
+  env: Env,
+  feedKey: string,
+  baselines: SeasonalBaselineRecord[]
+): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  for (const baseline of baselines) {
+    await env.DB.prepare(
+      `
+      INSERT INTO seasonal_baselines (feed_key, period_key, baseline_value, sample_count, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(feed_key, period_key)
+      DO UPDATE SET
+        baseline_value = excluded.baseline_value,
+        sample_count = excluded.sample_count,
+        updated_at = excluded.updated_at
+      `
+    )
+      .bind(feedKey, baseline.periodKey, baseline.baselineValue, baseline.sampleCount, updatedAt)
       .run();
   }
 }

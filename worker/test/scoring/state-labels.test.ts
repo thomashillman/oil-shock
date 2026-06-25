@@ -24,7 +24,15 @@ const thresholds: ScoringThresholds = {
   coverageMaxPenalty: 1.0,
   stateDeepPersistenceHours: 120,
   statePersistentPersistenceHours: 72,
-  ledgerStaleThresholdDays: 30
+  ledgerStaleThresholdDays: 30,
+  wtiBrentFloorUsd: 3.5,
+  wtiBrentCeilingUsd: 15,
+  wtiPremiumDiscount: 0.5,
+  dieselCrackFloorUsd: 10,
+  dieselCrackCeilingUsd: 40,
+  physicalBaselinePenaltyWeight: 0.1,
+  seasonalBaselineYears: 5,
+  physicalRollingWeeks: 4
 };
 
 describe("computeDislocationState", () => {

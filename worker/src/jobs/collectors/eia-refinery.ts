@@ -1,7 +1,14 @@
 import { normalizePoints } from "../../core/normalize";
+import { loadThresholds, writeSeasonalBaselines } from "../../db/client";
 import type { Env } from "../../env";
 import type { NormalizedPoint } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
+import {
+  computeSeasonalBaselines,
+  evaluateSeasonalBreach,
+  seasonalBreachSeriesKey,
+  type RawObservation
+} from "./seasonal-baseline";
 
 export const EIA_PROVIDER = "EIA";
 export const EIA_REFINERY_FEED_NAME = "eia_refinery";
@@ -128,8 +135,11 @@ export function buildRefineryObservations(
 }
 
 export async function collectEiaRefinery(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
+  const thresholds = await loadThresholds(env);
   const endDate = nowIso.slice(0, 10);
-  const startDate = new Date(Date.parse(nowIso) - 400 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Pull enough monthly history to build a 5-year seasonal baseline (plus a small buffer).
+  const windowMs = (Math.ceil(thresholds.seasonalBaselineYears * 365) + 30) * 24 * 60 * 60 * 1000;
+  const startDate = new Date(Date.parse(nowIso) - windowMs).toISOString().slice(0, 10);
   const url = new URL("https://api.eia.gov/v2/petroleum/pnp/unc/data");
   url.searchParams.set("api_key", env.EIA_API_KEY);
   url.searchParams.set("frequency", "monthly");
@@ -140,7 +150,7 @@ export async function collectEiaRefinery(env: Env, nowIso: string): Promise<Norm
   url.searchParams.set("start", startDate);
   url.searchParams.set("end", endDate);
   url.searchParams.set("offset", "0");
-  url.searchParams.set("length", "1");
+  url.searchParams.set("length", "5000");
 
   const response = await instrumentedFetch<EiaMonthlySeriesResponse>(env, url.toString(), EIA_REFINERY_FEED_NAME, EIA_PROVIDER, {
     timeout: 30000,
@@ -149,10 +159,22 @@ export async function collectEiaRefinery(env: Env, nowIso: string): Promise<Norm
     rateLimitDelayMs: 125
   });
 
-  const latestObservation = buildRefineryObservations(response.response?.data ?? [], EIA_REFINERY_LIVE_BRIDGE).at(-1);
+  const observations = buildRefineryObservations(response.response?.data ?? [], EIA_REFINERY_LIVE_BRIDGE);
+  const latestObservation = observations.at(-1);
   if (!latestObservation) {
     return [];
   }
+
+  // Refinery utilisation is monthly, so the "rolling reading" is the latest month compared against
+  // the same month's 5-year seasonal average. Lower utilisation than the seasonal norm = a breach.
+  const rawHistory: RawObservation[] = observations.map((obs) => ({
+    observedAt: obs.observedAt,
+    value: obs.metadata.utilizationPct
+  }));
+  const latestYear = Number(latestObservation.observedAt.slice(0, 4));
+  const baselines = computeSeasonalBaselines(rawHistory, "month", { excludeYear: latestYear });
+  await writeSeasonalBaselines(env, EIA_REFINERY_SERIES_KEY, baselines);
+  const breach = evaluateSeasonalBreach(rawHistory, baselines, { granularity: "month", rollingCount: 1 });
 
   return normalizePoints("eia", [
     {
@@ -160,6 +182,12 @@ export async function collectEiaRefinery(env: Env, nowIso: string): Promise<Norm
       observedAt: latestObservation.observedAt,
       value: latestObservation.value,
       unit: latestObservation.unit
+    },
+    {
+      seriesKey: seasonalBreachSeriesKey(EIA_REFINERY_SERIES_KEY),
+      observedAt: latestObservation.observedAt,
+      value: breach.breached ? 1 : 0,
+      unit: "index"
     }
   ]);
 }
