@@ -262,6 +262,27 @@ describe("runScore Energy compatibility with rule engine v2 bridge", () => {
     expect(Number(db.scores[0]?.score_value)).toBeCloseTo(0.25, 5);
   });
 
+  it("feeds inverted recognition and penalised physical stress into the Oil Shock compatibility path", async () => {
+    // Intended behaviour: the compatibility snapshot consumes the live Energy score's derived
+    // inputs, so the curve inversion and seasonal penalty deliberately reach /api/state too.
+    const db = new MockD1Database();
+    db.seriesPoints.push(
+      { series_key: "energy_spread.wti_brent_spread", value: 0.5, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "energy_spread.diesel_wti_crack", value: 0.0, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "price_signal.curve_slope", value: 0.8, observed_at: "2026-04-28T00:00:00.000Z" },
+      { series_key: "physical_stress.inventory_draw.seasonal_breach", value: 1, observed_at: "2026-04-28T00:00:00.000Z" }
+    );
+
+    await runScore(makeEnv(db), new Date("2026-04-28T00:00:00.000Z"));
+
+    expect(mockWriteOilShockCompatibilitySnapshot).toHaveBeenCalledTimes(1);
+    const energyInputs = mockWriteOilShockCompatibilitySnapshot.mock.calls[0]?.[3];
+    // priceSignal is the inverted recognition: 1 - 0.8 = 0.2
+    expect(energyInputs.priceSignal).toBeCloseTo(0.2, 5);
+    // physicalStress carries the seasonal-breach penalty: 0.5 + 0.1*1 = 0.6
+    expect(energyInputs.physicalStress).toBeCloseTo(0.6, 5);
+  });
+
   it("does not invoke action manager when rule engine v2 reports no trigger events", async () => {
     const db = new MockD1Database();
     db.seriesPoints.push(

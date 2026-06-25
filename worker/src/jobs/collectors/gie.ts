@@ -1,7 +1,7 @@
 import { normalizePoints } from "../../core/normalize";
-import { loadThresholds, writeSeasonalBaselines } from "../../db/client";
+import { getSeasonalBaselines, loadThresholds, writeSeasonalBaselines } from "../../db/client";
 import type { Env } from "../../env";
-import type { NormalizedPoint } from "../../types";
+import type { NormalizedPoint, ScoringThresholds } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
 import {
   computeSeasonalBaselines,
@@ -159,10 +159,14 @@ export function parseGieStorageResponse(response: unknown): GieStorageObservatio
   return observations.sort((left, right) => left.observedAt.localeCompare(right.observedAt));
 }
 
-export async function collectGieStorage(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
-  const thresholds = await loadThresholds(env);
+export async function collectGieStorage(
+  env: Env,
+  nowIso: string,
+  thresholds?: ScoringThresholds
+): Promise<NormalizedPoint[]> {
+  const resolvedThresholds = thresholds ?? (await loadThresholds(env));
   // Pull enough daily history to build a 5-year seasonal baseline (plus a small buffer).
-  const { startDate, endDate } = rollingWindow(Math.ceil(thresholds.seasonalBaselineYears * 365) + 30);
+  const { startDate, endDate } = rollingWindow(Math.ceil(resolvedThresholds.seasonalBaselineYears * 365) + 30);
   const url = new URL("https://agsi.gie.eu/api");
   url.searchParams.set("type", "eu");
   url.searchParams.set("from", startDate);
@@ -196,9 +200,11 @@ export async function collectGieStorage(env: Env, nowIso: string): Promise<Norma
   const latestYear = Number(latestObservation.observedAt.slice(0, 4));
   const baselines = computeSeasonalBaselines(rawHistory, "week", { excludeYear: latestYear });
   await writeSeasonalBaselines(env, GIE_SERIES_KEY, baselines);
-  const breach = evaluateSeasonalBreach(rawHistory, baselines, {
+  // Evaluate against the persisted baselines (this run's upsert merged with prior runs).
+  const persistedBaselines = await getSeasonalBaselines(env, GIE_SERIES_KEY);
+  const breach = evaluateSeasonalBreach(rawHistory, persistedBaselines, {
     granularity: "week",
-    rollingCount: Math.max(1, Math.round(thresholds.physicalRollingWeeks) * 7)
+    rollingCount: Math.max(1, Math.round(resolvedThresholds.physicalRollingWeeks) * 7)
   });
 
   const points = [

@@ -50,6 +50,25 @@ describe("collectEiaRefinery", () => {
     const breachPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization.seasonal_breach");
     expect(breachPoint).toMatchObject({ observedAt: "2026-03", value: 0 });
   });
+
+  it("flags a breach when the latest month is below its persisted seasonal baseline", async () => {
+    // Two prior-year Marches average 91% utilisation; the current March is far lower (80%), so the
+    // breach resolves against the persisted seasonal baseline (written then read back from the DB).
+    mockInstrumentedFetch.mockResolvedValueOnce({
+      response: {
+        data: [
+          { period: "2024-03", value: "90.0", units: "%" },
+          { period: "2025-03", value: "92.0", units: "%" },
+          { period: "2026-03", value: "80.0", units: "%" }
+        ],
+        total: 3
+      }
+    });
+
+    const points = await collectEiaRefinery(env, "2026-04-23T00:00:00.000Z");
+    const breachPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization.seasonal_breach");
+    expect(breachPoint?.value).toBe(1);
+  });
 });
 
 describe("buildRefineryObservations", () => {

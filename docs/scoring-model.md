@@ -169,13 +169,24 @@ All examples use `mismatch_market_response_weight = 0.15` and `ruleAdjustment = 
 
 The legacy Oil Shock path (`worker/src/jobs/score-compatibility.ts` +
 `worker/src/core/scoring/compute.ts`) still writes the `signal_snapshots` tables consumed by
-`GET /api/state`. It uses a different, recognition-gap formula and is **not** changed by the live
-Energy model:
+`GET /api/state`. Its **formula is unchanged**, but it consumes the same derived inputs as the live
+Energy score, so the refactor does shift its output:
 
 ```text
 mismatchScore = clamp01(physicalStress - priceSignal + marketResponse * mismatch_market_response_weight)
 ```
 
-Here `priceSignal` is the same `price_signal.curve_slope` observation. When the price feed is
-missing, the live path now feeds a neutral `0.5` into this snapshot instead of `0`, so a missing
-feed no longer maximises the compatibility mismatch.
+The inputs `runEnergyScore` passes into this path now carry the refactor's behaviour **by design**:
+
+- `physicalStress` includes the seasonal-baseline penalty (anchored basis + `+0.1` per breached
+  physical feed), so physical-supply breaches raise the compatibility mismatch too.
+- `priceSignal` is the **inverted** recognition (`1 - curve_slope`), the same value used as
+  `marketRecognition`. Backwardation therefore now *reduces* the compatibility mismatch where it
+  previously raised it. The raw `price_signal.curve_slope` observation point is still recorded for
+  freshness/evidence; only the scalar fed into the formula is the recognition metric.
+- When the price feed is missing, the path receives a neutral `0.5` (not `0`), so a missing feed
+  does not maximise the compatibility mismatch.
+
+This keeps the two paths semantically consistent (both treat backwardation as recognition); it is a
+deliberate behaviour change to `/api/state`, not an accidental one. `replay:validate` does not catch
+it because its fixtures inject `physicalStress`/`priceSignal` directly.

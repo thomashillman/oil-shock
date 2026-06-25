@@ -130,13 +130,22 @@ export async function runEnergyScore(
     // EU gas storage) that has breached its 5-year seasonal norm adds a bounded penalty to physical
     // stress. Missing breach feeds contribute nothing (conservative). The penalty is applied before
     // the [0,1] clamp via safeValue, so several simultaneous breaches lift physical stress but can
-    // never push it past 1.
-    const breachPoints = await Promise.all([
-      getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_INVENTORY_SERIES_KEY)),
-      getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_REFINERY_SERIES_KEY)),
-      getLatestSeriesValue(env, seasonalBreachSeriesKey(GIE_SERIES_KEY))
-    ]);
-    const seasonalBreachCount = breachPoints.filter((point) => point !== null && point.value >= 0.5).length;
+    // never push it past 1. The breach reads are best-effort: the penalty is an optional refinement,
+    // so a transient read failure degrades to zero penalty rather than aborting the whole score.
+    let seasonalBreachCount = 0;
+    try {
+      const breachPoints = await Promise.all([
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_INVENTORY_SERIES_KEY)),
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_REFINERY_SERIES_KEY)),
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(GIE_SERIES_KEY))
+      ]);
+      seasonalBreachCount = breachPoints.filter((point) => point !== null && point.value >= 0.5).length;
+    } catch (error) {
+      log("warn", "Seasonal-breach reads failed; applying zero physical-baseline penalty", {
+        runKey,
+        error: String(error)
+      });
+    }
     const physicalStress = safeValue(
       basePhysicalStress + thresholds.physicalBaselinePenaltyWeight * seasonalBreachCount
     );

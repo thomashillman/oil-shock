@@ -188,6 +188,12 @@ mismatchScore = clamp01(
 )
 ```
 
+The compatibility **formula is unchanged**, but it consumes the live Energy score's derived inputs,
+so the Energy refactor deliberately shifts its output: `physicalStress` carries the seasonal-baseline
+penalty, and `priceSignal` is the **inverted** recognition (`1 - curve_slope`). Backwardation now
+lowers the compatibility mismatch (consistent with the live score treating it as recognition).
+`replay:validate` injects these inputs directly, so it does not exercise this change.
+
 Coverage is tracked separately:
 
 ```text

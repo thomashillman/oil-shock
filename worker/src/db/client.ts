@@ -229,6 +229,36 @@ export async function writeSeasonalBaselines(
   }
 }
 
+interface SeasonalBaselineRow {
+  period_key: string;
+  baseline_value: number;
+  sample_count: number;
+}
+
+/**
+ * Read the persisted seasonal baselines for a feed. Because baselines are upserted per period and
+ * accumulate across runs, this is the source of truth used for breach evaluation — a single
+ * collection run with a short history window can still resolve a breach against baselines persisted
+ * by earlier runs.
+ */
+export async function getSeasonalBaselines(env: Env, feedKey: string): Promise<SeasonalBaselineRecord[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT period_key, baseline_value, sample_count
+    FROM seasonal_baselines
+    WHERE feed_key = ?
+    `
+  )
+    .bind(feedKey)
+    .all<SeasonalBaselineRow>();
+
+  return (result.results ?? []).map((row) => ({
+    periodKey: row.period_key,
+    baselineValue: Number(row.baseline_value),
+    sampleCount: Number(row.sample_count)
+  }));
+}
+
 export async function startRun(env: Env, runKey: string, runType: string): Promise<void> {
   await env.DB.prepare(
     `

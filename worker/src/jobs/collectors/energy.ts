@@ -1,7 +1,7 @@
 import { normalizePoints } from "../../core/normalize";
 import { loadThresholds } from "../../db/client";
 import type { Env } from "../../env";
-import type { NormalizedPoint } from "../../types";
+import type { NormalizedPoint, ScoringThresholds } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
 
 const EIA_BASE = "https://api.eia.gov/v2";
@@ -78,7 +78,11 @@ async function fetchLatestSeriesValue(
   return { value, observedAt };
 }
 
-export async function collectEnergy(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
+export async function collectEnergy(
+  env: Env,
+  nowIso: string,
+  thresholds?: ScoringThresholds
+): Promise<NormalizedPoint[]> {
   const [wti, brent, diesel] = await Promise.all([
     fetchLatestSeriesValue(env, "RWTC", "eia_wti"),
     fetchLatestSeriesValue(env, "RBRTE", "eia_brent"),
@@ -89,20 +93,20 @@ export async function collectEnergy(env: Env, nowIso: string): Promise<Normalize
     return [];
   }
 
-  const thresholds = await loadThresholds(env);
+  const resolvedThresholds = thresholds ?? (await loadThresholds(env));
 
   // WTI-Brent basis: normalise the spread MAGNITUDE against USD anchors (floor = post-2015
   // average, ceiling = severe logistical bottleneck).
   const spreadMagnitude = Math.abs(brent.value - wti.value);
   let wtiBrentStress = normalizeWithBounds(
     spreadMagnitude,
-    thresholds.wtiBrentFloorUsd,
-    thresholds.wtiBrentCeilingUsd
+    resolvedThresholds.wtiBrentFloorUsd,
+    resolvedThresholds.wtiBrentCeilingUsd
   );
   // Directional awareness: a WTI premium (WTI > Brent) usually reflects a US domestic pipeline
   // constraint rather than a global crude supply shock, so it carries less hidden-dislocation
   // signal. Discount it; a Brent premium (the global-shock direction) is left at full weight.
-  const directionMultiplier = wti.value > brent.value ? thresholds.wtiPremiumDiscount : 1.0;
+  const directionMultiplier = wti.value > brent.value ? resolvedThresholds.wtiPremiumDiscount : 1.0;
   wtiBrentStress = Math.max(0, Math.min(1, wtiBrentStress * directionMultiplier));
 
   // Diesel-WTI crack: convert diesel ($/gal) to $/bbl, subtract WTI, normalise against refining
@@ -110,8 +114,8 @@ export async function collectEnergy(env: Env, nowIso: string): Promise<Normalize
   const dieselCrackUsd = diesel.value * 42 - wti.value;
   const dieselCrackStress = normalizeWithBounds(
     dieselCrackUsd,
-    thresholds.dieselCrackFloorUsd,
-    thresholds.dieselCrackCeilingUsd
+    resolvedThresholds.dieselCrackFloorUsd,
+    resolvedThresholds.dieselCrackCeilingUsd
   );
 
   const points: Array<{ seriesKey: string; observedAt: string; value: number; unit: string }> = [

@@ -1,7 +1,7 @@
 import { normalizePoints } from "../../core/normalize";
-import { loadThresholds, writeSeasonalBaselines } from "../../db/client";
+import { getSeasonalBaselines, loadThresholds, writeSeasonalBaselines } from "../../db/client";
 import type { Env } from "../../env";
-import type { NormalizedPoint } from "../../types";
+import type { NormalizedPoint, ScoringThresholds } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
 import {
   computeSeasonalBaselines,
@@ -134,11 +134,15 @@ export function buildRefineryObservations(
   return observations;
 }
 
-export async function collectEiaRefinery(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
-  const thresholds = await loadThresholds(env);
+export async function collectEiaRefinery(
+  env: Env,
+  nowIso: string,
+  thresholds?: ScoringThresholds
+): Promise<NormalizedPoint[]> {
+  const resolvedThresholds = thresholds ?? (await loadThresholds(env));
   const endDate = nowIso.slice(0, 10);
   // Pull enough monthly history to build a 5-year seasonal baseline (plus a small buffer).
-  const windowMs = (Math.ceil(thresholds.seasonalBaselineYears * 365) + 30) * 24 * 60 * 60 * 1000;
+  const windowMs = (Math.ceil(resolvedThresholds.seasonalBaselineYears * 365) + 30) * 24 * 60 * 60 * 1000;
   const startDate = new Date(Date.parse(nowIso) - windowMs).toISOString().slice(0, 10);
   const url = new URL("https://api.eia.gov/v2/petroleum/pnp/unc/data");
   url.searchParams.set("api_key", env.EIA_API_KEY);
@@ -174,7 +178,9 @@ export async function collectEiaRefinery(env: Env, nowIso: string): Promise<Norm
   const latestYear = Number(latestObservation.observedAt.slice(0, 4));
   const baselines = computeSeasonalBaselines(rawHistory, "month", { excludeYear: latestYear });
   await writeSeasonalBaselines(env, EIA_REFINERY_SERIES_KEY, baselines);
-  const breach = evaluateSeasonalBreach(rawHistory, baselines, { granularity: "month", rollingCount: 1 });
+  // Evaluate against the persisted baselines (this run's upsert merged with prior runs).
+  const persistedBaselines = await getSeasonalBaselines(env, EIA_REFINERY_SERIES_KEY);
+  const breach = evaluateSeasonalBreach(rawHistory, persistedBaselines, { granularity: "month", rollingCount: 1 });
 
   return normalizePoints("eia", [
     {

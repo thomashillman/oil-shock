@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import type { NormalizedPoint } from "../types";
-import { writeSeriesPoints, startRun, finishRun } from "../db/client";
+import { writeSeriesPoints, startRun, finishRun, loadThresholds } from "../db/client";
 import { listEnabledFeedKeys, listRegisteredFeeds, upsertObservation, recordFeedCheck } from "../db/macro";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
@@ -173,26 +173,29 @@ export async function runCollection(env: Env, now = new Date()): Promise<void> {
   await startRun(env, runKey, "collect");
   log("info", "Starting collection run", { runKey, nowIso });
   try {
-    const [enabledEnergyFeedKeys, enabledCpiFeedKeys] = await Promise.all([
+    const [enabledEnergyFeedKeys, enabledCpiFeedKeys, thresholds] = await Promise.all([
       listEnabledFeedKeys(env, "energy"),
-      listEnabledFeedKeys(env, "cpi")
+      listEnabledFeedKeys(env, "cpi"),
+      // Load scoring thresholds once and share them across the energy collectors that need
+      // the seasonal/normalisation constants, instead of each collector re-reading the table.
+      loadThresholds(env)
     ]);
     const [energyPoints, gieCollector, refineryCollector, inventoryCollector, futuresCurveCollector] = await Promise.all([
-      settleCollector({ enabled: true, label: "Energy collector failed", collect: () => collectEnergy(env, nowIso) }),
+      settleCollector({ enabled: true, label: "Energy collector failed", collect: () => collectEnergy(env, nowIso, thresholds) }),
       settleOptionalCollector(GIE_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(GIE_FEED_KEY),
         label: "GIE collector failed",
-        collect: () => collectGieStorage(env, nowIso)
+        collect: () => collectGieStorage(env, nowIso, thresholds)
       }),
       settleOptionalCollector(EIA_REFINERY_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_REFINERY_OBSERVATION_FEED_KEY),
         label: "EIA refinery collector failed",
-        collect: () => collectEiaRefinery(env, nowIso)
+        collect: () => collectEiaRefinery(env, nowIso, thresholds)
       }),
       settleOptionalCollector(EIA_INVENTORY_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_INVENTORY_OBSERVATION_FEED_KEY),
         label: "EIA inventory collector failed",
-        collect: () => collectEiaInventory(env, nowIso)
+        collect: () => collectEiaInventory(env, nowIso, thresholds)
       }),
       settleOptionalCollector(EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY, {
         enabled: enabledEnergyFeedKeys.includes(EIA_FUTURES_CURVE_OBSERVATION_FEED_KEY),
