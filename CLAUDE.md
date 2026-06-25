@@ -108,6 +108,43 @@ corepack pnpm ci:preflight
 - If you seed new configuration required at runtime, make sure startup does not fail due to missing rows.
 - Call out data migration risks and rollback steps in your summary or PR.
 
+### Migrations are NOT auto-applied on deploy (read before merging schema changes)
+
+Cloudflare's Workers Git integration deploys the **worker code** on merge to `main`,
+but it does **not** run D1 migrations. Migrations are a separate, manual step against the
+remote database. This means code and schema deploy on different tracks, and merging code
+that depends on an un-applied migration breaks production the moment the new worker goes live.
+
+This has bitten us: PR #120 added `config_thresholds` keys (migration `0025`) and the
+`seasonal_baselines` table (migration `0026`). The code merged and deployed; the migrations
+did not run on production D1. Because `loadThresholds()` **throws** `MISSING_THRESHOLD` on any
+key in `THRESHOLD_KEY_MAP` that is absent, and it is called in both `runCollection` and
+`runEnergyScore`, the next scheduled collect+score cycle would have 500'd and frozen the
+pipeline — while the dashboard kept showing the last good (stale) snapshot.
+
+Rules to avoid it:
+
+- **Apply migrations to the target remote D1 before (or atomically with) the code that
+  depends on them goes live.** Schema/seed first, code second — never the reverse. This is the
+  backend-before-frontend ordering applied to the database itself.
+- Treat any new `config_thresholds` key, new table, or new series the runtime *reads at startup
+  or in the hot path* as a hard deploy dependency. `loadThresholds()` is fail-closed: a missing
+  key takes down collection and scoring, not just one feature.
+- Apply remote migrations explicitly, per environment:
+
+  ```bash
+  # preview D1, then production D1 (energy_dislocation)
+  corepack pnpm wrangler d1 migrations apply energy_dislocation --remote --env preview
+  corepack pnpm wrangler d1 migrations apply energy_dislocation --remote --env production
+  ```
+
+  If you must apply seed/DDL out of band (e.g. via the D1 API), keep them idempotent
+  (`INSERT OR REPLACE`, `CREATE TABLE/INDEX IF NOT EXISTS`) and also insert the corresponding
+  `d1_migrations` rows so `wrangler` tracking stays consistent.
+- After deploying a schema-dependent change, verify against the **remote** DB, not just local:
+  check `d1_migrations` is current, confirm `/health` reports the expected `threshold_count`,
+  and confirm one collect+score cycle succeeds before treating the change as live.
+
 ## Rules for Macro Signals expansion
 
 - Treat the current repo as the implementation source of truth, not off-repo planning notes.

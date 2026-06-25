@@ -108,6 +108,36 @@ corepack pnpm ci:preflight
 - If you seed new configuration required at runtime, make sure startup does not fail due to missing rows.
 - Call out data migration risks and rollback steps in your summary or PR.
 
+### Migrations are NOT auto-applied on deploy
+
+Cloudflare's Workers Git integration deploys the worker code on merge to `main`, but it does
+**not** run D1 migrations — that is a separate manual step against the remote database. Code and
+schema therefore deploy on different tracks. Merging code that depends on an un-applied migration
+breaks production as soon as the new worker goes live.
+
+Concrete failure (PR #120): the code added `config_thresholds` keys (`0025`) and the
+`seasonal_baselines` table (`0026`) and deployed, but those migrations never ran on production D1.
+`loadThresholds()` throws `MISSING_THRESHOLD` on any missing mapped key and runs in both
+`runCollection` and `runEnergyScore`, so the next collect+score cycle would have 500'd and frozen
+the pipeline while the dashboard kept serving the last good snapshot.
+
+To avoid it:
+
+- Apply migrations to the target **remote** D1 *before* (or atomically with) merging the code that
+  depends on them. Schema/seed first, code second.
+- Treat a new `config_thresholds` key, table, or runtime-read series as a hard deploy dependency —
+  `loadThresholds()` is fail-closed and takes down collection + scoring, not just one feature.
+- Apply per environment, then verify against the remote DB (not just local):
+
+  ```bash
+  corepack pnpm wrangler d1 migrations apply energy_dislocation --remote --env preview
+  corepack pnpm wrangler d1 migrations apply energy_dislocation --remote --env production
+  ```
+
+  Then confirm `d1_migrations` is current, `/health` shows the expected `threshold_count`, and one
+  collect+score cycle succeeds. If you apply DDL/seed out of band, keep it idempotent and also
+  write the `d1_migrations` tracking rows.
+
 ## Rules for Macro Signals expansion
 
 - Treat the current repo as the implementation source of truth, not off-repo planning notes.
