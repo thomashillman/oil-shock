@@ -41,8 +41,34 @@ describe("collectEnergy", () => {
       expect(point.value).toBeGreaterThanOrEqual(0);
       expect(point.value).toBeLessThanOrEqual(1);
     }
+    // Diesel crack = 2.0*42 - 65 = 19 USD/bbl; anchored to [floor 10, ceiling 40] => 9/30 = 0.3.
     expect(points.find((point) => point.seriesKey === "energy_spread.diesel_wti_crack")?.value)
-      .toBeCloseTo(0.475);
+      .toBeCloseTo(0.3);
+  });
+
+  it("discounts the basis stress when WTI trades at a premium to Brent", async () => {
+    // WTI 80 > Brent 68.5 => |spread| = 11.5 USD. Anchored to [3.5, 15] that is 8/11.5 = 0.6957,
+    // then halved by the WTI-premium discount (domestic constraint, not a global shock) => 0.3478.
+    mockInstrumentedFetch
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "80.0" }], total: 1 } })
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "68.5" }], total: 1 } })
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "2.0" }], total: 1 } });
+
+    const points = await collectEnergy(env, "2026-04-23T00:00:00.000Z");
+    expect(points.find((point) => point.seriesKey === "energy_spread.wti_brent_spread")?.value)
+      .toBeCloseTo(0.347826, 5);
+  });
+
+  it("applies no discount when Brent trades at a premium to WTI", async () => {
+    // Brent 80 > WTI 68.5 => |spread| = 11.5 USD, anchored to [3.5, 15] = 8/11.5 = 0.6957, full weight.
+    mockInstrumentedFetch
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "68.5" }], total: 1 } })
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "80.0" }], total: 1 } })
+      .mockResolvedValueOnce({ response: { data: [{ period: "2026-04-20", value: "2.0" }], total: 1 } });
+
+    const points = await collectEnergy(env, "2026-04-23T00:00:00.000Z");
+    expect(points.find((point) => point.seriesKey === "energy_spread.wti_brent_spread")?.value)
+      .toBeCloseTo(0.695652, 5);
   });
 
   it("returns no points when one side of a spread is unavailable", async () => {

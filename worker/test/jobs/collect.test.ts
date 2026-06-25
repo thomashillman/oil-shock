@@ -52,6 +52,38 @@ import { runCollection } from "../../src/jobs/collect";
 
 type Row = Record<string, unknown>;
 
+// runCollection loads scoring thresholds once and shares them with the energy collectors, so the
+// mock DB must satisfy loadThresholds()'s required-key set.
+const SEED_CONFIG_THRESHOLDS: Row[] = [
+  { key: "state_aligned_threshold_max", value: 0.3 },
+  { key: "state_mild_threshold_min", value: 0.3 },
+  { key: "state_mild_threshold_max", value: 0.5 },
+  { key: "state_persistent_threshold_min", value: 0.5 },
+  { key: "state_persistent_threshold_max", value: 0.75 },
+  { key: "state_deep_threshold_min", value: 0.75 },
+  { key: "shock_age_threshold_hours", value: 72 },
+  { key: "dislocation_persistence_threshold_hours", value: 72 },
+  { key: "ledger_adjustment_magnitude", value: 0.1 },
+  { key: "mismatch_market_response_weight", value: 0.15 },
+  { key: "confirmation_physical_stress_min", value: 0.6 },
+  { key: "confirmation_price_signal_max", value: 0.45 },
+  { key: "confirmation_market_response_min", value: 0.5 },
+  { key: "coverage_missing_penalty", value: 0.34 },
+  { key: "coverage_stale_penalty", value: 0.16 },
+  { key: "coverage_max_penalty", value: 1.0 },
+  { key: "state_deep_persistence_hours", value: 120 },
+  { key: "state_persistent_persistence_hours", value: 72 },
+  { key: "ledger_stale_threshold_days", value: 30 },
+  { key: "wti_brent_floor_usd", value: 3.5 },
+  { key: "wti_brent_ceiling_usd", value: 15.0 },
+  { key: "wti_premium_discount", value: 0.5 },
+  { key: "diesel_crack_floor_usd", value: 10.0 },
+  { key: "diesel_crack_ceiling_usd", value: 40.0 },
+  { key: "physical_baseline_penalty_weight", value: 0.1 },
+  { key: "seasonal_baseline_years", value: 5.0 },
+  { key: "physical_rolling_weeks", value: 4.0 }
+];
+
 class MockPreparedStatement {
   private params: unknown[] = [];
 
@@ -208,6 +240,9 @@ class MockD1Database {
 
   async all<T>(query: string, params: unknown[]): Promise<{ results: T[] }> {
     const normalized = query.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("from config_thresholds")) {
+      return { results: SEED_CONFIG_THRESHOLDS as T[] };
+    }
     if (normalized.includes("from series_points")) {
       return { results: this.seriesPoints as T[] };
     }

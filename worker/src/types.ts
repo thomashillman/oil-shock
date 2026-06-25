@@ -109,4 +109,20 @@ export interface ScoringThresholds {
   stateDeepPersistenceHours: number;
   statePersistentPersistenceHours: number;
   ledgerStaleThresholdDays: number;
+  /** USD/bbl WTI-Brent basis magnitude mapped to physicalStress = 0.0. */
+  wtiBrentFloorUsd: number;
+  /** USD/bbl WTI-Brent basis magnitude mapped to physicalStress = 1.0. */
+  wtiBrentCeilingUsd: number;
+  /** Multiplier applied to the basis stress when WTI trades at a premium to Brent. */
+  wtiPremiumDiscount: number;
+  /** USD/bbl diesel-WTI crack mapped to transmissionStress = 0.0. */
+  dieselCrackFloorUsd: number;
+  /** USD/bbl diesel-WTI crack mapped to transmissionStress = 1.0. */
+  dieselCrackCeilingUsd: number;
+  /** Physical-stress penalty added per physical feed below its seasonal baseline. */
+  physicalBaselinePenaltyWeight: number;
+  /** Years of history used to build per-period seasonal baselines. */
+  seasonalBaselineYears: number;
+  /** Most-recent observations averaged into the reading compared to the baseline. */
+  physicalRollingWeeks: number;
 }

@@ -1,7 +1,14 @@
 import { normalizePoints } from "../../core/normalize";
+import { getSeasonalBaselines, loadThresholds, writeSeasonalBaselines } from "../../db/client";
 import type { Env } from "../../env";
-import type { NormalizedPoint } from "../../types";
+import type { NormalizedPoint, ScoringThresholds } from "../../types";
 import { instrumentedFetch } from "../../lib/api-instrumentation";
+import {
+  computeSeasonalBaselines,
+  evaluateSeasonalBreach,
+  seasonalBreachSeriesKey,
+  type RawObservation
+} from "./seasonal-baseline";
 
 export const EIA_PROVIDER = "EIA";
 export const EIA_INVENTORY_FEED_NAME = "eia_inventory";
@@ -135,8 +142,14 @@ export function buildInventoryObservations(rows: EiaSeriesRow[], bridge: string)
   return observations;
 }
 
-export async function collectEiaInventory(env: Env, nowIso: string): Promise<NormalizedPoint[]> {
-  const { startDate, endDate } = trailingWindow(400);
+export async function collectEiaInventory(
+  env: Env,
+  nowIso: string,
+  thresholds?: ScoringThresholds
+): Promise<NormalizedPoint[]> {
+  const resolvedThresholds = thresholds ?? (await loadThresholds(env));
+  // Pull enough history to build a 5-year seasonal baseline (plus a small buffer).
+  const { startDate, endDate } = trailingWindow(Math.ceil(resolvedThresholds.seasonalBaselineYears * 365) + 30);
   const url = new URL("https://api.eia.gov/v2/petroleum/stoc/wstk/data");
   url.searchParams.set("api_key", env.EIA_API_KEY);
   url.searchParams.set("frequency", "weekly");
@@ -156,10 +169,27 @@ export async function collectEiaInventory(env: Env, nowIso: string): Promise<Nor
     rateLimitDelayMs: 125
   });
 
-  const latest = buildInventoryObservations(response.response?.data ?? [], EIA_INVENTORY_LIVE_BRIDGE).at(-1);
+  const observations = buildInventoryObservations(response.response?.data ?? [], EIA_INVENTORY_LIVE_BRIDGE);
+  const latest = observations.at(-1);
   if (!latest) {
     return [];
   }
+
+  // Compare the recent crude-inventory level against its 5-year seasonal norm. Lower inventory
+  // than the prior-years' seasonal average means a tighter physical system -> a breach.
+  const rawHistory: RawObservation[] = observations.map((obs) => ({
+    observedAt: obs.observedAt,
+    value: obs.metadata.inventoryMbb
+  }));
+  const latestYear = Number(latest.observedAt.slice(0, 4));
+  const baselines = computeSeasonalBaselines(rawHistory, "week", { excludeYear: latestYear });
+  await writeSeasonalBaselines(env, EIA_INVENTORY_SERIES_KEY, baselines);
+  // Evaluate against the persisted baselines (this run's upsert merged with prior runs).
+  const persistedBaselines = await getSeasonalBaselines(env, EIA_INVENTORY_SERIES_KEY);
+  const breach = evaluateSeasonalBreach(rawHistory, persistedBaselines, {
+    granularity: "week",
+    rollingCount: Math.max(1, Math.round(resolvedThresholds.physicalRollingWeeks))
+  });
 
   return normalizePoints("eia", [
     {
@@ -167,6 +197,12 @@ export async function collectEiaInventory(env: Env, nowIso: string): Promise<Nor
       observedAt: latest.observedAt || nowIso,
       value: latest.value,
       unit: latest.unit
+    },
+    {
+      seriesKey: seasonalBreachSeriesKey(EIA_INVENTORY_SERIES_KEY),
+      observedAt: latest.observedAt || nowIso,
+      value: breach.breached ? 1 : 0,
+      unit: "index"
     }
   ]);
 }

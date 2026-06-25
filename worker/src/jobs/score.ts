@@ -9,6 +9,10 @@ import {
 } from "../db/client";
 import { evaluateRules } from "../core/rules/engine";
 import { runEnergyRuleEngineV2 } from "../core/rules/energy-v2";
+import { EIA_INVENTORY_SERIES_KEY } from "./collectors/eia-inventory";
+import { EIA_REFINERY_SERIES_KEY } from "./collectors/eia-refinery";
+import { GIE_SERIES_KEY } from "./collectors/gie";
+import { seasonalBreachSeriesKey } from "./collectors/seasonal-baseline";
 import { runActionManagerForEngine } from "../core/actions/action-manager";
 import { toAppError } from "../lib/errors";
 import { log } from "../lib/logging";
@@ -68,10 +72,14 @@ export function computeEnergyDislocationScore(
 ): EnergyDislocationScoreResult {
   const { physicalStress, transmissionStress, marketRecognition, mismatchMarketResponseWeight, ruleAdjustment } = inputs;
 
+  // Physical stress enters the mismatch quadratically rather than linearly: risk does not grow
+  // smoothly with physical tightness, it accelerates as the system approaches a genuine shortage.
+  // Squaring keeps low/moderate stress muted while letting extreme physical stress dominate.
+  const squaredPhysicalStress = Math.pow(physicalStress, 2);
   const hiddenMismatch =
     marketRecognition === null
-      ? physicalStress * 0.5
-      : physicalStress * (1 - marketRecognition);
+      ? squaredPhysicalStress * 0.5
+      : squaredPhysicalStress * (1 - marketRecognition);
 
   const scoreValue = safeValue(
     hiddenMismatch + transmissionStress * mismatchMarketResponseWeight + ruleAdjustment
@@ -114,15 +122,43 @@ export async function runEnergyScore(
   let scoreInputs: EnergyScoreInputs | null = null;
   // Phase 2: Write the live Energy "hidden dislocation" score.
   try {
-    // physicalStress: physical crude constraint (WTI-Brent spread).
-    const physicalStress = safeValue(wtiBrentSpread.value);
+    const thresholds = await loadThresholds(env);
+
+    // physicalStress base: physical crude constraint (WTI-Brent spread).
+    const basePhysicalStress = safeValue(wtiBrentSpread.value);
+    // Latent physical-supply baseline: each physical feed (crude inventory, refinery utilisation,
+    // EU gas storage) that has breached its 5-year seasonal norm adds a bounded penalty to physical
+    // stress. Missing breach feeds contribute nothing (conservative). The penalty is applied before
+    // the [0,1] clamp via safeValue, so several simultaneous breaches lift physical stress but can
+    // never push it past 1. The breach reads are best-effort: the penalty is an optional refinement,
+    // so a transient read failure degrades to zero penalty rather than aborting the whole score.
+    let seasonalBreachCount = 0;
+    try {
+      const breachPoints = await Promise.all([
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_INVENTORY_SERIES_KEY)),
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(EIA_REFINERY_SERIES_KEY)),
+        getLatestSeriesValue(env, seasonalBreachSeriesKey(GIE_SERIES_KEY))
+      ]);
+      seasonalBreachCount = breachPoints.filter((point) => point !== null && point.value >= 0.5).length;
+    } catch (error) {
+      log("warn", "Seasonal-breach reads failed; applying zero physical-baseline penalty", {
+        runKey,
+        error: String(error)
+      });
+    }
+    const physicalStress = safeValue(
+      basePhysicalStress + thresholds.physicalBaselinePenaltyWeight * seasonalBreachCount
+    );
     // transmissionStress: downstream product/margin stress (diesel-WTI crack). Secondary signal.
     const transmissionStress = safeValue(dieselWtiCrack.value);
-    // marketRecognition: how much pricing already reflects the stress (futures curve slope), or
-    // null when the price feed is missing. Missing is treated as UNKNOWN, never as 0 or 1, so it
-    // can neither manufacture a false positive nor silently confirm full recognition.
+    // marketRecognition: how much pricing already reflects the stress, or null when the price feed
+    // is missing. The futures curve slope is INVERTED here: contango (high curve_slope) means the
+    // market is relaxed about near-term supply, while deep backwardation (low curve_slope) is the
+    // market actively pricing near-term tightness, i.e. high recognition. Missing is treated as
+    // UNKNOWN, never as 0 or 1, so it can neither manufacture a false positive nor silently confirm
+    // full recognition.
     const hasPriceSignal = Boolean(curveSlope);
-    const marketRecognition = hasPriceSignal ? safeValue(curveSlope?.value ?? null) : null;
+    const marketRecognition = hasPriceSignal ? safeValue(1 - safeValue(curveSlope?.value ?? null)) : null;
 
     scoreInputs = {
       physicalStress,
@@ -136,7 +172,6 @@ export async function runEnergyScore(
       marketResponsePoint: dieselWtiCrack
     };
 
-    const thresholds = await loadThresholds(env);
     const rules = await listActiveRules(env, "energy");
     const ruleEvaluation = evaluateRules(rules, {
       physicalStress,

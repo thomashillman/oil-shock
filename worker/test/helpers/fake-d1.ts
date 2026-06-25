@@ -38,6 +38,7 @@ type TableName =
   | "rules"
   | "api_feed_registry"
   | "api_health_metrics"
+  | "seasonal_baselines"
   | "pre_deploy_gates";
 
 const SEED_CONFIG_THRESHOLDS: Row[] = [
@@ -60,7 +61,15 @@ const SEED_CONFIG_THRESHOLDS: Row[] = [
   { key: "coverage_max_penalty", value: 1.0 },
   { key: "state_deep_persistence_hours", value: 120 },
   { key: "state_persistent_persistence_hours", value: 72 },
-  { key: "ledger_stale_threshold_days", value: 30 }
+  { key: "ledger_stale_threshold_days", value: 30 },
+  { key: "wti_brent_floor_usd", value: 3.5 },
+  { key: "wti_brent_ceiling_usd", value: 15.0 },
+  { key: "wti_premium_discount", value: 0.5 },
+  { key: "diesel_crack_floor_usd", value: 10.0 },
+  { key: "diesel_crack_ceiling_usd", value: 40.0 },
+  { key: "physical_baseline_penalty_weight", value: 0.1 },
+  { key: "seasonal_baseline_years", value: 5.0 },
+  { key: "physical_rolling_weeks", value: 4.0 }
 ];
 
 export class FakeD1Database {
@@ -195,6 +204,7 @@ export class FakeD1Database {
       }
     ],
     api_health_metrics: [],
+    seasonal_baselines: [],
     pre_deploy_gates: []
   };
 
@@ -326,6 +336,26 @@ export class FakeD1Database {
         action: "adjust_mismatch",
         is_active: params[5]
       });
+      return { success: true, meta: { last_row_id: this.nextId - 1 } };
+    }
+    if (normalized.includes("insert into seasonal_baselines")) {
+      const [feedKey, periodKey, baselineValue, sampleCount, updatedAt] = params;
+      const existing = this.tables.seasonal_baselines.find(
+        (row) => row.feed_key === feedKey && row.period_key === periodKey
+      );
+      if (existing) {
+        existing.baseline_value = baselineValue;
+        existing.sample_count = sampleCount;
+        existing.updated_at = updatedAt;
+      } else {
+        this.insert("seasonal_baselines", {
+          feed_key: feedKey,
+          period_key: periodKey,
+          baseline_value: baselineValue,
+          sample_count: sampleCount,
+          updated_at: updatedAt
+        });
+      }
       return { success: true, meta: { last_row_id: this.nextId - 1 } };
     }
     if (normalized.includes("insert into state_change_events")) {
@@ -490,6 +520,11 @@ export class FakeD1Database {
     }
     if (normalized.includes("from config_thresholds")) {
       return { results: this.tables.config_thresholds as T[] };
+    }
+    if (normalized.includes("from seasonal_baselines")) {
+      const feedKey = params[0];
+      const rows = this.tables.seasonal_baselines.filter((row) => row.feed_key === feedKey);
+      return { results: rows as T[] };
     }
     if (normalized.includes("from rules")) {
       const engineKey = typeof params[0] === "string" ? params[0] : null;

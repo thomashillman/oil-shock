@@ -37,14 +37,37 @@ describe("collectEiaRefinery", () => {
     expect(String(mockInstrumentedFetch.mock.calls[0]?.[1])).toContain("/petroleum/pnp/unc/data");
     expect(String(mockInstrumentedFetch.mock.calls[0]?.[1])).toContain("MOPUEUS2");
 
-    expect(points).toHaveLength(1);
-    expect(points[0]).toMatchObject({
-      seriesKey: "physical_stress.refinery_utilization",
+    const stressPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization");
+    expect(stressPoint).toMatchObject({
       observedAt: "2026-03",
       unit: "ratio",
       sourceKey: "eia"
     });
-    expect(points[0]?.value).toBeCloseTo(0.084);
+    expect(stressPoint?.value).toBeCloseTo(0.084);
+
+    // Derived seasonal-breach flag; only current-year history (excluded from the baseline) means
+    // there is no prior-year month norm to breach, so the flag is 0.
+    const breachPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization.seasonal_breach");
+    expect(breachPoint).toMatchObject({ observedAt: "2026-03", value: 0 });
+  });
+
+  it("flags a breach when the latest month is below its persisted seasonal baseline", async () => {
+    // Two prior-year Marches average 91% utilisation; the current March is far lower (80%), so the
+    // breach resolves against the persisted seasonal baseline (written then read back from the DB).
+    mockInstrumentedFetch.mockResolvedValueOnce({
+      response: {
+        data: [
+          { period: "2024-03", value: "90.0", units: "%" },
+          { period: "2025-03", value: "92.0", units: "%" },
+          { period: "2026-03", value: "80.0", units: "%" }
+        ],
+        total: 3
+      }
+    });
+
+    const points = await collectEiaRefinery(env, "2026-04-23T00:00:00.000Z");
+    const breachPoint = points.find((point) => point.seriesKey === "physical_stress.refinery_utilization.seasonal_breach");
+    expect(breachPoint?.value).toBe(1);
   });
 });
 

@@ -13,9 +13,10 @@ describe("computeEnergyDislocationScore", () => {
       ruleAdjustment: 0
     });
 
-    // hiddenMismatch = 0.02 * (1 - 0.5) = 0.01; transmission = 1.0 * 0.15 = 0.15 => 0.16
-    // (The old (physicalStress + marketResponse) / 2 formula produced a false 0.51 here.)
-    expect(scoreValue).toBeCloseTo(0.16, 5);
+    // hiddenMismatch = 0.02^2 * (1 - 0.5) = 0.0002; transmission = 1.0 * 0.15 = 0.15 => 0.1502
+    // The squared physical-stress term mutes weak physical signal even harder than the old linear
+    // shape, so high transmission alone still cannot manufacture a high score.
+    expect(scoreValue).toBeCloseTo(0.1502, 5);
   });
 
   it("Test B: high physical stress with low market recognition produces an elevated score", () => {
@@ -27,8 +28,8 @@ describe("computeEnergyDislocationScore", () => {
       ruleAdjustment: 0
     });
 
-    // hiddenMismatch = 0.7 * (1 - 0.2) = 0.56; transmission = 0.6 * 0.15 = 0.09 => 0.65
-    expect(scoreValue).toBeCloseTo(0.65, 5);
+    // hiddenMismatch = 0.7^2 * (1 - 0.2) = 0.392; transmission = 0.6 * 0.15 = 0.09 => 0.482
+    expect(scoreValue).toBeCloseTo(0.482, 5);
   });
 
   it("Test C: high physical stress with high market recognition reduces the hidden-dislocation score", () => {
@@ -40,8 +41,8 @@ describe("computeEnergyDislocationScore", () => {
       ruleAdjustment: 0
     });
 
-    // hiddenMismatch = 0.7 * (1 - 0.9) = 0.07; transmission = 0.09 => 0.16
-    expect(scoreValue).toBeCloseTo(0.16, 5);
+    // hiddenMismatch = 0.7^2 * (1 - 0.9) = 0.049; transmission = 0.09 => 0.139
+    expect(scoreValue).toBeCloseTo(0.139, 5);
   });
 
   it("Test D: missing market recognition is provisional, not automatically confirming", () => {
@@ -53,8 +54,9 @@ describe("computeEnergyDislocationScore", () => {
       ruleAdjustment: 0
     });
 
-    // hiddenMismatch = 0.7 * 0.5 = 0.35; transmission = 1.0 * 0.15 = 0.15 => 0.50
-    expect(scoreValue).toBeCloseTo(0.5, 5);
+    // hiddenMismatch = 0.7^2 * 0.5 = 0.245; transmission = 1.0 * 0.15 = 0.15 => 0.395
+    // The missing-recognition fallback uses the SAME squared physical-stress baseline.
+    expect(scoreValue).toBeCloseTo(0.395, 5);
     expect(flags).toContain("missing_price_confirmation");
     expect(confidence).toBe(0.6);
   });
@@ -68,8 +70,23 @@ describe("computeEnergyDislocationScore", () => {
       ruleAdjustment: 0.1
     });
 
-    // base 0.65 + rule 0.10 => 0.75
-    expect(scoreValue).toBeCloseTo(0.75, 5);
+    // base 0.482 + rule 0.10 => 0.582
+    expect(scoreValue).toBeCloseTo(0.582, 5);
+  });
+
+  it("Test H: the squared shape makes risk accelerate as physical stress rises", () => {
+    const base = {
+      transmissionStress: 0,
+      marketRecognition: 0,
+      mismatchMarketResponseWeight: WEIGHT,
+      ruleAdjustment: 0
+    };
+    // With recognition = 0 the score is purely physicalStress^2. Doubling physical stress from
+    // 0.4 to 0.8 should roughly quadruple the score, not double it (linear would give 0.4 -> 0.8).
+    const low = computeEnergyDislocationScore({ ...base, physicalStress: 0.4 });
+    const high = computeEnergyDislocationScore({ ...base, physicalStress: 0.8 });
+    expect(low.scoreValue).toBeCloseTo(0.16, 5);
+    expect(high.scoreValue).toBeCloseTo(0.64, 5);
   });
 
   it("Test F: the final score is clamped to [0, 1]", () => {
